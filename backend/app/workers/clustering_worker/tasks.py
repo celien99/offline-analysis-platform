@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 
 from app.common.logging import get_logger
+from app.core.config import settings
+from app.domain.clustering import ClusterConfig
 from app.infrastructure.database.session import async_session_factory
 from app.infrastructure.queue.celery_app import celery_app
 from app.repositories.embedding.repository import EmbeddingRepository
@@ -10,6 +12,25 @@ from app.services.clustering.service import ClusteringService
 from app.workers import run_async
 
 logger = get_logger(__name__)
+
+
+def _build_cluster_config(
+    min_cluster_size: int | None = None,
+    min_samples: int | None = None,
+) -> ClusterConfig:
+    return ClusterConfig(
+        umap_n_components=settings.umap_n_components,
+        umap_n_neighbors=settings.umap_n_neighbors,
+        umap_min_dist=0.1,
+        hdbscan_min_cluster_size=min_cluster_size
+        if min_cluster_size is not None
+        else settings.clustering_min_cluster_size,
+        hdbscan_min_samples=(
+            min_samples
+            if min_samples is not None
+            else settings.clustering_min_samples
+        ),
+    )
 
 
 async def _run_clustering(
@@ -34,9 +55,10 @@ async def _run_clustering(
 
     async with async_session_factory() as session:
         service = ClusteringService(session)
+        config = _build_cluster_config(min_cluster_size, min_samples)
         result, label_map, probability_map = await service.run_clustering(
             embeddings,
-            config=None,
+            config=config,
         )
         persisted = await service.persist_clustering_result(
             result,
