@@ -54,6 +54,9 @@ async def list_clusters(
             representative_image_urls=[],
             reviewed_by=c.reviewed_by,
             reviewed_at=c.reviewed_at,
+            vlm_anomaly_type=_vlm_value(c.vlm_analysis_json, "anomaly_type"),
+            vlm_is_false_alarm=_vlm_value(c.vlm_analysis_json, "is_false_alarm"),
+            vlm_analyzed_at=c.vlm_analyzed_at,
             created_at=c.created_at,
         )
         for c in clusters
@@ -103,6 +106,12 @@ async def get_cluster_detail(
         centroid=centroid,
         reviewed_by=cluster.reviewed_by,
         reviewed_at=cluster.reviewed_at,
+        vlm_anomaly_type=_vlm_value(cluster.vlm_analysis_json, "anomaly_type"),
+        vlm_is_false_alarm=_vlm_value(cluster.vlm_analysis_json, "is_false_alarm"),
+        vlm_reason=_vlm_value(cluster.vlm_analysis_json, "reason"),
+        vlm_confidence=_vlm_value(cluster.vlm_analysis_json, "confidence"),
+        vlm_suggestion=_vlm_value(cluster.vlm_analysis_json, "suggestion"),
+        vlm_analyzed_at=cluster.vlm_analyzed_at,
         clustering_run_at=cluster.clustering_run_at,
         created_at=cluster.created_at,
         trace_id=cluster.trace_id,
@@ -152,6 +161,16 @@ async def get_cluster_visualization(
         "scatter_data": scatter_data,
         "summary": summary,
     }
+
+
+def _vlm_value(payload: str | None, key: str) -> object | None:
+    if not payload:
+        return None
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return data.get(key)
 
 
 @router.post("/trigger", response_model=StatusResponse)

@@ -41,6 +41,10 @@ class Cluster(BaseModel):
     clustering_run_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    vlm_analysis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vlm_analyzed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class ClusterMembership(BaseModel):

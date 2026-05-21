@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.logging import get_logger
 from app.core.exceptions import NotFoundError, VLMAnalysisError
 from app.domain.multimodal import VLMAnalyzer, VLMRequest, VLMResult
+from app.models.cluster import Cluster
+from app.repositories.anomaly.repository import AnomalyRepository
 from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
 
 logger = get_logger(__name__)
@@ -20,18 +25,30 @@ class VLMService:
         self._analyzer = analyzer
         self._cluster_repo = ClusterRepository(session)
         self._membership_repo = ClusterMembershipRepository(session)
+        self._anomaly_repo = AnomalyRepository(session)
 
     async def analyze_cluster(self, cluster_id: str) -> VLMResult:
         cluster = await self._cluster_repo.get_by_id(cluster_id)
         if cluster is None:
             raise NotFoundError("Cluster", cluster_id)
 
-        import json
-
         representative_ids = json.loads(cluster.representative_ids or "[]")
+        anomaly_ids = representative_ids or await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
+        anomalies = await self._anomaly_repo.get_by_ids(anomaly_ids)
+        image_paths: list[str] = []
+        for anomaly in anomalies:
+            for path in [
+                anomaly.crop_path,
+                anomaly.roi_path,
+                anomaly.original_path,
+                anomaly.heatmap_path,
+            ]:
+                if path:
+                    image_paths.append(path)
+                    break
 
         request = VLMRequest(
-            cluster_representative_paths=representative_ids,
+            cluster_representative_paths=image_paths,
             cluster_metadata={
                 "cluster_id": cluster_id,
                 "sample_count": cluster.sample_count,
@@ -47,6 +64,8 @@ class VLMService:
                 f"VLM analysis failed for cluster {cluster_id}: {e}"
             ) from e
 
+        await self.persist_cluster_analysis(cluster_id, result)
+
         logger.info(
             "vlm_analysis_complete",
             cluster_id=cluster_id,
@@ -55,6 +74,28 @@ class VLMService:
             confidence=result.confidence,
         )
         return result
+
+    async def persist_cluster_analysis(
+        self,
+        cluster_id: str,
+        result: VLMResult,
+    ) -> Cluster:
+        cluster = await self._cluster_repo.get_by_id(cluster_id)
+        if cluster is None:
+            raise NotFoundError("Cluster", cluster_id)
+
+        cluster.vlm_analysis_json = json.dumps({
+            "anomaly_type": result.anomaly_type,
+            "is_false_alarm": result.is_false_alarm,
+            "reason": result.reason,
+            "confidence": result.confidence,
+            "suggestion": result.suggestion,
+            "raw_response": result.raw_response,
+        })
+        cluster.vlm_analyzed_at = datetime.now(tz=timezone.utc)
+        await self._cluster_repo.update(cluster)
+        await self._session.commit()
+        return cluster
 
     async def batch_analyze_clusters(
         self, cluster_ids: list[str]
@@ -91,7 +132,7 @@ class VLMService:
     ) -> VLMResult:
         request = VLMRequest(
             cluster_representative_paths=[
-                p for p in [crop_path, roi_path, original_image_path] if p is not None
+                p for p in [crop_path, roi_path, original_image_path, heatmap_path] if p is not None
             ],
         )
         return await self._analyzer.analyze(request)

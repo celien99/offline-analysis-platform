@@ -29,6 +29,9 @@ class ClusterSummary(BaseModel):
     representative_image_urls: list[str] = []
     reviewed_by: str | None = None
     reviewed_at: datetime | None = None
+    vlm_anomaly_type: str | None = None
+    vlm_is_false_alarm: bool | None = None
+    vlm_analyzed_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -51,6 +54,12 @@ class ClusterDetailResponse(BaseModel):
     centroid: list[float] | None = None
     reviewed_by: str | None
     reviewed_at: datetime | None
+    vlm_anomaly_type: str | None = None
+    vlm_is_false_alarm: bool | None = None
+    vlm_reason: str | None = None
+    vlm_confidence: float | None = None
+    vlm_suggestion: str | None = None
+    vlm_analyzed_at: datetime | None = None
     clustering_run_at: datetime
     created_at: datetime
     trace_id: str | None = None
