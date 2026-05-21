@@ -22,4 +22,14 @@ export const anomalyApi = {
       params: { anomaly_id: anomalyId, top_k: topK, threshold },
       signal,
     }),
+
+  upload: (params: {
+    camera_id: string;
+    source?: string;
+    anomaly_score?: number;
+    date_folder: string;
+    detected_at: string;
+    metadata?: Record<string, unknown>;
+  }, signal?: AbortSignal) =>
+    post<{ anomaly_id: string; status: string }>("/anomaly/upload", params, { signal }),
 };

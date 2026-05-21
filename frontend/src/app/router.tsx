@@ -7,6 +7,9 @@ const ClusterReview = lazy(() => import("../features/cluster-review"));
 const AnomalyBrowser = lazy(() => import("../features/anomaly-browser"));
 const KnowledgeBase = lazy(() => import("../features/knowledge-base"));
 const RulesManagement = lazy(() => import("../features/rules-engine"));
+const AnomalyUpload = lazy(() => import("../features/anomaly-upload"));
+const Training = lazy(() => import("../features/training"));
+const ModelDeploy = lazy(() => import("../features/model-deploy"));
 
 function LazyFallback() {
   return (
@@ -23,8 +26,11 @@ export default function AppRouter() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/clusters" element={<ClusterReview />} />
         <Route path="/anomalies" element={<AnomalyBrowser />} />
+        <Route path="/upload" element={<AnomalyUpload />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/rules" element={<RulesManagement />} />
+        <Route path="/training" element={<Training />} />
+        <Route path="/deploy" element={<ModelDeploy />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

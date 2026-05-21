@@ -4,8 +4,11 @@ import {
   DashboardOutlined,
   ClusterOutlined,
   BugOutlined,
+  UploadOutlined,
   BookOutlined,
   ThunderboltOutlined,
+  ExperimentOutlined,
+  RocketOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -15,8 +18,11 @@ const menuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "Dashboard" },
   { key: "/clusters", icon: <ClusterOutlined />, label: "Cluster Review" },
   { key: "/anomalies", icon: <BugOutlined />, label: "Anomaly Browser" },
+  { key: "/upload", icon: <UploadOutlined />, label: "Upload" },
   { key: "/knowledge", icon: <BookOutlined />, label: "Knowledge Base" },
   { key: "/rules", icon: <ThunderboltOutlined />, label: "Rules Engine" },
+  { key: "/training", icon: <ExperimentOutlined />, label: "Training" },
+  { key: "/deploy", icon: <RocketOutlined />, label: "Deploy" },
 ];
 
 interface Props {

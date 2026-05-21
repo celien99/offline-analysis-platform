@@ -3,3 +3,5 @@ export { clusterApi } from "./cluster";
 export { anomalyApi } from "./anomaly";
 export { knowledgeApi } from "./knowledge";
 export { rulesApi } from "./rules";
+export { trainingApi } from "./training";
+export { modelApi } from "./model";

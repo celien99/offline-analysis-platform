@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { clusterApi, anomalyApi, knowledgeApi, rulesApi } from "../api";
-import type { ReviewSubmit } from "../types";
+import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi } from "../api";
+import type { ReviewSubmit, TrainingStartParams, DeployRequest } from "../types";
 
 // ── Cluster queries ──
 
@@ -166,6 +166,68 @@ export function useRuleGenerateFromKb() {
       rulesApi.generateFromKnowledge(knowledgeEntryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rules"] });
+    },
+  });
+}
+
+// ── Training queries ──
+
+export function useTrainingStart() {
+  return useMutation({
+    mutationFn: (params: TrainingStartParams) => trainingApi.start(params),
+  });
+}
+
+export function useTrainingStatus(taskId: string | null) {
+  return useQuery({
+    queryKey: ["training", "status", taskId],
+    queryFn: ({ signal }) => trainingApi.status(taskId!, signal),
+    enabled: !!taskId,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useTrainedModels(params: {
+  model_type?: string;
+  page?: number;
+} = {}) {
+  return useQuery({
+    queryKey: ["training", "models", params],
+    queryFn: ({ signal }) => trainingApi.listModels({ page_size: 20, ...params }, signal),
+    placeholderData: (prev) => prev,
+  });
+}
+
+// ── Model deployment queries ──
+
+export function useDeployments(params: {
+  target?: string;
+  page?: number;
+} = {}) {
+  return useQuery({
+    queryKey: ["model", "deployments", params],
+    queryFn: ({ signal }) => modelApi.listDeployments({ page_size: 50, ...params }, signal),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useDeployModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: DeployRequest) => modelApi.deploy(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["model"] });
+    },
+  });
+}
+
+export function useRollbackModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ target, reason }: { target: string; reason?: string }) =>
+      modelApi.rollback(target, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["model"] });
     },
   });
 }
