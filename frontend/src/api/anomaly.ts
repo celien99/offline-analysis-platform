@@ -1,4 +1,5 @@
 import { get, post } from "./client";
+import http from "./client";
 import type { AnomalyRecord } from "../types";
 
 export const anomalyApi = {
@@ -32,4 +33,11 @@ export const anomalyApi = {
     metadata?: Record<string, unknown>;
   }, signal?: AbortSignal) =>
     post<{ anomaly_id: string; status: string }>("/anomaly/upload", params, { signal }),
+
+  uploadWithFiles: (formData: FormData) =>
+    http.post<{ anomaly_id: string; status: string }>(
+      "/anomaly/upload-with-files",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    ).then((res) => res.data),
 };
