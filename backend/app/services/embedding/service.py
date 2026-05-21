@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +18,7 @@ class EmbeddingService:
     def __init__(
         self,
         session: AsyncSession,
-        extractor: EmbeddingExtractor,
+        extractor: EmbeddingExtractor | None = None,
     ) -> None:
         self._session = session
         self._repo = EmbeddingRepository(session)
@@ -33,6 +31,10 @@ class EmbeddingService:
         *,
         model_version: str | None = None,
     ) -> EmbeddingVector:
+        if self._extractor is None:
+            raise EmbeddingGenerationError(
+                "No embedding extractor configured"
+            )
         try:
             vector = await self._extractor.extract(image)
         except Exception as e:
