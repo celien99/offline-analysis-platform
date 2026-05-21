@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi } from "../api";
+import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi } from "../api";
 import type { ReviewSubmit, TrainingStartParams, DeployRequest } from "../types";
 
 // ── Cluster queries ──
@@ -228,6 +228,38 @@ export function useRollbackModel() {
       modelApi.rollback(target, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["model"] });
+    },
+  });
+}
+
+// ── Multimodal (VLM) queries ──
+
+export function useVLMAnalyzeCluster() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clusterId: string) => multimodalApi.analyzeCluster(clusterId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+    },
+  });
+}
+
+export function useVLMAnalyzeBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clusterIds: string[]) => multimodalApi.analyzeBatch(clusterIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+    },
+  });
+}
+
+export function useVLMAnalyzeAnomaly() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (anomalyId: string) => multimodalApi.analyzeAnomaly(anomalyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["anomalies"] });
     },
   });
 }

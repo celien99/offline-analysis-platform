@@ -11,3 +11,4 @@ export type { Rule, MatchedRule, EvalResult } from "./rules";
 export type { ApiError, PaginatedParams, ReviewSubmit } from "./api";
 export type { TrainingStartParams, TrainingStatus, TrainedModel, TrainedModelList } from "./training";
 export type { DeployRequest, DeploymentRecord } from "./model";
+export type { VLMResult, VLMAnalysisResponse, VLMBatchAnalysisResponse } from "./multimodal";

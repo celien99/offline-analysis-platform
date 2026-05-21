@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>171+ 源文件</b> · <b>29 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
+  <b>171+ 源文件</b> · <b>32 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
 </p>
 
 ---
@@ -153,7 +153,7 @@ flowchart TB
 offline-analysis-platform/
 ├── backend/                          # Python 后端（125+ 文件）
 │   ├── app/
-│   │   ├── api/                      # 8 个 FastAPI 路由，28 个端点
+│   │   ├── api/                      # 9 个 FastAPI 路由，32 个端点
 │   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
 │   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
 │   │   │   ├── review/               #   提交复核 · 查询历史
@@ -303,6 +303,10 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 
                      POST   /api/model/deploy                      📦 模型部署
                      POST   /api/model/deploy/{target}/rollback
+
+                     POST   /api/multimodal/analyze/cluster/{id}    🤖 多模态分析
+                     POST   /api/multimodal/analyze/batch
+                     POST   /api/multimodal/analyze/anomaly/{id}
 ```
 
 ---

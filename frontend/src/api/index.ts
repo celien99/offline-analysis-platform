@@ -5,3 +5,4 @@ export { knowledgeApi } from "./knowledge";
 export { rulesApi } from "./rules";
 export { trainingApi } from "./training";
 export { modelApi } from "./model";
+export { multimodalApi } from "./multimodal";

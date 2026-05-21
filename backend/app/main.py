@@ -15,6 +15,7 @@ from app.api.registry.router import router as registry_router
 from app.api.embedding.router import router as embedding_router
 from app.api.knowledge.router import router as knowledge_router
 from app.api.rules.router import router as rules_router
+from app.api.multimodal.router import router as multimodal_router
 from app.common.logging import get_logger, setup_logging
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -76,3 +77,4 @@ app.include_router(registry_router)
 app.include_router(embedding_router)
 app.include_router(knowledge_router)
 app.include_router(rules_router)
+app.include_router(multimodal_router)
