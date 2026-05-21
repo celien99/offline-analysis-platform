@@ -226,6 +226,8 @@ async def _create_model_version(
 ) -> None:
     from datetime import datetime, timezone
 
+    from app.repositories.registry.model_version import ModelVersionRepository
+
     async with async_session_factory() as session:
         model = ModelVersion(
             id=generate_uuid(),
@@ -239,7 +241,8 @@ async def _create_model_version(
             trained_at=datetime.now(tz=timezone.utc),
             status="registered",
         )
-        session.add(model)
+        repo = ModelVersionRepository(session)
+        await repo.create(model)
         await session.commit()
 
 

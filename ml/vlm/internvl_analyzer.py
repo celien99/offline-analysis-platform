@@ -53,7 +53,6 @@ class InternVLAnalyzer:
             {"type": "text", "text": ANALYSIS_PROMPT}
         ]
 
-        import numpy as np
         for img_field, label in [
             (request.crop_image, "crop"),
             (request.heatmap_image, "heatmap"),

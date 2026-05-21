@@ -42,7 +42,10 @@ async def test_knowledge_entries_empty() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/knowledge/entries")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
 
 
 @pytest.mark.asyncio
@@ -51,7 +54,10 @@ async def test_list_rules_empty() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/rules")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
 
 
 @pytest.mark.asyncio

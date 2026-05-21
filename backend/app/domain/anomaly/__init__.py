@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from app.common.types import AnomalyId, CameraId, Timestamp
 

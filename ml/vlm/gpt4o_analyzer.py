@@ -56,7 +56,6 @@ class GPT4oAnalyzer:
             {"type": "text", "text": ANALYSIS_PROMPT}
         ]
 
-        import numpy as np
         for img_field in [
             request.crop_image,
             request.heatmap_image,

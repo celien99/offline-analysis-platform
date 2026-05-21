@@ -71,7 +71,6 @@ class QwenVLMAnalyzer:
             {"type": "text", "text": ANALYSIS_PROMPT}
         ]
 
-        import numpy as np
         if request.crop_image is not None:
             b64 = self._ndarray_to_base64(request.crop_image)
             content_parts.append({

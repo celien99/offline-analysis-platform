@@ -5,7 +5,7 @@ from typing import Protocol
 
 import numpy as np
 
-from app.common.types import AnomalyId, EmbeddingArray, ModelVersionId
+from app.common.types import AnomalyId
 
 
 class EmbeddingExtractor(Protocol):

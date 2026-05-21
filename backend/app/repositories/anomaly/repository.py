@@ -65,6 +65,14 @@ class AnomalyRepository(BaseRepository):
         )
         await self._session.execute(stmt)
 
+    async def update_heatmap_path(self, anomaly_id: str, heatmap_path: str) -> None:
+        stmt = (
+            update(AnomalyRecord)
+            .where(AnomalyRecord.id == anomaly_id)
+            .values(heatmap_path=heatmap_path)
+        )
+        await self._session.execute(stmt)
+
     async def get_by_ids(
         self, ids: list[str]
     ) -> Sequence[AnomalyRecord]:

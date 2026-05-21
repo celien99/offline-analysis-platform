@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Float, Integer, String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel

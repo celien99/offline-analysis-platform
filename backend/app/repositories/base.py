@@ -70,3 +70,13 @@ class BaseRepository:
 
             entity.deleted_at = datetime.now(tz=timezone.utc)
             await self._session.flush()
+
+    async def hard_delete_expired_before(self, cutoff) -> int:
+        from sqlalchemy import delete
+
+        stmt = delete(self._model).where(
+            self._model.deleted_at.isnot(None),
+            self._model.deleted_at < cutoff,
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount

@@ -106,10 +106,8 @@ def generate_heatmap(
 
             async with async_session_factory() as session:
                 anomaly_repo = AnomalyRepository(session)
-                anomaly = await anomaly_repo.get_by_id(anomaly_id)
-                if anomaly is not None:
-                    anomaly.heatmap_path = heatmap_path
-                    await session.commit()
+                await anomaly_repo.update_heatmap_path(anomaly_id, heatmap_path)
+                await session.commit()
 
             logger.info("heatmap_task_complete", anomaly_id=anomaly_id, path=heatmap_path)
             return {"status": "completed", "anomaly_id": anomaly_id, "heatmap_path": heatmap_path}

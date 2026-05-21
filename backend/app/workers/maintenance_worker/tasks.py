@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, text
+from sqlalchemy import text
 
 from app.common.logging import get_logger
 from app.infrastructure.database.session import async_session_factory
 from app.infrastructure.queue.celery_app import celery_app
-from app.models.anomaly import AnomalyRecord
-from app.models.cluster import Cluster, ClusterMembership
-from app.models.embedding import EmbeddingVector
-from app.models.knowledge import KnowledgeEntry, RuleEntry
-from app.models.registry import DeploymentRecord, ModelVersion
-from app.models.review import ReviewRecord
+from app.repositories.anomaly.repository import AnomalyRepository
+from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
+from app.repositories.embedding.repository import EmbeddingRepository
+from app.repositories.knowledge import KnowledgeRepository, RuleRepository
+from app.repositories.registry.deployment import DeploymentRepository
+from app.repositories.registry.model_version import ModelVersionRepository
+from app.repositories.review.repository import ReviewRepository
 from app.workers import run_async
 
 logger = get_logger(__name__)
@@ -23,17 +24,19 @@ async def _cleanup_expired(retention_days: int) -> int:
     deleted = 0
 
     async with async_session_factory() as session:
-        models = [
-            AnomalyRecord, EmbeddingVector, Cluster, ClusterMembership,
-            ReviewRecord, KnowledgeEntry, RuleEntry, ModelVersion, DeploymentRecord,
+        repos = [
+            AnomalyRepository(session),
+            EmbeddingRepository(session),
+            ClusterRepository(session),
+            ClusterMembershipRepository(session),
+            ReviewRepository(session),
+            KnowledgeRepository(session),
+            RuleRepository(session),
+            ModelVersionRepository(session),
+            DeploymentRepository(session),
         ]
-        for model in models:
-            stmt = delete(model).where(
-                model.deleted_at.isnot(None),
-                model.deleted_at < cutoff,
-            )
-            result = await session.execute(stmt)
-            deleted += result.rowcount
+        for repo in repos:
+            deleted += await repo.hard_delete_expired_before(cutoff)
         await session.commit()
 
     logger.info("maintenance_cleanup_complete", deleted_records=deleted, retention_days=retention_days)
