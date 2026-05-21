@@ -16,6 +16,7 @@ celery_app = Celery(
         "app.workers.heatmap_worker.tasks",
         "app.workers.thumbnail_worker.tasks",
         "app.workers.maintenance_worker.tasks",
+        "app.workers.pipeline_worker.tasks",
     ],
 )
 
@@ -31,8 +32,8 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=50,
     beat_schedule={
-        "regular-clustering-every-6-hours": {
-            "task": "clustering.schedule_regular",
+        "regular-pipeline-every-6-hours": {
+            "task": "pipeline.full_cycle",
             "schedule": 21600.0,
         },
         "cleanup-expired-data-daily": {
