@@ -18,4 +18,18 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    target: "es2020",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          antd: ["antd", "@ant-design/icons"],
+          plotly: ["plotly.js-dist-min", "react-plotly.js"],
+          vendor: ["axios", "dayjs", "react-photo-view"],
+        },
+      },
+    },
+  },
 });
