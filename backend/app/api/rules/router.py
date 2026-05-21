@@ -65,34 +65,41 @@ async def create_rule(
     }
 
 
-@router.get("", response_model=list[dict])
+@router.get("", response_model=dict)
 async def list_rules(
     rule_type: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-) -> list[dict]:
+) -> dict:
     service = RuleEngineService(session)
     offset = (page - 1) * page_size
-    rules, _ = await service.list_rules(
+    rules, total = await service.list_rules(
         rule_type=rule_type,
         enabled=enabled,
         offset=offset,
         limit=page_size,
     )
-    return [
-        {
-            "rule_id": r.id,
-            "name": r.name,
-            "rule_type": r.rule_type,
-            "priority": r.priority,
-            "enabled": r.enabled,
-            "description": r.description,
-            "created_at": r.created_at.isoformat(),
-        }
-        for r in rules
-    ]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": [
+            {
+                "rule_id": r.id,
+                "name": r.name,
+                "rule_type": r.rule_type,
+                "priority": r.priority,
+                "enabled": r.enabled,
+                "description": r.description,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rules
+        ],
+    }
 
 
 @router.get("/{rule_id}", response_model=dict)

@@ -9,6 +9,14 @@ export interface PaginatedParams {
   page_size?: number;
 }
 
+export interface PaginatedResponse<T> {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  items: T[];
+}
+
 export interface ReviewSubmit {
   cluster_id: string;
   reviewer: string;
@@ -16,4 +24,6 @@ export interface ReviewSubmit {
   defect_type?: "wrinkle" | "scratch" | "reflection" | "stain" | "seam_shift";
   comment?: string;
   new_cluster_name?: string;
+  merge_source_ids?: string[];
+  split_member_ids?: string[];
 }

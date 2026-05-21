@@ -23,11 +23,13 @@ export default function AnomalyBrowser() {
     return () => clearTimeout(timer);
   }, [cameraInput]);
 
-  const { data: anomalies = [], isLoading, refetch } = useAnomalyList({
+  const { data, isLoading, refetch } = useAnomalyList({
     page,
     camera_id: cameraFilter,
     status: statusFilter,
   });
+  const anomalies = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const reprocessMutation = useAnomalyReprocess();
 
@@ -88,7 +90,7 @@ export default function AnomalyBrowser() {
           dataSource={anomalies}
           rowKey="anomaly_id"
           loading={isLoading}
-          pagination={{ current: page, pageSize: 20, onChange: setPage }}
+          pagination={{ current: page, pageSize: 20, total, onChange: setPage }}
         />
       </Card>
 

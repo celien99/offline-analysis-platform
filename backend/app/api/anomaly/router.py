@@ -91,7 +91,7 @@ async def upload_anomaly_with_files(
 
 @router.get(
     "/list",
-    response_model=list[AnomalyResponse],
+    response_model=dict,
 )
 async def list_anomalies(
     camera_id: str | None = Query(default=None),
@@ -101,7 +101,7 @@ async def list_anomalies(
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
     minio: MinIOClient = Depends(get_minio),
-) -> list[AnomalyResponse]:
+) -> dict:
     service = AnomalyService(session, minio)
     offset = (page - 1) * page_size
     records, total = await service.list_anomalies(
@@ -111,7 +111,14 @@ async def list_anomalies(
         offset=offset,
         limit=page_size,
     )
-    return [_to_response(r, minio) for r in records]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": [_to_response(r, minio) for r in records],
+    }
 
 
 @router.get(

@@ -31,23 +31,30 @@ async def create_knowledge_entry(
     return _entry_to_response(entry)
 
 
-@router.get("/entries", response_model=list[KnowledgeEntryResponse])
+@router.get("/entries", response_model=dict)
 async def list_knowledge_entries(
     category: str | None = Query(default=None),
     defect_type: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-) -> list[KnowledgeEntryResponse]:
+) -> dict:
     service = KnowledgeService(session)
     offset = (page - 1) * page_size
-    entries, _ = await service.list_entries(
+    entries, total = await service.list_entries(
         category=category,
         defect_type=defect_type,
         offset=offset,
         limit=page_size,
     )
-    return [_entry_to_response(e) for e in entries]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": [_entry_to_response(e) for e in entries],
+    }
 
 
 @router.get("/entries/search", response_model=list[KnowledgeEntryResponse])

@@ -1,9 +1,9 @@
 import { get, post, del } from "./client";
-import type { Rule, EvalResult } from "../types";
+import type { Rule, EvalResult, PaginatedResponse } from "../types";
 
 export const rulesApi = {
   list: (params: { rule_type?: string; page_size?: number }, signal?: AbortSignal) =>
-    get<Rule[]>("/rules", { params, signal }),
+    get<PaginatedResponse<Rule>>("/rules", { params, signal }),
 
   create: (params: Record<string, unknown>, signal?: AbortSignal) =>
     post("/rules", null, { params, signal }),

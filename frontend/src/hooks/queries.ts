@@ -75,6 +75,7 @@ export function useKnowledgeList(
       knowledgeApi.list({ page_size: 100, ...params }, signal),
     placeholderData: (prev) => prev,
     enabled,
+    select: (data) => data.items,
   });
 }
 
@@ -114,6 +115,7 @@ export function useRulesList(typeFilter?: string) {
     queryFn: ({ signal }) =>
       rulesApi.list({ rule_type: typeFilter, page_size: 200 }, signal),
     placeholderData: (prev) => prev,
+    select: (data) => data.items,
   });
 }
 

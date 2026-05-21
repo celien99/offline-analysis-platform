@@ -1,9 +1,9 @@
 import { get, post, del } from "./client";
-import type { KnowledgeEntry } from "../types";
+import type { KnowledgeEntry, PaginatedResponse } from "../types";
 
 export const knowledgeApi = {
   list: (params: { category?: string; defect_type?: string; page_size?: number }, signal?: AbortSignal) =>
-    get<KnowledgeEntry[]>("/knowledge/entries", { params, signal }),
+    get<PaginatedResponse<KnowledgeEntry>>("/knowledge/entries", { params, signal }),
 
   search: (q: string, limit = 20, signal?: AbortSignal) =>
     get<KnowledgeEntry[]>("/knowledge/entries/search", { params: { q, limit }, signal }),

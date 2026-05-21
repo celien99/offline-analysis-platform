@@ -1,6 +1,6 @@
 import { get, post } from "./client";
 import http from "./client";
-import type { AnomalyRecord } from "../types";
+import type { AnomalyRecord, PaginatedResponse } from "../types";
 
 export const anomalyApi = {
   list: (params: {
@@ -10,7 +10,7 @@ export const anomalyApi = {
     page?: number;
     page_size?: number;
   }, signal?: AbortSignal) =>
-    get<AnomalyRecord[]>("/anomaly/list", { params, signal }),
+    get<PaginatedResponse<AnomalyRecord>>("/anomaly/list", { params, signal }),
 
   detail: (anomalyId: string, signal?: AbortSignal) =>
     get<AnomalyRecord>(`/anomaly/${anomalyId}`, { signal }),
