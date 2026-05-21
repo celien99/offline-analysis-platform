@@ -1,6 +1,4 @@
-<p align="center">
-  <h1>🏭 Industrial AI Offline Analysis Platform</h1>
-</p>
+ <h1 align="center">🏭 Industrial AI Offline Analysis Platform</h1>
 
 <h3 align="center">工业座椅缺陷检测 — 离线智能分析平台</h3>
 
