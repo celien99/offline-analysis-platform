@@ -312,30 +312,6 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 
 ---
 
-## Kubernetes 部署
-
-```bash
-# 创建命名空间和配置
-kubectl apply -f deployment/k8s/namespace.yaml
-kubectl apply -f deployment/k8s/configmap.yaml
-kubectl create secret generic platform-secrets \
-  --from-literal=db-password=<password> \
-  --from-literal=grafana-admin-password=<password> \
-  -n industrial-ai
-
-# 部署核心服务
-kubectl apply -f deployment/k8s/
-```
-
-| 资源 | 说明 |
-|---|---|
-| `api-deployment` | FastAPI 2 副本，liveness/readiness 探针 |
-| `worker-deployment` | Celery GPU Worker 2 副本，PVC 挂载模型目录 |
-| `observability` | Grafana + Promtail DaemonSet（日志采集） |
-| `ingress` | Nginx Ingress，50MB body，300s 超时 |
-
----
-
 ## 前端页面
 
 | 页面 | 路由 | 功能说明 |
