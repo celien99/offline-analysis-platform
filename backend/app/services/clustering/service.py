@@ -35,92 +35,71 @@ class ClusteringService:
             hdbscan_min_samples=settings.clustering_min_samples,
         )
 
-    def _pick_representatives(
-        self,
-        embeddings: dict[str, np.ndarray],
-        labels: np.ndarray,
-        probs: np.ndarray,
-    ) -> dict[int, list[str]]:
-        representatives: dict[int, list[str]] = {}
-        for label in set(labels):
-            if label == -1:
-                continue
-            label_indices = [i for i, l in enumerate(labels) if l == label]
-            anomaly_ids_for_label = list(embeddings.keys())
-            ids_sorted = sorted(
-                label_indices,
-                key=lambda i: probs[i],
-                reverse=True,
-            )
-            representatives[label] = [
-                anomaly_ids_for_label[i] for i in ids_sorted[:5]
-            ]
-        return representatives
-
     async def run_clustering(
         self,
         embeddings: dict[str, np.ndarray],
         *,
         config: ClusterConfig | None = None,
     ) -> tuple[ClusteringResult, dict[str, int], dict[str, float]]:
-        if len(embeddings) < max((config or ClusterConfig()).hdbscan_min_cluster_size, 3):
+        cfg = config or self._build_cluster_config()
+
+        if len(embeddings) < max(cfg.hdbscan_min_cluster_size, 3):
             raise ClusteringError(
                 f"Need at least {settings.clustering_min_cluster_size} embeddings for clustering"
             )
 
-        cfg = config or self._build_cluster_config()
+        ids = list(embeddings.keys())
+        matrix = np.stack([embeddings[i] for i in ids])
+
+        from ml.clustering.pipeline import ClusteringPipeline
+
+        pipeline = ClusteringPipeline(
+            umap_n_components=cfg.umap_n_components,
+            umap_n_neighbors=cfg.umap_n_neighbors,
+            umap_min_dist=cfg.umap_min_dist,
+            hdbscan_min_cluster_size=cfg.hdbscan_min_cluster_size,
+            hdbscan_min_samples=cfg.hdbscan_min_samples,
+            hdbscan_metric=cfg.hdbscan_metric,
+        )
 
         try:
-            from umap import UMAP
-
-            reducer = UMAP(
-                n_components=cfg.umap_n_components,
-                n_neighbors=cfg.umap_n_neighbors,
-                min_dist=cfg.umap_min_dist,
-                random_state=42,
-            )
-            ids = list(embeddings.keys())
-            matrix = np.stack([embeddings[i] for i in ids])
-            umap_result = reducer.fit_transform(matrix)
-
-            from hdbscan import HDBSCAN
-
-            clusterer = HDBSCAN(
-                min_cluster_size=cfg.hdbscan_min_cluster_size,
-                min_samples=cfg.hdbscan_min_samples,
-                metric=cfg.hdbscan_metric,
-            )
-            labels = clusterer.fit_predict(matrix)
-            probabilities = clusterer.probabilities_
-
+            result = pipeline.fit_predict(matrix, ids)
         except Exception as e:
             logger.error("clustering_failed", error=str(e))
             raise ClusteringError(f"Clustering failed: {e}") from e
 
-        representatives = self._pick_representatives(embeddings, labels, probabilities)
-        run_at = datetime.now(tz=timezone.utc)
+        labels: np.ndarray = result["labels"]
+        probabilities: np.ndarray = result["probabilities"]
+        umap_coords: np.ndarray = result["umap_coords"]
 
-        # Build full anomaly ID → label mapping for membership recording
-        label_map: dict[str, int] = dict(zip(ids, (int(l) for l in labels)))
+        representatives = pipeline.get_representatives(labels, probabilities, n_per_cluster=5)
+
+        label_map: dict[str, int] = dict(zip(ids, (int(lb) for lb in labels)))
         probability_map: dict[str, float] = dict(zip(ids, (float(p) for p in probabilities)))
+
+        run_at = datetime.now(tz=timezone.utc)
 
         clusters: list[ClusterResult] = []
         unique_labels = set(labels)
-        noise_count = int(sum(1 for l in labels if l == -1))
+        noise_count = int(sum(1 for lb in labels if lb == -1))
 
         for label in sorted(unique_labels):
             if label == -1:
                 continue
-            label_indices = [i for i, l in enumerate(labels) if l == label]
+            int_label = int(label)
+            label_indices = [i for i, lb in enumerate(labels) if lb == label]
             centroid = matrix[label_indices].mean(axis=0).tolist()
-            umap_points = umap_result[label_indices]
+            umap_points = umap_coords[label_indices]
             umap_center = umap_points.mean(axis=0)
+
+            rep_indices = representatives.get(int_label, [])
+            rep_ids = [ids[i] for i in rep_indices] if rep_indices else []
 
             cluster = ClusterResult(
                 cluster_id=generate_uuid(),
-                label=int(label),
+                label=int_label,
                 sample_count=len(label_indices),
-                representative_ids=representatives.get(int(label), []),
+                representative_ids=rep_ids,
                 centroid=centroid,
                 umap_x=float(umap_center[0]),
                 umap_y=float(umap_center[1]),
@@ -168,7 +147,6 @@ class ClusteringService:
             )
             persisted.append(await self._cluster_repo.create(cluster))
 
-            # Record ALL anomaly memberships, not just representatives
             if label_map is not None:
                 memberships = [
                     ClusterMembership(
