@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.logging import get_logger
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.security import generate_uuid
-from app.models.cluster import Cluster, ClusterMembership
+from app.models.cluster import Cluster
 from app.models.review import ReviewRecord
 from app.repositories.anomaly.repository import AnomalyRepository
 from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
@@ -150,16 +150,12 @@ class ReviewService:
         )
         await self._cluster_repo.create(new_cluster)
 
-        for aid in valid_ids:
-            membership = ClusterMembership(
-                id=generate_uuid(),
-                cluster_id=new_cluster.id,
-                anomaly_id=aid,
-                membership_score=1.0,
-            )
-            await self._membership_repo.create(membership)
-
-        remaining_count = max(len(current_member_ids) - len(valid_ids), 0)
+        moved_count = await self._membership_repo.move_memberships(
+            source_cluster_id=cluster.id,
+            target_cluster_id=new_cluster.id,
+            anomaly_ids=valid_ids,
+        )
+        remaining_count = max(len(current_member_ids) - moved_count, 0)
         await self._cluster_repo.update_review(
             cluster.id,
             review_status=cluster.review_status or "real_defect",
@@ -210,16 +206,13 @@ class ReviewService:
             source_member_ids = (
                 await self._membership_repo.get_anomaly_ids_by_cluster(source_id)
             )
-            for aid in source_member_ids:
-                membership = ClusterMembership(
-                    id=generate_uuid(),
-                    cluster_id=target_cluster_id,
-                    anomaly_id=aid,
-                    membership_score=1.0,
-                )
-                await self._membership_repo.create(membership)
+            moved_count = await self._membership_repo.move_memberships(
+                source_cluster_id=source_id,
+                target_cluster_id=target_cluster_id,
+                anomaly_ids=source_member_ids,
+            )
 
-            total_sample_count += source.sample_count
+            total_sample_count += moved_count or source.sample_count
             if source.representative_ids:
                 merged_representatives.extend(
                     json.loads(source.representative_ids)

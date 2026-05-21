@@ -110,3 +110,25 @@ class ClusterMembershipRepository(BaseRepository):
         self, memberships: list[ClusterMembership]
     ) -> list[ClusterMembership]:
         return await self.create_all(memberships)
+
+    async def move_memberships(
+        self,
+        *,
+        source_cluster_id: str,
+        target_cluster_id: str,
+        anomaly_ids: list[str],
+    ) -> int:
+        if not anomaly_ids:
+            return 0
+
+        stmt = (
+            update(ClusterMembership)
+            .where(
+                ClusterMembership.deleted_at.is_(None),
+                ClusterMembership.cluster_id == source_cluster_id,
+                ClusterMembership.anomaly_id.in_(anomaly_ids),
+            )
+            .values(cluster_id=target_cluster_id)
+        )
+        result = await self._session.execute(stmt)
+        return int(result.rowcount or 0)
