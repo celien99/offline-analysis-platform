@@ -174,6 +174,15 @@ class FilterClassifierTrainer:
             "history": history,
         }
 
+    def load_checkpoint(self, checkpoint_path: str | Path) -> None:
+        """Load model weights from a checkpoint file."""
+        checkpoint = torch.load(str(checkpoint_path), map_location=self._device)
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            self._model.load_state_dict(checkpoint["model_state_dict"])
+        else:
+            self._model.load_state_dict(checkpoint)
+        self._model.eval()
+
     def export_torchscript(self, output_path: str | Path) -> str:
         output_path = Path(output_path)
         self._model.eval()
