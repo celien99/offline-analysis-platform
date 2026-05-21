@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>171+ 源文件</b> · <b>28 个 API 端点</b> · <b>7 个 Celery Worker</b> · <b>5 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
+  <b>171+ 源文件</b> · <b>29 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
 </p>
 
 ---
@@ -71,6 +71,7 @@ flowchart TB
         <li>512 维特征向量，存入 <b>pgvector</b>（IVFFlat 索引）</li>
         <li>支持按异常 ID 或原始向量进行余弦相似度检索</li>
         <li>Celery 异步批量提取，不阻塞 API</li>
+        <li>Grad-CAM 热力图生成 + Pillow 缩略图生成</li>
       </ul>
     </td>
     <td width="50%">
@@ -79,7 +80,7 @@ flowchart TB
         <li>StandardScaler → UMAP → HDBSCAN 完整 Pipeline</li>
         <li>无需人工标注，自动发现缺陷模式</li>
         <li>每个簇自动选取代表样本</li>
-        <li>Celery Beat 每 <b>6 小时</b>定时触发</li>
+        <li>Celery Beat 每 <b>6 小时</b>自动触发完整离线分析周期 (Pipeline 编排)</li>
       </ul>
     </td>
   </tr>
@@ -115,8 +116,9 @@ flowchart TB
       <h3>🎯 分类器训练与模型部署</h3>
       <ul>
         <li>支持 MobileNetV3 / EfficientNet / ResNet18</li>
-        <li>Adam + ReduceLROnPlateau + Early Stopping</li>
-        <li>导出 TorchScript / ONNX，注册至 <b>MLflow</b></li>
+        <li>Adam + ReduceLROnPlateau + Early Stopping (patience=10)</li>
+        <li>自动数据加载：从 MinIO 读取已审核聚类数据，train/val split</li>
+        <li>导出 TorchScript / ONNX，自动注册至 <b>MLflow</b> 和数据库</li>
         <li>安全部署 + 版本化回滚</li>
       </ul>
     </td>
@@ -165,7 +167,7 @@ offline-analysis-platform/
 │   │   ├── repositories/             # 5 个 Repository（封装所有 DB 访问）
 │   │   ├── models/                   # 9 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
-│   │   ├── workers/                  # 7 个 Celery Worker 模块
+│   │   ├── workers/                  # 8 个 Celery Worker 模块（含 Pipeline 编排）
 │   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
 │   │   ├── core/                     # 配置类 · 异常体系 · 安全工具
 │   │   ├── common/                   # 共享类型 · structlog 结构化日志
@@ -185,8 +187,11 @@ offline-analysis-platform/
 │       │   ├── dashboard/            #   看板：UMAP 散点图 · 复核柱状图 · 统计卡片
 │       │   ├── cluster-review/       #   聚类复核：列表 · 详情弹窗 · 复核弹窗
 │       │   ├── anomaly-browser/      #   异常浏览：筛选 · 列表 · 详情 · 相似检索
+│       │   ├── anomaly-upload/       #   异常上传：JSON元数据 · multipart文件上传
 │       │   ├── knowledge-base/       #   知识库：增删改查 · 全文搜索 · 创建表单
-│       │   └── rules-engine/         #   规则引擎：启停开关 · 评估模拟器 · 创建表单
+│       │   ├── rules-engine/         #   规则引擎：启停开关 · 评估模拟器 · 创建表单
+│       │   ├── training/             #   训练管理：模型列表 · 启动训练 · 状态轮询
+│       │   └── model-deploy/         #   模型部署：部署历史 · 部署操作 · 回滚确认
 │       ├── api/                      # Axios API 客户端（按 domain 拆分）
 │       ├── types/                    # TypeScript 类型定义（按 domain 拆分）
 │       ├── hooks/                    # useApi 通用 hook
@@ -269,7 +274,8 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 > 所有端点文档详见 **[`/docs`](http://localhost:8000/docs)**（Swagger）和 **[`/redoc`](http://localhost:8000/redoc)**
 
 ```
-                     POST   /api/anomaly/upload                    📥 异常样本
+                     POST   /api/anomaly/upload                    📥 上传异常
+                     POST   /api/anomaly/upload-with-files         (multipart 文件上传)
                      GET    /api/anomaly/list · /{id}
                      POST   /api/anomaly/{id}/reprocess
 
@@ -308,8 +314,11 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 | **Dashboard** | `/` | Plotly UMAP 散点图 · 复核状态分布柱状图 · 4 个统计指标卡片 |
 | **Cluster Review** | `/clusters` | 聚类列表筛选 · 详情弹窗（代表图 + 成员列表） · 一键复核 |
 | **Anomaly Browser** | `/anomalies` | 相机/状态筛选 · PhotoView 图片浏览（缩放/旋转） · 相似检索 · 重新处理 |
+| **Anomaly Upload** | `/upload` | JSON 元数据提交 · multipart 文件上传（原图/ROI/热力图/裁剪图） |
 | **Knowledge Base** | `/knowledge` | 条目增删改查 · 全文搜索 · 按分类/缺陷类型筛选 · 一键生成规则 |
 | **Rules Engine** | `/rules` | 规则增删改查 · 启停开关 · 在线评估模拟器 · 从知识库生成规则 |
+| **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） |
+| **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 在线模型安全回滚 |
 
 ---
 
