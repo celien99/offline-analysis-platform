@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>151+ 源文件</b> · <b>28 个 API 端点</b> · <b>7 个 Celery Worker</b> · <b>5 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
+  <b>171+ 源文件</b> · <b>28 个 API 端点</b> · <b>7 个 Celery Worker</b> · <b>5 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
 </p>
 
 ---
@@ -175,13 +175,23 @@ offline-analysis-platform/
 │   ├── Dockerfile                    # API 镜像
 │   ├── Dockerfile.worker             # GPU Worker 镜像
 │   └── pyproject.toml                # 依赖与工具配置
-├── frontend/                         # React 前端（13 源文件）
+├── frontend/                         # React 前端（33+ 源文件）
+│   ├── index.html                    # Vite 入口 HTML
+│   ├── vite.config.ts                # Vite 配置 + API 代理
+│   ├── tailwind.config.js            # TailwindCSS 配置
 │   └── src/
-│       ├── pages/                    # Dashboard · ClusterReview · AnomalyBrowser
-│       │                             #   KnowledgeBase · RulesManagement
-│       ├── components/               # ClusterCard · ClusterList · ImageViewer
-│       ├── api/                      # Axios API 客户端
-│       └── types/                    # TypeScript 类型定义
+│       ├── app/                      # layout.tsx · router.tsx（React Router）
+│       ├── features/                 # 功能页面（Feature-based 架构）
+│       │   ├── dashboard/            #   看板：UMAP 散点图 · 复核柱状图 · 统计卡片
+│       │   ├── cluster-review/       #   聚类复核：列表 · 详情弹窗 · 复核弹窗
+│       │   ├── anomaly-browser/      #   异常浏览：筛选 · 列表 · 详情 · 相似检索
+│       │   ├── knowledge-base/       #   知识库：增删改查 · 全文搜索 · 创建表单
+│       │   └── rules-engine/         #   规则引擎：启停开关 · 评估模拟器 · 创建表单
+│       ├── api/                      # Axios API 客户端（按 domain 拆分）
+│       ├── types/                    # TypeScript 类型定义（按 domain 拆分）
+│       ├── hooks/                    # useApi 通用 hook
+│       ├── components/ui/            # PageHeader 等共享 UI 组件
+│       └── lib/                      # constants 等共享常量
 └── ml/                               # ML 模块（9 文件）
     ├── embedding/                    # ResNet18 提取器（512 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
@@ -245,7 +255,7 @@ uv run uvicorn app.main:app --reload --port 8000
 
 # 前端
 cd frontend
-npm install && npm run dev           # → http://localhost:5173
+pnpm install && pnpm run dev          # → http://localhost:3000
 
 # Celery Worker
 cd backend
