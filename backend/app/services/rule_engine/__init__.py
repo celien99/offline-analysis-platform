@@ -55,7 +55,7 @@ class RuleEngineService:
                     "type": rule.rule_type,
                     "priority": rule.priority,
                 })
-                if rule.priority >= self._get_rule_priority(final_action):
+                if rule.priority > self._get_rule_priority(final_action):
                     final_action = rule.rule_type
 
         logger.info(

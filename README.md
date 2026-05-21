@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>171+ 源文件</b> · <b>32 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b>
+  <b>200+ 源文件</b> · <b>32 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>12 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
 </p>
 
 ---
@@ -311,6 +311,30 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 
 ---
 
+## Kubernetes 部署
+
+```bash
+# 创建命名空间和配置
+kubectl apply -f deployment/k8s/namespace.yaml
+kubectl apply -f deployment/k8s/configmap.yaml
+kubectl create secret generic platform-secrets \
+  --from-literal=db-password=<password> \
+  --from-literal=grafana-admin-password=<password> \
+  -n industrial-ai
+
+# 部署核心服务
+kubectl apply -f deployment/k8s/
+```
+
+| 资源 | 说明 |
+|---|---|
+| `api-deployment` | FastAPI 2 副本，liveness/readiness 探针 |
+| `worker-deployment` | Celery GPU Worker 2 副本，PVC 挂载模型目录 |
+| `observability` | Grafana + Promtail DaemonSet（日志采集） |
+| `ingress` | Nginx Ingress，50MB body，300s 超时 |
+
+---
+
 ## 前端页面
 
 | 页面 | 路由 | 功能说明 |
@@ -369,9 +393,9 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 
 ```bash
 cd backend
-uv run pytest -v                                  # 全部 26 个测试用例
+uv run pytest -v                                  # 全部 39 个测试用例
 uv run pytest app/tests/ -v --cov=app             # 含覆盖率报告
-uv run pytest app/tests/test_rule_engine.py -v    # 单独文件
+uv run pytest app/tests/test_anomaly_service.py -v  # 单独文件
 ```
 
 | 测试套件 | 覆盖内容 |
@@ -381,6 +405,7 @@ uv run pytest app/tests/test_rule_engine.py -v    # 单独文件
 | `test_clustering_service` | 默认配置、自定义配置 |
 | `test_knowledge_service` | 创建条目、从复核自动生成、搜索 |
 | `test_rule_engine` | CRUD、优先级评估、启停开关、相机过滤 |
+| `test_anomaly_service` | 创建异常、含文件上传、列表查询过滤、重新处理 |
 | `test_api` | 健康检查、空列表、资源不存在、无结果搜索 |
 
 ---
