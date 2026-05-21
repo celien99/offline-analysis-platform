@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     vlm_endpoint: str = "http://localhost:8001/v1"
 
     # MLflow
-    mlflow_tracking_uri: str = "http://localhost:5000"
+    mlflow_tracking_uri: str = "http://localhost:5001"
     mlflow_artifact_root: str = "./mlruns"
 
     # File storage paths

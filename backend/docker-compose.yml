@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -16,7 +14,7 @@ services:
       - INDUSTRIAL_MINIO_ACCESS_KEY=minioadmin
       - INDUSTRIAL_MINIO_SECRET_KEY=minioadmin
       - INDUSTRIAL_MINIO_BUCKET=anomaly-data
-      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5000
+      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5001
       - INDUSTRIAL_DEBUG=false
     depends_on:
       db:
@@ -40,7 +38,7 @@ services:
       - INDUSTRIAL_MINIO_ACCESS_KEY=minioadmin
       - INDUSTRIAL_MINIO_SECRET_KEY=minioadmin
       - INDUSTRIAL_MINIO_BUCKET=anomaly-data
-      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5000
+      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5001
       - INDUSTRIAL_DEBUG=false
     depends_on:
       db:
@@ -106,17 +104,23 @@ services:
       retries: 5
     restart: unless-stopped
 
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/anomaly-data;
+      exit 0
+      "
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.14.0
     ports:
-      - "5000:5000"
-    environment:
-      - MLFLOW_BACKEND_STORE_URI=postgresql://postgres:postgres@db:5432/mlflow
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts
-    command: mlflow server --host 0.0.0.0 --port 5000
-    depends_on:
-      db:
-        condition: service_healthy
+      - "5001:5001"
+    command: mlflow server --host 0.0.0.0 --port 5001
     restart: unless-stopped
 
 volumes:

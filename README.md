@@ -233,7 +233,7 @@ docker compose up -d
 | **PostgreSQL** | `5432` | pgvector `IVFFlat` 向量索引 |
 | **Redis** | `6379` | 消息队列 + 结果后端 |
 | **MinIO** | `9000` / `9001` | 对象存储 + Web 控制台 |
-| **MLflow** | `5000` | 模型注册与实验追踪 |
+| **MLflow** | `5001` | 模型注册与实验追踪 |
 
 </details>
 

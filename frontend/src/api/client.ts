@@ -28,6 +28,9 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 http.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiError>) => {
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
     const detail =
       error.response?.data?.message ??
       error.response?.data?.detail ??

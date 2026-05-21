@@ -72,6 +72,51 @@ async def list_clusters(
     )
 
 
+@router.get("/visualization")
+async def get_cluster_visualization(
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, object]:
+    """Return cluster data formatted for Plotly scatter plot visualization."""
+    service = ClusteringService(session)
+    clusters, _ = await service.list_clusters(offset=0, limit=10000)
+
+    scatter_data: list[dict[str, object]] = []
+    summary: dict[str, int] = {
+        "total_clusters": 0,
+        "total_samples": 0,
+        "real_defect": 0,
+        "false_alarm": 0,
+        "pending_review": 0,
+    }
+
+    for c in clusters:
+        if c.umap_x is not None and c.umap_y is not None:
+            scatter_data.append({
+                "cluster_id": c.id,
+                "name": c.name or f"Cluster {c.id[:8]}",
+                "x": c.umap_x,
+                "y": c.umap_y,
+                "sample_count": c.sample_count,
+                "possible_type": c.possible_type or "unknown",
+                "review_status": c.review_status or "pending_review",
+                "defect_type": c.defect_type or "unknown",
+            })
+
+        summary["total_clusters"] += 1
+        summary["total_samples"] += c.sample_count
+        if c.review_status == "real_defect":
+            summary["real_defect"] += 1
+        elif c.review_status == "false_alarm":
+            summary["false_alarm"] += 1
+        else:
+            summary["pending_review"] += 1
+
+    return {
+        "scatter_data": scatter_data,
+        "summary": summary,
+    }
+
+
 @router.get(
     "/{cluster_id}",
     response_model=ClusterDetailResponse,
@@ -116,51 +161,6 @@ async def get_cluster_detail(
         created_at=cluster.created_at,
         trace_id=cluster.trace_id,
     )
-
-
-@router.get("/visualization")
-async def get_cluster_visualization(
-    session: AsyncSession = Depends(get_session),
-) -> dict[str, object]:
-    """Return cluster data formatted for Plotly scatter plot visualization."""
-    service = ClusteringService(session)
-    clusters, _ = await service.list_clusters(offset=0, limit=10000)
-
-    scatter_data: list[dict[str, object]] = []
-    summary: dict[str, int] = {
-        "total_clusters": 0,
-        "total_samples": 0,
-        "real_defect": 0,
-        "false_alarm": 0,
-        "pending_review": 0,
-    }
-
-    for c in clusters:
-        if c.umap_x is not None and c.umap_y is not None:
-            scatter_data.append({
-                "cluster_id": c.id,
-                "name": c.name or f"Cluster {c.id[:8]}",
-                "x": c.umap_x,
-                "y": c.umap_y,
-                "sample_count": c.sample_count,
-                "possible_type": c.possible_type or "unknown",
-                "review_status": c.review_status or "pending_review",
-                "defect_type": c.defect_type or "unknown",
-            })
-
-        summary["total_clusters"] += 1
-        summary["total_samples"] += c.sample_count
-        if c.review_status == "real_defect":
-            summary["real_defect"] += 1
-        elif c.review_status == "false_alarm":
-            summary["false_alarm"] += 1
-        else:
-            summary["pending_review"] += 1
-
-    return {
-        "scatter_data": scatter_data,
-        "summary": summary,
-    }
 
 
 def _vlm_value(payload: str | None, key: str) -> object | None:
