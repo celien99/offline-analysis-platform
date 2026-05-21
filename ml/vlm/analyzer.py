@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 import httpx
+import numpy as np
 from PIL import Image
 
 from app.domain.multimodal import VLMRequest, VLMResult
@@ -58,8 +59,7 @@ class QwenVLMAnalyzer:
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     @staticmethod
-    def _ndarray_to_base64(image_array) -> str:
-        import numpy as np
+    def _ndarray_to_base64(image_array: np.ndarray) -> str:
         img = Image.fromarray(image_array.astype(np.uint8)).convert("RGB")
         buffer = BytesIO()
         img.save(buffer, format="JPEG", quality=85)
