@@ -18,6 +18,14 @@ class ReviewSubmitRequest(BaseModel):
     )
     comment: str | None = Field(default=None, max_length=2000)
     new_cluster_name: str | None = Field(default=None, max_length=128)
+    merge_source_ids: list[str] | None = Field(
+        default=None, max_length=20,
+        description="Source cluster IDs to merge into the target cluster_id",
+    )
+    split_member_ids: list[str] | None = Field(
+        default=None, max_length=1000,
+        description="Anomaly IDs to move into a new split-off cluster",
+    )
 
 
 class ReviewResponse(BaseModel):
