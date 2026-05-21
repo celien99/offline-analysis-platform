@@ -7,11 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.common.logging import get_logger
-from app.infrastructure.storage.minio_client import MinIOClient, minio_client
 from app.services.clustering.service import ClusteringService
 from app.schemas.cluster import (
     ClusterDetailResponse,
-    ClusterListParams,
     ClusterListResponse,
     ClusterSummary,
     ClusterTriggerRequest,

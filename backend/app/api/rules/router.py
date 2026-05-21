@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.common.logging import get_logger
-from app.schemas.common import ErrorResponse, StatusResponse
+from app.schemas.common import StatusResponse
 from app.services.rule_engine import RuleEngineService
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])

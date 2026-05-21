@@ -5,8 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.logging import get_logger
-from app.core.exceptions import NotFoundError, TrainingError
-from app.domain.training import TrainingConfig, TrainingResult
+from app.core.exceptions import NotFoundError
 from app.models.registry import ModelVersion
 from app.repositories.anomaly.repository import AnomalyRepository
 from app.repositories.cluster.repository import ClusterRepository

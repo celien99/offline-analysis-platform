@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.common.logging import get_logger
-from app.schemas.embedding import EmbeddingSimilarResult, EmbeddingSearchRequest, EmbeddingSearchByVectorRequest
+from app.schemas.embedding import EmbeddingSimilarResult, EmbeddingSearchByVectorRequest
 from app.schemas.common import ErrorResponse
-from app.services.embedding.service import EmbeddingService
 
 router = APIRouter(prefix="/api/embedding", tags=["embedding"])
 logger = get_logger(__name__)
