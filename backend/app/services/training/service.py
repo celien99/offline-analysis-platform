@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.logging import get_logger
 from app.core.exceptions import NotFoundError
+from app.core.security import generate_uuid
 from app.models.registry import ModelVersion
 from app.repositories.anomaly.repository import AnomalyRepository
-from app.repositories.cluster.repository import ClusterRepository
+from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
+from app.repositories.registry.model_version import ModelVersionRepository
 
 logger = get_logger(__name__)
 
@@ -18,16 +20,13 @@ class TrainingService:
         self._session = session
         self._anomaly_repo = AnomalyRepository(session)
         self._cluster_repo = ClusterRepository(session)
+        self._model_version_repo = ModelVersionRepository(session)
 
     async def prepare_training_data(
         self,
         *,
         anomaly_ids: list[str] | None = None,
     ) -> dict[str, list[str]]:
-        """Collect labeled anomaly data for classifier training.
-
-        Returns dict mapping label (real_defect / false_alarm) to list of anomaly IDs.
-        """
         training_data: dict[str, list[str]] = {
             "real_defect": [],
             "false_alarm": [],
@@ -37,7 +36,6 @@ class TrainingService:
             "reviewed", offset=0, limit=10000
         )
 
-        from app.repositories.cluster.repository import ClusterMembershipRepository
         membership_repo = ClusterMembershipRepository(self._session)
 
         for cluster in reviewed_clusters:
@@ -72,8 +70,6 @@ class TrainingService:
         metrics: dict[str, float] | None = None,
         mlflow_run_id: str | None = None,
     ) -> ModelVersion:
-        from app.core.security import generate_uuid
-
         model = ModelVersion(
             id=generate_uuid(),
             model_name=model_name,
@@ -86,20 +82,12 @@ class TrainingService:
             trained_at=datetime.now(tz=timezone.utc),
             status="registered",
         )
-        self._session.add(model)
-        await self._session.flush()
-        return model
+        return await self._model_version_repo.create(model)
 
     async def get_model(self, model_name: str, version: str) -> ModelVersion:
-        from sqlalchemy import select
-
-        stmt = select(ModelVersion).where(
-            ModelVersion.model_name == model_name,
-            ModelVersion.version == version,
-            ModelVersion.deleted_at.is_(None),
+        model = await self._model_version_repo.get_by_name_and_version(
+            model_name, version
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
         if model is None:
             raise NotFoundError("ModelVersion", f"{model_name}:{version}")
         return model
@@ -111,21 +99,6 @@ class TrainingService:
         offset: int = 0,
         limit: int = 20,
     ) -> tuple[list[ModelVersion], int]:
-        from sqlalchemy import func, select
-
-        stmt = select(ModelVersion).where(ModelVersion.deleted_at.is_(None))
-        if model_type is not None:
-            stmt = stmt.where(ModelVersion.model_type == model_type)
-        stmt = stmt.offset(offset).limit(limit)
-
-        result = await self._session.execute(stmt)
-        models = list(result.scalars().all())
-
-        count_stmt = select(func.count()).select_from(ModelVersion).where(
-            ModelVersion.deleted_at.is_(None)
+        return await self._model_version_repo.list_by_type(
+            model_type=model_type, offset=offset, limit=limit
         )
-        if model_type is not None:
-            count_stmt = count_stmt.where(ModelVersion.model_type == model_type)
-        total = await self._session.execute(count_stmt)
-
-        return models, total.scalar_one()

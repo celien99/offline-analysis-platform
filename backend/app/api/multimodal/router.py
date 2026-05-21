@@ -90,25 +90,9 @@ async def analyze_anomaly(
     session: AsyncSession = Depends(get_session),
     analyzer: VLMAnalyzer = Depends(get_vlm_analyzer),
 ) -> VLMAnomalyAnalysisResponse:
-    from app.repositories.anomaly.repository import AnomalyRepository
-
-    repo = AnomalyRepository(session)
-    anomaly = await repo.get_by_id(anomaly_id)
-    if anomaly is None:
-        return VLMAnomalyAnalysisResponse(
-            status="failed",
-            anomaly_id=anomaly_id,
-            error=f"Anomaly {anomaly_id} not found",
-        )
-
     service = VLMService(session, analyzer)
     try:
-        result = await service.analyze_single_anomaly(
-            original_image_path=anomaly.original_path,
-            roi_path=anomaly.roi_path,
-            heatmap_path=anomaly.heatmap_path,
-            crop_path=anomaly.crop_path,
-        )
+        result = await service.analyze_anomaly_by_id(anomaly_id)
         return VLMAnomalyAnalysisResponse(
             status="completed",
             anomaly_id=anomaly_id,

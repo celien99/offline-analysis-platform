@@ -67,6 +67,21 @@ class VLMService:
                 logger.warning("vlm_analysis_skipped", cluster_id=cluster_id)
         return results
 
+    async def analyze_anomaly_by_id(self, anomaly_id: str) -> VLMResult:
+        from app.repositories.anomaly.repository import AnomalyRepository
+
+        repo = AnomalyRepository(self._session)
+        anomaly = await repo.get_by_id(anomaly_id)
+        if anomaly is None:
+            raise NotFoundError("Anomaly", anomaly_id)
+
+        return await self.analyze_single_anomaly(
+            original_image_path=anomaly.original_path,
+            roi_path=anomaly.roi_path,
+            heatmap_path=anomaly.heatmap_path,
+            crop_path=anomaly.crop_path,
+        )
+
     async def analyze_single_anomaly(
         self,
         original_image_path: str | None = None,

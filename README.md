@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>200+ 源文件</b> · <b>32 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>12 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
+  <b>230+ 源文件</b> · <b>36 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>8 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
 </p>
 
 ---
@@ -153,7 +153,7 @@ flowchart TB
 offline-analysis-platform/
 ├── backend/                          # Python 后端（125+ 文件）
 │   ├── app/
-│   │   ├── api/                      # 9 个 FastAPI 路由，32 个端点
+│   │   ├── api/                      # 9 个 FastAPI 路由，36 个端点
 │   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
 │   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
 │   │   │   ├── review/               #   提交复核 · 查询历史
@@ -161,9 +161,10 @@ offline-analysis-platform/
 │   │   │   ├── knowledge/            #   增删改查 · 全文搜索 · 按簇查询
 │   │   │   ├── rules/                #   增删改查 · 在线评估 · 开关 · 从知识库生成
 │   │   │   ├── training/             #   启动训练 · 查询状态 · 模型列表
-│   │   │   └── registry/             #   部署 · 回滚 · 部署历史
+│   │   │   ├── registry/             #   部署 · 回滚 · 部署历史
+│   │   │   └── multimodal/           #   VLM 单簇 · 批量 · 单异常分析
 │   │   ├── domain/                   # 6 个领域模型 + Protocol 接口
-│   │   ├── services/                 # 8 个业务服务模块
+│   │   ├── services/                 # 9 个业务服务模块
 │   │   ├── repositories/             # 5 个 Repository（封装所有 DB 访问）
 │   │   ├── models/                   # 9 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
@@ -197,7 +198,7 @@ offline-analysis-platform/
 │       ├── hooks/                    # useApi 通用 hook
 │       ├── components/ui/            # PageHeader 等共享 UI 组件
 │       └── lib/                      # constants 等共享常量
-└── ml/                               # ML 模块（9 文件）
+└── ml/                               # ML 模块（12 文件）
     ├── embedding/                    # ResNet18 提取器（512 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
     ├── classifier/                   # MobileNetV3 训练器 + ONNX 导出

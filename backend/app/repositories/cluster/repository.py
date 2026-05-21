@@ -81,6 +81,11 @@ class ClusterRepository(BaseRepository):
         return result.scalars().all()
 
 
+    async def update_fields(self, cluster_id: str, **values: object) -> None:
+        stmt = update(Cluster).where(Cluster.id == cluster_id).values(**values)
+        await self._session.execute(stmt)
+
+
 class ClusterMembershipRepository(BaseRepository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ClusterMembership)

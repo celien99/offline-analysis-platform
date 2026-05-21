@@ -166,14 +166,9 @@ class ReviewService:
             reviewed_by=reviewer,
         )
 
-        from sqlalchemy import update
-
-        stmt = (
-            update(Cluster)
-            .where(Cluster.id == cluster.id)
-            .values(sample_count=remaining_count)
+        await self._cluster_repo.update_fields(
+            cluster.id, sample_count=remaining_count
         )
-        await self._session.execute(stmt)
 
         logger.info(
             "cluster_split",
@@ -232,17 +227,11 @@ class ReviewService:
 
             await self._cluster_repo.soft_delete(source_id)
 
-        from sqlalchemy import update
-
-        stmt = (
-            update(Cluster)
-            .where(Cluster.id == target_cluster_id)
-            .values(
-                sample_count=total_sample_count,
-                representative_ids=json.dumps(merged_representatives[:20]),
-            )
+        await self._cluster_repo.update_fields(
+            target_cluster_id,
+            sample_count=total_sample_count,
+            representative_ids=json.dumps(merged_representatives[:20]),
         )
-        await self._session.execute(stmt)
 
         await self._cluster_repo.update_review(
             target_cluster_id,
