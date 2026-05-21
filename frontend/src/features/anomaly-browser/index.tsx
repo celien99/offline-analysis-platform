@@ -3,40 +3,33 @@ import { Card, Table, Button, Space, Input, Select, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { AnomalyRecord } from "../../types";
 import { anomalyApi } from "../../api";
+import { useAnomalyList, useAnomalyReprocess } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useAnomalyColumns } from "./components/AnomalyTable";
 import AnomalyDetailModal from "./components/AnomalyDetailModal";
 
 export default function AnomalyBrowser() {
-  const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [cameraInput, setCameraInput] = useState("");
   const [cameraFilter, setCameraFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyRecord | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
 
-  const load = async (p = page) => {
-    setLoading(true);
-    try {
-      setAnomalies(
-        await anomalyApi.list({
-          page: p,
-          page_size: 20,
-          camera_id: cameraFilter,
-          status: statusFilter,
-        }),
-      );
-    } catch {
-      message.error("Failed to load anomalies");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
-  }, [page, cameraFilter, statusFilter]);
+    const timer = setTimeout(() => {
+      setCameraFilter(cameraInput || undefined);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [cameraInput]);
+
+  const { data: anomalies = [], isLoading, refetch } = useAnomalyList({
+    page,
+    camera_id: cameraFilter,
+    status: statusFilter,
+  });
+
+  const reprocessMutation = useAnomalyReprocess();
 
   const handleViewDetail = async (anomalyId: string) => {
     try {
@@ -49,9 +42,8 @@ export default function AnomalyBrowser() {
 
   const handleReprocess = async (anomalyId: string) => {
     try {
-      await anomalyApi.reprocess(anomalyId);
+      await reprocessMutation.mutateAsync(anomalyId);
       message.success("Anomaly queued for reprocessing");
-      load();
     } catch {
       message.error("Reprocess failed");
     }
@@ -69,8 +61,8 @@ export default function AnomalyBrowser() {
               placeholder="Camera ID"
               allowClear
               style={{ width: 150 }}
-              value={cameraFilter}
-              onChange={(e) => setCameraFilter(e.target.value || undefined)}
+              value={cameraInput}
+              onChange={(e) => setCameraInput(e.target.value)}
             />
             <Select
               placeholder="Status"
@@ -85,7 +77,7 @@ export default function AnomalyBrowser() {
                 { value: "reviewed", label: "Reviewed" },
               ]}
             />
-            <Button icon={<ReloadOutlined />} onClick={() => load()}>Refresh</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>
           </Space>
         }
       />
@@ -95,7 +87,7 @@ export default function AnomalyBrowser() {
           columns={columns}
           dataSource={anomalies}
           rowKey="anomaly_id"
-          loading={loading}
+          loading={isLoading}
           pagination={{ current: page, pageSize: 20, onChange: setPage }}
         />
       </Card>

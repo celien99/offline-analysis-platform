@@ -1,20 +1,13 @@
-import { Row, Col } from "antd";
-import { useApi } from "../../hooks/useApi";
-import { clusterApi } from "../../api";
-import type { ClusterVizData } from "../../types";
+import { Row, Col, Spin } from "antd";
+import { useClusterVisualization } from "../../hooks/queries";
 import SummaryStats from "./components/SummaryStats";
 import ClusterScatterPlot from "./components/ClusterScatterPlot";
 import ReviewBarChart from "./components/ReviewBarChart";
-import { Spin } from "antd";
 
 export default function Dashboard() {
-  const { data: vizData, loading } = useApi<ClusterVizData>(
-    () => clusterApi.visualization() as Promise<ClusterVizData>,
-    [],
-    { silent: true },
-  );
+  const { data: vizData, isLoading } = useClusterVisualization();
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spin size="large" />

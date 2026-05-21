@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, Table, Button, Space, Input, Select, Form, message } from "antd";
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import type { KnowledgeEntry } from "../../types";
-import { knowledgeApi, rulesApi } from "../../api";
+import { useKnowledgeList, useKnowledgeSearch, useKnowledgeCreate, useKnowledgeDelete } from "../../hooks/queries";
+import { useRuleGenerateFromKb } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useKnowledgeColumns } from "./components/KnowledgeTable";
 import CreateKnowledgeForm from "./components/CreateKnowledgeForm";
@@ -10,8 +11,6 @@ import KnowledgeDetailModal from "./components/KnowledgeDetailModal";
 import { CATEGORY_OPTIONS, DEFECT_TYPES } from "../../lib/constants";
 
 export default function KnowledgeBase() {
-  const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
-  const [loading, setLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [defectFilter, setDefectFilter] = useState<string | undefined>();
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -19,49 +18,41 @@ export default function KnowledgeBase() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<KnowledgeEntry | null>(null);
   const [form] = Form.useForm();
-  const [submitting, setSubmitting] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      setEntries(
-        searchKeyword
-          ? await knowledgeApi.search(searchKeyword)
-          : await knowledgeApi.list({ category: categoryFilter, defect_type: defectFilter, page_size: 100 }),
-      );
-    } catch {
-      message.error("Failed to load knowledge entries");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const searchMode = searchKeyword.length > 0;
 
-  useEffect(() => {
-    load();
-  }, [categoryFilter, defectFilter]);
+  const { data: listData = [], isLoading: listLoading, refetch: refetchList } = useKnowledgeList(
+    { category: categoryFilter, defect_type: defectFilter },
+    !searchMode,
+  );
+  const { data: searchData = [], isLoading: searchLoading, refetch: refetchSearch } = useKnowledgeSearch(
+    searchKeyword,
+    searchMode,
+  );
 
-  const handleSearch = () => load();
+  const entries = searchMode ? searchData : listData;
+  const loading = searchMode ? searchLoading : listLoading;
+  const refetch = searchMode ? refetchSearch : refetchList;
+
+  const createMutation = useKnowledgeCreate();
+  const deleteMutation = useKnowledgeDelete();
+  const generateRuleMutation = useRuleGenerateFromKb();
 
   const handleCreate = async (values: Record<string, unknown>) => {
-    setSubmitting(true);
     try {
-      await knowledgeApi.create(values);
+      await createMutation.mutateAsync(values);
       message.success("Knowledge entry created");
       setCreateVisible(false);
       form.resetFields();
-      load();
     } catch {
       message.error("Failed to create entry");
-    } finally {
-      setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await knowledgeApi.delete(id);
+      await deleteMutation.mutateAsync(id);
       message.success("Entry deleted");
-      load();
     } catch {
       message.error("Failed to delete entry");
     }
@@ -74,7 +65,7 @@ export default function KnowledgeBase() {
 
   const handleGenerateRule = async (entry: KnowledgeEntry) => {
     try {
-      const data = await rulesApi.generateFromKnowledge(entry.knowledge_id);
+      const data = await generateRuleMutation.mutateAsync(entry.knowledge_id);
       message.success(`Generated ${(data as unknown[]).length} rule(s)`);
     } catch {
       message.error("Failed to generate rule");
@@ -99,7 +90,7 @@ export default function KnowledgeBase() {
               style={{ width: 250 }}
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              onSearch={handleSearch}
+              onSearch={(v) => setSearchKeyword(v)}
               enterButton={<SearchOutlined />}
             />
             <Select
@@ -145,7 +136,7 @@ export default function KnowledgeBase() {
       <CreateKnowledgeForm
         form={form}
         open={createVisible}
-        submitting={submitting}
+        submitting={createMutation.isPending}
         onSubmit={handleCreate}
         onClose={() => { setCreateVisible(false); form.resetFields(); }}
       />

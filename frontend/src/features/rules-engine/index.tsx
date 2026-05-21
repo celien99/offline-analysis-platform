@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, Table, Button, Space, Select, message, Form } from "antd";
 import { PlusOutlined, ReloadOutlined, PlayCircleOutlined, BookOutlined } from "@ant-design/icons";
 import { Modal, Input } from "antd";
-import type { Rule, EvalResult } from "../../types";
-import { rulesApi } from "../../api";
+import type { EvalResult } from "../../types";
+import { useRulesList, useRuleCreate, useRuleToggle, useRuleDelete, useRuleEvaluate, useRuleGenerateFromKb } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useRulesColumns } from "./components/RulesTable";
 import CreateRuleForm from "./components/CreateRuleForm";
@@ -12,36 +12,23 @@ import EvalResultDisplay from "./components/EvalResult";
 import { RULE_TYPE_OPTIONS } from "../../lib/constants";
 
 export default function RulesManagement() {
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [createVisible, setCreateVisible] = useState(false);
   const [evalVisible, setEvalVisible] = useState(false);
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
-  const [evalLoading, setEvalLoading] = useState(false);
   const [genFromKbVisible, setGenFromKbVisible] = useState(false);
   const [form] = Form.useForm();
   const [evalForm] = Form.useForm();
   const [kbForm] = Form.useForm();
-  const [submitting, setSubmitting] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      setRules(await rulesApi.list({ rule_type: typeFilter, page_size: 200 }));
-    } catch {
-      message.error("Failed to load rules");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, [typeFilter]);
+  const { data: rules = [], isLoading, refetch } = useRulesList(typeFilter);
+  const createMutation = useRuleCreate();
+  const toggleMutation = useRuleToggle();
+  const deleteMutation = useRuleDelete();
+  const evaluateMutation = useRuleEvaluate();
+  const generateMutation = useRuleGenerateFromKb();
 
   const handleCreate = async (values: Record<string, unknown>) => {
-    setSubmitting(true);
     try {
       let conditionJson = "{}";
       try {
@@ -49,10 +36,9 @@ export default function RulesManagement() {
         conditionJson = values.condition_json as string;
       } catch {
         message.error("Invalid JSON in condition");
-        setSubmitting(false);
         return;
       }
-      await rulesApi.create({
+      await createMutation.mutateAsync({
         name: values.name,
         rule_type: values.rule_type,
         condition_json: conditionJson,
@@ -64,19 +50,15 @@ export default function RulesManagement() {
       message.success("Rule created");
       setCreateVisible(false);
       form.resetFields();
-      load();
     } catch {
       message.error("Failed to create rule");
-    } finally {
-      setSubmitting(false);
     }
   };
 
   const handleToggle = async (ruleId: string, enabled: boolean) => {
     try {
-      await rulesApi.toggle(ruleId, enabled);
+      await toggleMutation.mutateAsync({ ruleId, enabled });
       message.success(`Rule ${enabled ? "enabled" : "disabled"}`);
-      load();
     } catch {
       message.error("Failed to toggle rule");
     }
@@ -84,19 +66,17 @@ export default function RulesManagement() {
 
   const handleDelete = async (ruleId: string) => {
     try {
-      await rulesApi.delete(ruleId);
+      await deleteMutation.mutateAsync(ruleId);
       message.success("Rule deleted");
-      load();
     } catch {
       message.error("Failed to delete rule");
     }
   };
 
   const handleEvaluate = async (values: Record<string, unknown>) => {
-    setEvalLoading(true);
     try {
       setEvalResult(
-        await rulesApi.evaluate({
+        await evaluateMutation.mutateAsync({
           camera_id: values.camera_id as string,
           defect_type: values.defect_type as string | undefined,
           anomaly_score: values.anomaly_score as number | undefined,
@@ -105,23 +85,17 @@ export default function RulesManagement() {
       );
     } catch {
       message.error("Evaluation failed");
-    } finally {
-      setEvalLoading(false);
     }
   };
 
   const handleGenerateFromKb = async (values: Record<string, unknown>) => {
-    setSubmitting(true);
     try {
-      const data = await rulesApi.generateFromKnowledge(values.knowledge_entry_id as string);
+      const data = await generateMutation.mutateAsync(values.knowledge_entry_id as string);
       message.success(`Generated ${(data as unknown[]).length} rule(s)`);
       setGenFromKbVisible(false);
       kbForm.resetFields();
-      load();
     } catch {
       message.error("Failed to generate rules");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -141,7 +115,7 @@ export default function RulesManagement() {
               onChange={setTypeFilter}
               options={RULE_TYPE_OPTIONS as { value: string; label: string }[]}
             />
-            <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>
             <Button icon={<BookOutlined />} onClick={() => setGenFromKbVisible(true)}>From KB</Button>
             <Button
               icon={<PlayCircleOutlined />}
@@ -165,7 +139,7 @@ export default function RulesManagement() {
           columns={columns}
           dataSource={rules}
           rowKey="rule_id"
-          loading={loading}
+          loading={isLoading}
           pagination={{ pageSize: 20, showTotal: (t) => `Total ${t} rules` }}
           size="middle"
         />
@@ -174,7 +148,7 @@ export default function RulesManagement() {
       <CreateRuleForm
         form={form}
         open={createVisible}
-        submitting={submitting}
+        submitting={createMutation.isPending}
         onSubmit={handleCreate}
         onClose={() => { setCreateVisible(false); form.resetFields(); }}
       />
@@ -182,7 +156,7 @@ export default function RulesManagement() {
       <EvaluateRuleForm
         form={evalForm}
         open={evalVisible}
-        loading={evalLoading}
+        loading={evaluateMutation.isPending}
         onSubmit={handleEvaluate}
         onClose={() => setEvalVisible(false)}
       />
@@ -194,7 +168,7 @@ export default function RulesManagement() {
         open={genFromKbVisible}
         onCancel={() => { setGenFromKbVisible(false); kbForm.resetFields(); }}
         onOk={() => kbForm.submit()}
-        confirmLoading={submitting}
+        confirmLoading={generateMutation.isPending}
       >
         <Form form={kbForm} layout="vertical" onFinish={(v) => handleGenerateFromKb(v)}>
           <Form.Item
