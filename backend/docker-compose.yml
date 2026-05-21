@@ -3,21 +3,21 @@ version: "3.9"
 services:
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@db:5432/anomaly_db
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=anomaly-data
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - DEBUG=false
+      - INDUSTRIAL_POSTGRES_URL=postgresql+asyncpg://postgres:postgres@db:5432/anomaly_db
+      - INDUSTRIAL_REDIS_URL=redis://redis:6379/0
+      - INDUSTRIAL_CELERY_BROKER_URL=redis://redis:6379/1
+      - INDUSTRIAL_CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - INDUSTRIAL_MINIO_ENDPOINT=minio:9000
+      - INDUSTRIAL_MINIO_ACCESS_KEY=minioadmin
+      - INDUSTRIAL_MINIO_SECRET_KEY=minioadmin
+      - INDUSTRIAL_MINIO_BUCKET=anomaly-data
+      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5000
+      - INDUSTRIAL_DEBUG=false
     depends_on:
       db:
         condition: service_healthy
@@ -29,19 +29,19 @@ services:
 
   worker:
     build:
-      context: .
-      dockerfile: Dockerfile.worker
+      context: ..
+      dockerfile: backend/Dockerfile.worker
     environment:
-      - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@db:5432/anomaly_db
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=anomaly-data
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - DEBUG=false
+      - INDUSTRIAL_POSTGRES_URL=postgresql+asyncpg://postgres:postgres@db:5432/anomaly_db
+      - INDUSTRIAL_REDIS_URL=redis://redis:6379/0
+      - INDUSTRIAL_CELERY_BROKER_URL=redis://redis:6379/1
+      - INDUSTRIAL_CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - INDUSTRIAL_MINIO_ENDPOINT=minio:9000
+      - INDUSTRIAL_MINIO_ACCESS_KEY=minioadmin
+      - INDUSTRIAL_MINIO_SECRET_KEY=minioadmin
+      - INDUSTRIAL_MINIO_BUCKET=anomaly-data
+      - INDUSTRIAL_MLFLOW_TRACKING_URI=http://mlflow:5000
+      - INDUSTRIAL_DEBUG=false
     depends_on:
       db:
         condition: service_healthy

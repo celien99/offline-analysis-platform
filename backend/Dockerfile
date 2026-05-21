@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml .
+COPY backend/pyproject.toml .
 RUN uv pip install --system --no-cache \
     fastapi>=0.115.0 \
     uvicorn[standard]>=0.30.0 \
@@ -28,9 +28,10 @@ RUN uv pip install --system --no-cache \
     python-multipart>=0.0.9 \
     numpy>=1.26.0
 
-COPY app/ ./app/
-COPY alembic.ini .
-COPY alembic/ ./alembic/
+COPY backend/app/ ./app/
+COPY backend/alembic.ini .
+COPY backend/alembic/ ./alembic/
+COPY ml/ ./ml/
 
 EXPOSE 8000
 
