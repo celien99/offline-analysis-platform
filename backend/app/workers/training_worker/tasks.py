@@ -110,6 +110,13 @@ def train_filter_classifier(
         batch_size=batch_size,
     )
 
+    import mlflow
+
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    mlflow.set_experiment("filter_classifier")
+
+    mlflow_run_id: str | None = None
+
     try:
         images, labels = run_async(_load_training_data(anomaly_ids or []))
 
@@ -145,31 +152,65 @@ def train_filter_classifier(
             device="cpu",
             learning_rate=learning_rate,
         )
-        metrics = trainer.train(
-            train_dataset=train_ds,
-            val_dataset=val_ds,
-            batch_size=batch_size,
-            epochs=epochs,
-            class_names=class_names,
-            output_dir=output_dir,
-        )
 
-        torchscript_path = output_dir / "model.pt"
-        trainer.export_torchscript(torchscript_path)
+        with mlflow.start_run() as run:
+            mlflow_run_id = run.info.run_id
+            mlflow.log_params({
+                "model_type": model_type,
+                "num_classes": num_classes,
+                "batch_size": batch_size,
+                "epochs": epochs,
+                "learning_rate": learning_rate,
+                "validation_split": validation_split,
+                "augmentations": augmentations,
+                "train_samples": len(train_imgs),
+                "val_samples": len(val_imgs),
+            })
+
+            metrics = trainer.train(
+                train_dataset=train_ds,
+                val_dataset=val_ds,
+                batch_size=batch_size,
+                epochs=epochs,
+                class_names=class_names,
+                output_dir=output_dir,
+            )
+
+            numeric_metrics = {
+                k: v for k, v in metrics.items() if isinstance(v, (float, int))
+            }
+            mlflow.log_metrics(numeric_metrics)
+
+            torchscript_path = output_dir / "model.pt"
+            trainer.export_torchscript(torchscript_path)
+
+            mlflow.log_artifact(str(torchscript_path), artifact_path="model")
+            mlflow.pytorch.log_model(
+                trainer._model,
+                artifact_path="pytorch_model",
+                registered_model_name=f"filter_classifier_{model_type}",
+            )
 
         run_async(_create_model_version(
             model_name=f"filter_classifier_{model_type}",
             model_type=model_type,
             artifact_path=str(torchscript_path),
-            metrics={k: v for k, v in metrics.items() if isinstance(v, (float, int))},
+            metrics=numeric_metrics,
+            mlflow_run_id=mlflow_run_id,
         ))
 
-        logger.info("training_complete", model_type=model_type, metrics=metrics)
+        logger.info(
+            "training_complete",
+            model_type=model_type,
+            metrics=metrics,
+            mlflow_run_id=mlflow_run_id,
+        )
         return {
             "status": "completed",
             "model_type": model_type,
             "artifact_path": str(torchscript_path),
-            "metrics": {k: v for k, v in metrics.items() if isinstance(v, (float, int))},
+            "metrics": numeric_metrics,
+            "mlflow_run_id": mlflow_run_id,
         }
     except Exception as e:
         logger.error("training_failed", error=str(e))
@@ -181,6 +222,7 @@ async def _create_model_version(
     model_type: str,
     artifact_path: str,
     metrics: dict[str, float],
+    mlflow_run_id: str | None = None,
 ) -> None:
     from datetime import datetime, timezone
 
@@ -192,7 +234,8 @@ async def _create_model_version(
             model_type=model_type,
             framework="pytorch",
             artifact_path=artifact_path,
-            metrics=json.dumps(metrics),
+            metrics_json=json.dumps(metrics),
+            mlflow_run_id=mlflow_run_id,
             trained_at=datetime.now(tz=timezone.utc),
             status="registered",
         )
