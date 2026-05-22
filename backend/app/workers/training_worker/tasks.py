@@ -201,13 +201,9 @@ def train_filter_classifier(
 
         # 训练完成后自动部署到默认目标
         if settings.deploy_on_train_complete:
-            import os
             from app.workers.deployment_worker.tasks import deploy_model_version_task
 
-            default_target = os.environ.get(
-                "INDUSTRIAL_DEFAULT_DEPLOY_TARGET",
-                "production_line_a",
-            )
+            default_target = settings.default_deploy_target
             try:
                 deploy_model_version_task.delay(
                     model_name=model_version.model_name,

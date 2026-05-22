@@ -1,0 +1,95 @@
+{
+  "$comment": "seat_defect_core 检测配置示例 — 完整闭环模式",
+  "seat_defect_inspection": {
+    "part_id": "seat_demo",
+    "upload_base_url": "http://localhost:8000",
+
+    "default_seat_model_id": "model_a",
+
+    "seat_models": [
+      {
+        "seat_model_id": "model_a",
+        "display_name": "示例座椅型号A",
+        "cameras": [
+          {
+            "camera_id": "line_a_cam_01",
+            "patchcore_model_path": "./models/patchcore_line_a.npz",
+            "enabled": true,
+
+            "quality": {
+              "min_laplacian_variance": 80.0,
+              "min_brightness_mean": 30.0,
+              "max_brightness_mean": 225.0,
+              "max_overexposed_ratio": 0.25,
+              "max_underexposed_ratio": 0.35
+            },
+
+            "detection": {
+              "model_path": "./models/yolo_seat.pt",
+              "target_class": "seat",
+              "confidence": 0.25,
+              "iou": 0.45,
+              "device": "cpu",
+              "imgsz": 960
+            },
+
+            "roi": {
+              "crop_expand_ratio": 0.05,
+              "edge_ignore_pixels": 6,
+              "alignment": {
+                "output_width": 256,
+                "output_height": 256
+              }
+            },
+
+            "patchcore": {
+              "image_size": 256,
+              "threshold_quantile": 0.99,
+              "decision_score_margin": 1.08,
+              "min_valid_patch_ratio": 0.65
+            },
+
+            "color_branch": {
+              "enabled": false
+            },
+
+            "filter_classifier": {
+              "enabled": true,
+              "model_path": "./deployed_models/line_a/filter_classifier/",
+              "device": "cpu",
+              "input_size": 224,
+              "confidence_threshold": 0.5
+            },
+
+            "rule_engine": {
+              "enabled": true,
+              "rules": [
+                {
+                  "name": "low_evidence_false_alarm",
+                  "enabled": true,
+                  "max_anomaly_score": 0.8,
+                  "require_filter_false_alarm": true,
+                  "action": "suppress_to_ok"
+                },
+                {
+                  "name": "few_strong_patches",
+                  "enabled": true,
+                  "min_strong_patch_count": 2,
+                  "action": "suppress_to_ok"
+                }
+              ]
+            },
+
+            "regions": []
+          }
+        ]
+      }
+    ],
+
+    "fusion": {
+      "reject_on_any_reject": true,
+      "ng_strategy": "any",
+      "defect_overrides_reject": true
+    }
+  }
+}

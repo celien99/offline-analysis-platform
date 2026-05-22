@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     }
     deploy_model_subdir: str = "filter_classifier"
     deploy_on_train_complete: bool = False
+    default_deploy_target: str = "production_line_a"
 
     # Pagination
     default_page_size: int = 20
