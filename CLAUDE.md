@@ -25,14 +25,14 @@ uv run mypy app                                   # type check (mypy strict)
 # seat_defect_core (online detection core)
 cd seat_defect_core
 uv sync                                          # install deps (torch, cv2, ultralytics, etc.)
-# 设置 PYTHONPATH 指向仓库根目录（避免 types/ 与 stdlib 冲突）
-PYTHONPATH=/path/to/repo uv run python -m seat_defect_core --help
-PYTHONPATH=/path/to/repo uv run python -m seat_defect_core --config config.example.json --images cam1=img.jpg
+# types/ 已重命名为 core_types/，无需 PYTHONPATH
+uv run python -m seat_defect_core --help
+uv run python -m seat_defect_core --config config.example.json --images cam1=img.jpg
 
 # Demo (from repo root)
 cd backend && docker compose up -d               # start backend services
 mkdir -p sample_images                           # 放入测试图片（文件名=camera_id）
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py --images ./sample_images
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py --images ./sample_images
 
 # Frontend
 cd frontend

@@ -9,7 +9,7 @@ import cv2
 
 from .config import InspectionConfig
 from .runtime_config import load_config
-from .types import InspectionFrame, InspectionResponse
+from .core_types import InspectionFrame, InspectionResponse
 
 ConfigSource = Union[str, PathLike, InspectionConfig]
 

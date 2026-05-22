@@ -7,7 +7,7 @@ from time import perf_counter
 from typing import Dict, List, Optional, Tuple
 
 from ..fusion import fuse_camera_results
-from ..types import CameraInspectionResult, InspectionError, InspectionFrame, InspectionResult
+from ..core_types import CameraInspectionResult, InspectionError, InspectionFrame, InspectionResult
 from .core import InspectionService
 from .frames import (
     build_frame_map,

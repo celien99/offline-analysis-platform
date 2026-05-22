@@ -14,7 +14,7 @@ from ..config import CameraConfig, FilterClassifierConfig, InspectionConfig, Pat
 from ..cvops import ImageQualityGuard, RoiRefineEngine
 from ..patchcore.features import _TorchPatchFeatureExtractor
 from ..patchcore import LoadedModelBundle, PatchCoreService
-from ..types import DetectionResult, ImageQualityDecision, RoiRefineResult, TextureAnomalyResult
+from ..core_types import DetectionResult, ImageQualityDecision, RoiRefineResult, TextureAnomalyResult
 from ..yolo import DetectionService
 
 

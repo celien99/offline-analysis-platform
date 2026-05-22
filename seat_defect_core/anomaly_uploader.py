@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 import requests
 
-from .types import CameraInspectionResult, InspectionResponse
+from .core_types import CameraInspectionResult, InspectionResponse
 
 
 def upload_camera_result(

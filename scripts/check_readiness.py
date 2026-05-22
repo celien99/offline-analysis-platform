@@ -2,8 +2,8 @@
 """检测环境就绪检查：验证配置、模型文件和依赖的完整度。
 
 用法：
-  PYTHONPATH=. uv run --directory seat_defect_core python scripts/check_readiness.py
-  PYTHONPATH=. uv run --directory seat_defect_core python scripts/check_readiness.py --config seat_defect_core/config.example.json
+  ./seat_defect_core/.venv/bin/python scripts/check_readiness.py
+  ./seat_defect_core/.venv/bin/python scripts/check_readiness.py --config seat_defect_core/config.example.json
 """
 
 from __future__ import annotations
@@ -126,9 +126,8 @@ def print_next_steps(missing_count: int) -> None:
         print("  所有模型文件已就绪，可以直接运行检测!")
         print()
         print("  运行命令:")
-        print("    cd seat_defect_core")
-        print("    PYTHONPATH=.. uv run python -m seat_defect_core \\")
-        print("      --config config.example.json \\")
+        print("    ./seat_defect_core/.venv/bin/python -m seat_defect_core \\")
+        print("      --config seat_defect_core/config.example.json \\")
         print("      --images cam_front=sample.jpg cam_side=sample.jpg")
         return
 

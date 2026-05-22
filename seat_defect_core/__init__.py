@@ -2,7 +2,7 @@
 
 from .config import InspectionConfig
 from .runtime_config import load_config
-from .types import (
+from .core_types import (
     CameraInspectionResult,
     FramePacket,
     InspectionError,

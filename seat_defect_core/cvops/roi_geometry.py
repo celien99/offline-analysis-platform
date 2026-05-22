@@ -7,7 +7,7 @@ from typing import Any, Optional, Tuple, Union
 import cv2
 import numpy as np
 
-from ..types import BoundingBox, DetectionObject
+from ..core_types import BoundingBox, DetectionObject
 
 
 def _expand_box(

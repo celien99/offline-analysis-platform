@@ -873,11 +873,11 @@ cd seat_defect_core
 # 2. 安装依赖（自动创建 .venv）
 uv sync
 
-# 3. 验证安装
-PYTHONPATH=.. uv run python -c "from seat_defect_core import SeatDefectInspector; print('OK')"
+# 3. 验证安装（从仓库根目录运行）
+python -c "import sys; sys.path.insert(0, '.'); from seat_defect_core import SeatDefectInspector; print('OK')"
 ```
 
-**注意**：`PYTHONPATH=..` 必须指向仓库根目录（seat_defect_core 的父目录），否则 `types/` 子目录会与 Python 标准库 `types` 模块冲突。
+**注意**：所有命令从仓库根目录执行。`seat_defect_core/core_types/` 已重命名以避免与 Python 标准库 `types` 模块冲突。
 
 ### 10.4 目录结构与模型文件
 
@@ -929,7 +929,7 @@ offline-analysis-platform/
 
 ```bash
 cd /path/to/offline-analysis-platform
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/check_readiness.py
+./seat_defect_core/.venv/bin/python scripts/check_readiness.py
 ```
 
 输出示例：
@@ -980,13 +980,13 @@ sample_images/
 
 ```bash
 # 基本用法
-PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
   --images "cam_front=sample_images/cam_front.jpg" \
   --part-id test_001
 
 # 带所有参数
-PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
   --images "cam_front=sample_images/cam_front.jpg" \
   --part-id part_20260522_001 \
@@ -995,7 +995,7 @@ PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
   --output outputs/test_result.json
 
 # 预热模式（预加载模型，后续检测更快）
-PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
   --images "cam_front=sample_images/cam_front.jpg" \
   --warmup
@@ -1101,12 +1101,12 @@ mkdir -p sample_images
 ```bash
 # 完整闭环模式（需要后端运行 + 已放置测试图片）
 cd /path/to/offline-analysis-platform
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
   --backend http://localhost:8000 \
   --images ./sample_images
 
 # 纯检测模式（不需要后端）
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
   --images ./sample_images \
   --no-upload
 ```
@@ -1140,7 +1140,7 @@ A：依赖未安装。运行 `cd seat_defect_core && uv sync`。
 
 **Q2：提示 `ModuleNotFoundError: No module named 'seat_defect_core'`**
 
-A：`PYTHONPATH` 未正确设置。确保 `PYTHONPATH` 指向仓库根目录（不是 seat_defect_core 目录本身）。
+A：确保从仓库根目录运行命令，且 `seat_defect_core/` 目录存在于当前路径下。
 
 **Q3：提示 `target_not_found`**
 

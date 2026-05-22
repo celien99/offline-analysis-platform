@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 
 from ..config import CameraConfig
-from ..types import FramePacket, InspectionFrame
+from ..core_types import FramePacket, InspectionFrame
 
 
 def normalize_inspection_frames(

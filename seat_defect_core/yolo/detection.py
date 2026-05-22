@@ -10,7 +10,7 @@ from ultralytics.engine.results import Results
 from ultralytics.utils import ops
 
 from ..config import DetectionConfig
-from ..types import BoundingBox, DetectionObject, DetectionResult
+from ..core_types import BoundingBox, DetectionObject, DetectionResult
 
 
 class DetectionService:

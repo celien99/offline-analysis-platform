@@ -7,7 +7,7 @@ from typing import Tuple
 import cv2
 
 from ..config import QualityGuardConfig
-from ..types import ImageQualityDecision, ImageQualityMetrics
+from ..core_types import ImageQualityDecision, ImageQualityMetrics
 
 
 class ImageQualityGuard:

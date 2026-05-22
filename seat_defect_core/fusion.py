@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .config import FusionConfig
-from .types import CameraInspectionResult, InspectionResult
+from .core_types import CameraInspectionResult, InspectionResult
 
 
 def fuse_camera_results(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Union
 
-from .types import BoundingBox, CameraInspectionResult, InspectionError, InspectionResult
+from .core_types import BoundingBox, CameraInspectionResult, InspectionError, InspectionResult
 
 
 def inspection_result_to_dict(result: InspectionResult) -> Dict[str, Any]:

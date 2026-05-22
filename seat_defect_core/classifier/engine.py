@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 
 from ..config import FilterClassifierConfig
-from ..types import FilterClassifierResult
+from ..core_types import FilterClassifierResult
 
 # 与 ml/classifier/trainer.py:_build_transform() 保持严格一致
 _IMAGE_NET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)

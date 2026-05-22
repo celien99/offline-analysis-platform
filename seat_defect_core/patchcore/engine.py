@@ -21,7 +21,7 @@ from .scoring import (
     normalize_map_against_threshold,
 )
 from ..config import PatchCoreConfig
-from ..types import TextureAnomalyResult
+from ..core_types import TextureAnomalyResult
 
 _RUNTIME_DECISION_OVERRIDE_FIELDS = (
     "min_valid_patch_ratio",

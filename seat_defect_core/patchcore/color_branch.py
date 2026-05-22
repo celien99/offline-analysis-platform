@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from ..config import ColorBranchConfig
-from ..types import ColorAnomalyResult
+from ..core_types import ColorAnomalyResult
 
 
 @dataclass

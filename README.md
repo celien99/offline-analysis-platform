@@ -394,7 +394,7 @@ mkdir -p sample_images
 # cp /path/to/your/cam_front.jpg sample_images/
 
 # 4. 运行端到端验证 Demo
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
   --backend http://localhost:8000 --images ./sample_images
 
 # 5. (可选) 启动在线检测核心 Docker 服务

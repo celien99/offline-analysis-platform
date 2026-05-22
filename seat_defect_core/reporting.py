@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .serialization import inspection_result_to_dict
-from .types import InspectionResult
+from .core_types import InspectionResult
 from .util import write_json
 
 

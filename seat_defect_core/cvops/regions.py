@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from ..config import RegionConfig
-from ..types import BoundingBox, RoiRefineResult
+from ..core_types import BoundingBox, RoiRefineResult
 from ..util import select_patchcore_input
 
 

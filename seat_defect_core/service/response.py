@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from ..config import CameraConfig, InspectionConfig
 from ..reporting import export_inspection_report
-from ..types import CameraInspectionResult, InspectionError, InspectionResponse, InspectionResult
+from ..core_types import CameraInspectionResult, InspectionError, InspectionResponse, InspectionResult
 
 
 def build_missing_frame_result(

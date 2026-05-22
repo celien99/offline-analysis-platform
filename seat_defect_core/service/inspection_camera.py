@@ -12,7 +12,7 @@ from ..cvops import split_roi_regions
 from ..cvops.regions import RegionRoiSample
 from ..patchcore import ColorConsistencyService
 from ..rule_engine import apply_rules
-from ..types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionPatchCoreResult
+from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionPatchCoreResult
 from ..util import select_patchcore_input
 
 if TYPE_CHECKING:
@@ -486,7 +486,7 @@ def _predict_filter_classifier(
         return svc.predict(prepared.roi.aligned_roi_image)
     except Exception:
         # 故障安全：推理失败时 is_real_defect=True，不抑制 PatchCore 结果
-        from ..types import FilterClassifierResult
+        from ..core_types import FilterClassifierResult
 
         return FilterClassifierResult(
             is_real_defect=True,
