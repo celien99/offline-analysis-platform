@@ -1,20 +1,30 @@
 {
-  "$comment": "seat_defect_core 检测配置示例 — 完整闭环模式",
+  "$comment": "seat_defect_core 检测配置 — 完整闭环模式。路径类字段相对于本配置文件所在目录解析。",
   "seat_defect_inspection": {
     "part_id": "seat_demo",
+    "default_seat_model_id": "seat_model_a",
+    "output_json_path": "../outputs/seat_defect_inspection/results.json",
+    "debug_dir": "../outputs/seat_defect_inspection/debug",
+    "debug_artifacts_enabled": false,
     "upload_base_url": "http://localhost:8000",
 
-    "default_seat_model_id": "model_a",
+    "fusion": {
+      "reject_on_any_reject": true,
+      "ng_strategy": "any",
+      "defect_overrides_reject": true
+    },
 
     "seat_models": [
       {
-        "seat_model_id": "model_a",
-        "display_name": "示例座椅型号A",
+        "seat_model_id": "seat_model_a",
+        "display_name": "座椅型号A",
         "cameras": [
           {
-            "camera_id": "line_a_cam_01",
-            "patchcore_model_path": "./models/patchcore_line_a.npz",
+            "camera_id": "cam_front",
+            "patchcore_model_path": "../models/seat_model_a/cam_front_patchcore.npz",
+            "source": "",
             "enabled": true,
+            "color_insensitive_mode": true,
 
             "quality": {
               "min_laplacian_variance": 80.0,
@@ -25,17 +35,21 @@
             },
 
             "detection": {
-              "model_path": "./models/yolo_seat.pt",
+              "model_path": "../models/yolo/seat_model_a_best.pt",
               "target_class": "seat",
               "confidence": 0.25,
               "iou": 0.45,
-              "device": "cpu",
-              "imgsz": 960
+              "device": "mps",
+              "imgsz": 960,
+              "fill_segmentation_holes": true,
+              "segmentation_hole_fill_max_area_ratio": 0.08
             },
 
             "roi": {
-              "crop_expand_ratio": 0.05,
-              "edge_ignore_pixels": 6,
+              "crop_expand_ratio": 0.02,
+              "crop_shrink_ratio": 0.0,
+              "mask_erode_pixels": 1,
+              "edge_ignore_pixels": 4,
               "alignment": {
                 "output_width": 256,
                 "output_height": 256
@@ -43,10 +57,28 @@
             },
 
             "patchcore": {
+              "backend": "full",
               "image_size": 256,
+              "backbone_name": "wide_resnet50_2",
+              "feature_layers": ["layer2", "layer3"],
+              "backbone_pretrained": true,
+              "backbone_device": "mps",
+              "texture_input": "lab_l",
+              "min_target_coverage": 0.6,
+              "max_ignore_overlap": 0.1,
+              "min_valid_patch_ratio": 0.4,
               "threshold_quantile": 0.99,
               "decision_score_margin": 1.08,
-              "min_valid_patch_ratio": 0.65
+              "strong_patch_score_ratio": 0.9,
+              "min_strong_patch_count": 3,
+              "min_strong_component_count": 2,
+              "min_strong_patch_ratio": 0.015,
+              "min_strong_component_ratio": 0.01,
+              "critical_score_margin": 1.35,
+              "critical_peak_score_margin": 1.45,
+              "critical_min_component_patch_count": 2,
+              "min_peak_component_patch_count": 1,
+              "coreset_sampling_ratio": 0.1
             },
 
             "color_branch": {
@@ -55,8 +87,8 @@
 
             "filter_classifier": {
               "enabled": true,
-              "model_path": "./deployed_models/line_a/filter_classifier/",
-              "device": "cpu",
+              "model_path": "../deployed_models/line_a/filter_classifier/",
+              "device": "mps",
               "input_size": 224,
               "confidence_threshold": 0.5
             },
@@ -80,16 +112,17 @@
               ]
             },
 
-            "regions": []
+            "regions": [
+              {
+                "region_id": "upper",
+                "box": [0.03, 0.03, 0.97, 0.42],
+                "patchcore_model_path": "../models/seat_model_a/cam_front_upper_patchcore.npz",
+                "enabled": true
+              }
+            ]
           }
         ]
       }
-    ],
-
-    "fusion": {
-      "reject_on_any_reject": true,
-      "ng_strategy": "any",
-      "defect_overrides_reject": true
-    }
+    ]
   }
 }
