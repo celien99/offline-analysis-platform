@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     data_dir: Path = Path("./data")
     model_dir: Path = Path("./models")
 
+    # 模型部署目标：目标名 -> 部署目录路径
+    deploy_targets: dict[str, str] = {
+        "production_line_a": "./deployed_models/line_a",
+        "production_line_b": "./deployed_models/line_b",
+    }
+    deploy_model_subdir: str = "filter_classifier"
+    deploy_on_train_complete: bool = False
+
     # Pagination
     default_page_size: int = 20
     max_page_size: int = 100

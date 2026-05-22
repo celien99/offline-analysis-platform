@@ -191,13 +191,42 @@ def train_filter_classifier(
                 registered_model_name=f"filter_classifier_{model_type}",
             )
 
-        run_async(_create_model_version(
+        model_version = run_async(_create_model_version(
             model_name=f"filter_classifier_{model_type}",
             model_type=model_type,
             artifact_path=str(torchscript_path),
             metrics=numeric_metrics,
             mlflow_run_id=mlflow_run_id,
         ))
+
+        # 训练完成后自动部署到默认目标
+        if settings.deploy_on_train_complete:
+            import os
+            from app.workers.deployment_worker.tasks import deploy_model_version_task
+
+            default_target = os.environ.get(
+                "INDUSTRIAL_DEFAULT_DEPLOY_TARGET",
+                "production_line_a",
+            )
+            try:
+                deploy_model_version_task.delay(
+                    model_name=model_version.model_name,
+                    version=model_version.version,
+                    target=default_target,
+                    deployed_by="system:training_worker",
+                )
+                logger.info(
+                    "auto_deploy_triggered",
+                    model_name=model_version.model_name,
+                    version=model_version.version,
+                    target=default_target,
+                )
+            except Exception as deploy_err:
+                logger.warning(
+                    "auto_deploy_failed",
+                    target=default_target,
+                    error=str(deploy_err),
+                )
 
         logger.info(
             "training_complete",
@@ -211,6 +240,8 @@ def train_filter_classifier(
             "artifact_path": str(torchscript_path),
             "metrics": numeric_metrics,
             "mlflow_run_id": mlflow_run_id,
+            "model_version_id": model_version.id,
+            "model_version": model_version.version,
         }
     except Exception as e:
         logger.error("training_failed", error=str(e))
@@ -223,7 +254,7 @@ async def _create_model_version(
     artifact_path: str,
     metrics: dict[str, float],
     mlflow_run_id: str | None = None,
-) -> None:
+) -> ModelVersion:
     from datetime import datetime, timezone
 
     from app.repositories.registry.model_version import ModelVersionRepository
@@ -244,6 +275,7 @@ async def _create_model_version(
         repo = ModelVersionRepository(session)
         await repo.create(model)
         await session.commit()
+        return model
 
 
 @celery_app.task(name="training.export_model")

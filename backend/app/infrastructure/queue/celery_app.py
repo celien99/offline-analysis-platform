@@ -11,6 +11,7 @@ celery_app = Celery(
     include=[
         "app.workers.embedding_worker.tasks",
         "app.workers.clustering_worker.tasks",
+        "app.workers.deployment_worker.tasks",
         "app.workers.vlm_worker.tasks",
         "app.workers.training_worker.tasks",
         "app.workers.heatmap_worker.tasks",

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.common.logging import get_logger
 from app.schemas.common import StatusResponse
+from app.core.config import settings
 from app.schemas.registry import (
     DeploymentResponse,
     ModelDeployRequest,
@@ -50,6 +51,12 @@ async def rollback_model(
     service = DeploymentService(session)
     await service.rollback(target, reason=reason)
     return StatusResponse(status="rolled_back", message=f"Model for {target} rolled back")
+
+
+@router.get("/deploy-targets")
+async def list_deploy_targets() -> dict[str, str]:
+    """列出所有已配置的部署目标及其目录路径。"""
+    return dict(settings.deploy_targets)
 
 
 @router.get(
