@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from io import BytesIO
 
 from minio import Minio
@@ -76,13 +77,13 @@ class MinIOClient:
             logger.error("delete_failed", object_name=object_name, error=str(e))
             raise StorageError(f"Delete failed: {e}") from e
 
-    async def get_presigned_url(self, object_name: str, expires: int = 3600) -> str:
+    async def get_presigned_url(self, object_name: str, expires_seconds: int = 3600) -> str:
         try:
             return await asyncio.to_thread(
                 self._client.presigned_get_object,
                 bucket_name=self._bucket,
                 object_name=object_name,
-                expires=expires,
+                expires=timedelta(seconds=expires_seconds),
             )
         except S3Error as e:
             raise StorageError(f"Presigned URL failed: {e}") from e

@@ -104,6 +104,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         for cam_result in response.result.camera_results:
             print(f"  [{cam_result.camera_id}] status={cam_result.status} reason={cam_result.reason}")
 
+        # --upload 时同步上传，确保上传完成后再退出
+        if args.upload and response.status == "NG":
+            from seat_defect_core.anomaly_uploader import upload_inspection_response
+            print(f"上传 NG 结果到 {args.upload}...")
+            results = upload_inspection_response(response, args.upload)
+            for r in results:
+                print(f"  上传成功: anomaly_id={r.get('anomaly_id', '?')}")
+            if not results:
+                print("  上传失败（网络不通或后端未运行）")
+
         if args.output:
             output_path = Path(args.output)
             output_path.parent.mkdir(parents=True, exist_ok=True)

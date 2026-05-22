@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,7 +119,7 @@ async def list_anomalies(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
-        "items": [_to_response(r, minio) for r in records],
+        "items": await asyncio.gather(*[_to_response(r, minio) for r in records]),
     }
 
 
@@ -133,7 +135,7 @@ async def get_anomaly(
 ) -> AnomalyResponse:
     service = AnomalyService(session, minio)
     record = await service.get_anomaly(anomaly_id)
-    return _to_response(record, minio)
+    return await _to_response(record, minio)
 
 
 @router.post("/{anomaly_id}/reprocess")
@@ -147,15 +149,21 @@ async def reprocess_anomaly(
     return {"status": "queued", "anomaly_id": anomaly_id}
 
 
-def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResponse:
-    def _presigned(path: str | None) -> str | None:
+async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResponse:
+    async def _presigned(path: str | None) -> str | None:
         if path is None:
             return None
         try:
-            return minio.get_presigned_url(path)
+            return await minio.get_presigned_url(path)
         except Exception:
             return None
 
+    original_url, roi_url, heatmap_url, crop_url = await asyncio.gather(
+        _presigned(record.original_path),
+        _presigned(record.roi_path),
+        _presigned(record.heatmap_path),
+        _presigned(record.crop_path),
+    )
     return AnomalyResponse(
         anomaly_id=record.id,
         camera_id=record.camera_id,
@@ -164,10 +172,10 @@ def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResponse:
         date_folder=record.date_folder,
         status=record.status,
         detected_at=record.detected_at,
-        original_url=_presigned(record.original_path),
-        roi_url=_presigned(record.roi_path),
-        heatmap_url=_presigned(record.heatmap_path),
-        crop_url=_presigned(record.crop_path),
+        original_url=original_url,
+        roi_url=roi_url,
+        heatmap_url=heatmap_url,
+        crop_url=crop_url,
         created_at=record.created_at,
         trace_id=record.trace_id,
     )
