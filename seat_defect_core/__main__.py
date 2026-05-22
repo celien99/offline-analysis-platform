@@ -101,8 +101,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         # 输出结果
         payload = response.to_dict()
         print(json.dumps({"status": response.status, "decision_reason": response.decision_reason}, ensure_ascii=False))
-        for cam_id, result in response.result.camera_results.items():
-            print(f"  [{cam_id}] status={result.status} reason={result.reason}")
+        for cam_result in response.result.camera_results:
+            print(f"  [{cam_result.camera_id}] status={cam_result.status} reason={cam_result.reason}")
 
         if args.output:
             output_path = Path(args.output)
