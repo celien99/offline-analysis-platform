@@ -1,5 +1,7 @@
 # 离线分析平台 — 标准操作流程 (SOP)
 
+> 本文档覆盖离线分析平台（第 1~9 章）和在线检测核心 seat_defect_core（第 10 章）的完整操作流程。
+
 ## 1. 系统概述
 
 本平台是一个 **工业 AI 离线智能分析平台**，面向汽车座椅缺陷检测场景。它与线上实时检测系统（YOLO + PatchCore + Filter Classifier）配合运行，但**自身不参与线上实时判定**，而是作为"AI 进化大脑"持续学习线上采集的异常样本，通过聚类分析、VLM 解释、人工审核、知识沉淀和模型训练，反哺线上系统以**持续降低误报率**。
@@ -114,7 +116,7 @@ npm run dev
    - **Camera ID**: 相机编号（如 `CAM-01`）
    - **Date Folder**: 日期文件夹（格式 `YYYY-MM-DD`）
    - **Source**: 来源系统，可选 `patchcore` / `filter_classifier` / `rule_engine`
-   - **Anomaly Score**: 异常分数 (0.0~1.0)
+   - **Anomaly Score**: 异常分数（PatchCore 欧氏距离值，通常 >0，无上限）
    - **Detected At**: 检测时间
 3. 上传图像文件（至少提供一张）：
    - **Original Image**: 原始大图
@@ -828,3 +830,359 @@ A：当前版本审核记录不可撤销。如果审核错误，联系供应商�
 
 **Q5：为什么需要我天天审核，不能让 AI 自己判断吗？**
 A：AI 可以自动判断一部分（VLM 已经在做了），但 AI 的判断需要你的验证来纠偏。你审核的过程就是在教 AI"什么才是真正的缺陷"——没有这个过程，AI 的能力不会提升。你的目标是：随着时间推移，需要你审核的聚类越来越少（因为 AI 学会了）。
+
+---
+
+## 10. 在线检测核心 (seat_defect_core) 本地运行与测试指南
+
+> **读者对象**：供应商工程师、开发人员和现场调试人员。本章覆盖 seat_defect_core（在线实时缺陷检测核心）的本地环境搭建、配置、运行和测试的完整流程。
+
+### 10.1 组件说明
+
+`seat_defect_core` 是在线实时检测核心程序，负责产线实时判定。它与离线分析平台的关系如下：
+
+```
+seat_defect_core (在线)                   离线分析平台 (本仓库)
+═════════════════════                     ══════════════════
+YOLO → ROI → PatchCore                  异常收集 → Embedding → 聚类
+    → Filter Classifier                     → VLM 解释 → 人工审核
+    → Rule Engine                          → 知识库 → 规则引擎
+    → Fusion → OK/NG/REJECT               → 分类器训练 → 模型部署
+         │                                      ↑          │
+         └── NG 时自动上传异常 ──────────────────→          │
+                                                           │
+         模型自动加载 ←─── 部署桥接 ←──────────────────────┘
+```
+
+### 10.2 环境要求
+
+| 项目 | 最低要求 | 推荐 |
+|------|----------|------|
+| Python | 3.11+ | 3.11 |
+| 包管理器 | uv | uv |
+| 操作系统 | macOS / Linux | macOS (Apple Silicon) / Linux (x86_64) |
+| GPU | 不需要 | Apple MPS / NVIDIA CUDA |
+| 磁盘空间 | ~5GB（含模型） | ~10GB |
+
+### 10.3 首次安装
+
+```bash
+# 1. 进入 seat_defect_core 目录
+cd seat_defect_core
+
+# 2. 安装依赖（自动创建 .venv）
+uv sync
+
+# 3. 验证安装
+PYTHONPATH=.. uv run python -c "from seat_defect_core import SeatDefectInspector; print('OK')"
+```
+
+**注意**：`PYTHONPATH=..` 必须指向仓库根目录（seat_defect_core 的父目录），否则 `types/` 子目录会与 Python 标准库 `types` 模块冲突。
+
+### 10.4 目录结构与模型文件
+
+```
+offline-analysis-platform/
+├── models/                              # 模型文件（需提前训练或从产线拷贝）
+│   ├── yolo/
+│   │   └── best.pt                      # YOLO 座椅检测模型 (ultralytics .pt)
+│   └── seat_model_a/
+│       ├── cam_0_lower_patchcore.npz    # 整 ROI PatchCore 模型
+│       ├── cam_0_upper_patchcore.npz    # 区域 upper PatchCore 模型
+│       └── cam_0_middle_patchcore.npz   # 区域 middle PatchCore 模型
+├── deployed_models/                     # 部署桥接目标目录（后端自动写入）
+│   └── line_a/
+│       └── filter_classifier/
+│           └── model.pt                 # 训练完成的 Filter Classifier
+├── outputs/                             # 检测报告和调试产物
+│   └── seat_defect_inspection/
+│       ├── results.json                 # 最新检测报告
+│       └── debug/                       # 调试产物目录
+└── seat_defect_core/
+    ├── config.example.json              # 检测配置文件（需按实际模型路径调整）
+    └── pyproject.toml
+```
+
+### 10.5 配置文件说明
+
+`config.example.json` 的关键字段：
+
+| 字段路径 | 说明 | 示例值 |
+|----------|------|--------|
+| `part_id` | 工件编号 | `"seat_demo"` |
+| `default_seat_model_id` | 默认座椅型号 | `"seat_model_a"` |
+| `upload_base_url` | NG 自动上传目标 | `"http://localhost:8000"` |
+| `fusion.ng_strategy` | 多机位融合策略 | `"any"` / `"all"` / `"majority"` |
+| `cameras[].detection.model_path` | YOLO 模型路径 | `"../models/yolo/best.pt"` |
+| `cameras[].patchcore_model_path` | PatchCore 模型路径 | `"../models/seat_model_a/cam_0_lower_patchcore.npz"` |
+| `cameras[].patchcore.backbone_device` | 计算设备 | `"mps"` (Mac) / `"cpu"` / `"cuda:0"` |
+| `cameras[].detection.device` | YOLO 设备 | `"mps"` (Mac) / `"cpu"` |
+| `cameras[].filter_classifier.enabled` | 启用分类器 | `true` / `false`（无模型时关闭） |
+| `cameras[].rule_engine.enabled` | 启用规则引擎 | `true` / `false` |
+| `cameras[].regions[].box` | 区域归一化坐标 | `[x1, y1, x2, y2]` (0~1) |
+
+所有路径字段相对于**配置文件所在目录**（即 `seat_defect_core/`）解析。
+
+### 10.6 环境就绪检查（诊断工具）
+
+运行诊断脚本，5 项检查确认环境是否就绪：
+
+```bash
+cd /path/to/offline-analysis-platform
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/check_readiness.py
+```
+
+输出示例：
+
+```
+============================================================
+  seat_defect_core 环境就绪检查
+============================================================
+
+[1] Python 版本
+ [  OK  ] Python 3.11 (需要 >=3.11)
+
+[2] Python 依赖
+ [  OK  ] cv2 (opencv-python)
+ [  OK  ] numpy (numpy)
+ [  OK  ] torch (torch)
+ [  OK  ] torchvision (torchvision)
+ [  OK  ] ultralytics (ultralytics)
+ [  OK  ] requests (requests)
+
+[3] 加速设备
+ [  OK  ] torch 2.12.0 — CPU=True, MPS=True, CUDA=False
+
+[4] 检测配置
+ [  OK  ] 配置加载成功
+
+[5] 模型文件检查
+ [  OK  ] cam_front (整ROI): .../cam_0_lower_patchcore.npz
+ [  OK  ] cam_front/upper: .../cam_0_upper_patchcore.npz
+ [  OK  ] cam_front/middle: .../cam_0_middle_patchcore.npz
+ [  OK  ] YOLO: .../models/yolo/best.pt
+```
+
+### 10.7 生成测试图片
+
+如果没有真实的座椅图片，可以生成合成测试图片：
+
+```bash
+# 生成 4 张图片（50% 含模拟缺陷）
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/generate_sample_images.py \
+  --output ./sample_images --count 4 --defect-ratio 0.5 --seed 42
+```
+
+合成图片包含灰色背景（模拟座椅表面）、随机纹理噪声、暗色斑点（模拟缺陷）和划痕线条。
+
+### 10.8 运行单次检测
+
+```bash
+# 基本用法
+PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample_images/defect_01.jpg" \
+  --part-id test_001
+
+# 带所有参数
+PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample_images/defect_01.jpg" \
+  --part-id part_20260522_001 \
+  --seat-model-id seat_model_a \
+  --upload http://localhost:8000 \
+  --output outputs/test_result.json
+
+# 预热模式（预加载模型，后续检测更快）
+PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample_images/defect_01.jpg" \
+  --warmup
+```
+
+### 10.9 通过 Python API 调用
+
+```python
+import sys
+sys.path.insert(0, "/path/to/offline-analysis-platform")
+
+from seat_defect_core import SeatDefectInspector
+
+inspector = SeatDefectInspector("seat_defect_core/config.example.json")
+
+# 方式 1：从图片路径检测
+response, camera_images = inspector.inspect_paths(
+    {"cam_front": "sample_images/defect_01.jpg"},
+    part_id="test_001",
+    seat_model_id="seat_model_a",
+)
+print(f"status: {response.status}")
+print(f"reason: {response.decision_reason}")
+
+# 方式 2：从 numpy 数组检测
+import cv2
+img = cv2.imread("sample_images/defect_01.jpg")
+response, camera_images = inspector.inspect(
+    [{"camera_id": "cam_front", "image": img}],
+    part_id="test_001",
+)
+```
+
+### 10.10 理解检测结果
+
+检测报告自动写入 `outputs/seat_defect_inspection/results.json`：
+
+```json
+{
+  "status": "NG",
+  "decision_reason": "ng_from_cam_front",
+  "camera_results": [{
+    "camera_id": "cam_front",
+    "status": "NG",
+    "reason": "region_texture_anomaly:upper,middle",
+    "quality": {"accepted": true, "metrics": {...}},
+    "region_results": [{
+      "region_id": "upper",
+      "status": "NG",
+      "texture_result": {
+        "score": 152.5,
+        "threshold": 88.8,
+        "is_anomaly": true,
+        "strong_patch_count": 46
+      }
+    }]
+  }]
+}
+```
+
+**状态含义**：
+
+| status | 含义 | 后续动作 |
+|--------|------|----------|
+| `OK` | 检测通过，未发现异常 | 放行 |
+| `NG` | 检测到缺陷 | 隔离 + 上传离线平台 |
+| `REJECT` | 检测条件不满足 | 检查图像质量/ROI/配置 |
+
+**常见 reason**：
+
+| reason | 说明 |
+|--------|------|
+| `texture_anomaly` | 完整 ROI PatchCore 判定为纹理异常 |
+| `region_texture_anomaly:<ids>` | 区域 PatchCore 判定异常 |
+| `filter_classifier_suppressed` | 分类器抑制了 PatchCore 误报 |
+| `target_not_found` | YOLO 未检测到目标座椅 |
+| `low_valid_patch_ratio` | 有效 patch 比例不足 |
+| `quality_<reason>` | 图像质量不合格 |
+
+### 10.11 端到端联动测试（在线检测 + 离线平台）
+
+验证完整数据闭环——从在线检测到离线分析平台的全链路。
+
+#### 前置条件
+
+```bash
+# 1. 启动离线平台后端
+cd backend && docker compose up -d
+
+# 2. 确认所有服务健康
+docker compose ps
+curl http://localhost:8000/health
+
+# 3. 准备测试图片
+cd ..
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/generate_sample_images.py \
+  -o sample_images -n 2
+```
+
+#### 运行端到端 Demo
+
+```bash
+# 自动检测 + 上传（需要后端运行）
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+  --backend http://localhost:8000
+
+# 纯检测模式（不需要后端）
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+  --no-upload
+```
+
+Demo 自动执行 5 个步骤：
+1. 检查后端健康状态
+2. 准备/生成测试图片
+3. 加载检测配置
+4. 运行 seat_defect_core 检测
+5. 将 NG 结果上传到离线平台
+
+#### 手动触发离线分析
+
+NG 异常上传到后端后，可以手动触发离线分析管线：
+
+```bash
+# 触发聚类分析（处理所有 pending 状态异常）
+curl -X POST http://localhost:8000/api/cluster/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"min_cluster_size": 5, "min_samples": 3}'
+
+# 查询异常列表确认上传成功
+curl "http://localhost:8000/api/anomaly/list?status=pending"
+```
+
+### 10.12 常见问题排查
+
+**Q1：运行检测时提示 `ModuleNotFoundError: No module named 'cv2'`**
+
+A：依赖未安装。运行 `cd seat_defect_core && uv sync`。
+
+**Q2：提示 `ModuleNotFoundError: No module named 'seat_defect_core'`**
+
+A：`PYTHONPATH` 未正确设置。确保 `PYTHONPATH` 指向仓库根目录（不是 seat_defect_core 目录本身）。
+
+**Q3：提示 `target_not_found`**
+
+A：YOLO 模型未检测到座椅。检查：
+- `detection.model_path` 是否正确指向有效的 YOLO .pt 文件
+- 图片中是否确实有座椅
+- `detection.confidence` 是否设置过高
+
+**Q4：提示 `low_valid_patch_ratio`**
+
+A：有效 patch 比例不足。检查：
+- `patchcore.min_target_coverage` 是否设置过高
+- `roi.mask_erode_pixels` 是否腐蚀过多
+- ROI 对齐参数是否与训练时一致
+
+**Q5：检测速度慢（首次 > 60s）**
+
+A：首次运行需要：
+- 下载 torchvision 预训练 backbone 权重（~200MB，仅一次）
+- JIT 编译 YOLO 模型
+后续运行会显著加快（缓存命中）。
+
+**Q6：Mac 上 MPS 加速不生效**
+
+A：确认 `backbone_device` 和 `detection.device` 都设为 `"mps"`。如果遇到 MPS 相关报错，回退为 `"cpu"`。
+
+**Q7：如何临时关闭某个模块进行测试**
+
+A：在配置文件中设置对应 `enabled` 字段为 `false`：
+- `filter_classifier.enabled: false` — 跳过分类器（无模型时）
+- `rule_engine.enabled: false` — 跳过规则引擎
+- `color_branch.enabled: false` — 跳过颜色分支
+- `cameras[].enabled: false` — 跳过某个机位
+- `regions[].enabled: false` — 跳过某个区域
+
+**Q8：如何验证部署的 Filter Classifier 模型已生效**
+
+A：运行检测后查看输出中的 `filter_result` 字段：
+```bash
+cat outputs/seat_defect_inspection/results.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for cam in d['camera_results']:
+    fr = cam.get('filter_result')
+    if fr:
+        print(f'classifier: is_real_defect={fr[\"is_real_defect\"]} confidence={fr[\"confidence\"]:.3f}')
+    else:
+        print('classifier: 未执行（enabled=false 或模型未就绪）')
+"
+```
