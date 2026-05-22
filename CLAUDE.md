@@ -25,13 +25,14 @@ uv run mypy app                                   # type check (mypy strict)
 # seat_defect_core (online detection core)
 cd seat_defect_core
 uv sync                                          # install deps (torch, cv2, ultralytics, etc.)
-uv run python -m seat_defect_core --help         # CLI entry point
-uv run python -m seat_defect_core --config config.example.json --images cam1=img.jpg
+# 设置 PYTHONPATH 指向仓库根目录（避免 types/ 与 stdlib 冲突）
+PYTHONPATH=/path/to/repo uv run python -m seat_defect_core --help
+PYTHONPATH=/path/to/repo uv run python -m seat_defect_core --config config.example.json --images cam1=img.jpg
 
 # Demo (from repo root)
 cd backend && docker compose up -d               # start backend services
-python scripts/generate_sample_images.py          # generate synthetic test images
-python scripts/demo_full_loop.py                  # run end-to-end demo
+uv run --directory ../seat_defect_core python ../scripts/generate_sample_images.py
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py
 
 # Frontend
 cd frontend

@@ -16,6 +16,9 @@ dependencies = [
 requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.uv]
+package = false
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

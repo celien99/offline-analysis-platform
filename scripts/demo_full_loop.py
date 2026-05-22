@@ -93,7 +93,7 @@ def run_inspection(
     seat_model_id: str | None = None,
 ) -> tuple[object, dict]:
     """运行 seat_defect_core 检测。"""
-    sys.path.insert(0, str(REPO_ROOT / "seat_defect_core"))
+    sys.path.insert(0, str(REPO_ROOT))
     from seat_defect_core.api import SeatDefectInspector
 
     inspector = SeatDefectInspector(str(config_path))
@@ -110,7 +110,7 @@ def run_inspection(
 
 def upload_results(response, base_url: str) -> list[dict]:
     """将 NG 检测结果上传到离线平台。"""
-    sys.path.insert(0, str(REPO_ROOT / "seat_defect_core"))
+    sys.path.insert(0, str(REPO_ROOT))
     from seat_defect_core.anomaly_uploader import upload_inspection_response
 
     print(f"  [上传] 目标: {base_url}")
