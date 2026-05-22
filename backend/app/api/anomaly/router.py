@@ -51,7 +51,7 @@ async def upload_anomaly_with_files(
     source: str = Form(
         default="patchcore", pattern=r"^(patchcore|filter_classifier|rule_engine)$"
     ),
-    anomaly_score: float | None = Form(default=None, ge=0.0, le=1.0),
+    anomaly_score: float | None = Form(default=None, ge=0.0),
     date_folder: str = Form(..., max_length=16),
     detected_at: str = Form(...),
     original_file: UploadFile | None = File(default=None),

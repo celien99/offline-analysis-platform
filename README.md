@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>230+ 源文件</b> · <b>36 个 API 端点</b> · <b>8 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>8 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
+  <b>270+ 源文件</b> · <b>37 个 API 端点</b> · <b>9 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>8 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
 </p>
 
 ---
@@ -34,12 +34,13 @@
 
 ```mermaid
 flowchart TB
-    subgraph ONLINE["🔴 在线检测系统"]
+    subgraph ONLINE["🔴 在线检测系统 (seat_defect_core)"]
         direction LR
         CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
         YOLO --> PC["PatchCore<br/>异常评分"]
         PC --> FC["Filter<br/>分类器"]
-        FC --> DECISION{"OK / NG"}
+        FC --> RE["规则引擎<br/>后处理"]
+        RE --> DECISION{"OK / NG"}
     end
 
     subgraph OFFLINE["🔵 离线分析平台（本仓库）"]
@@ -52,10 +53,11 @@ flowchart TB
         REVIEW --> RULES["🧠 规则引擎<br/>优先级评估"]
         KB --> TRAIN["🎯 分类器训练<br/>MobileNetV3"]
         TRAIN --> REGISTRY["📦 模型注册<br/>MLflow"]
+        REGISTRY --> DEPLOY["🚀 自动部署<br/>原子写入部署目录"]
     end
 
-    ONLINE -->|"异常样本"| INGEST
-    REGISTRY -->|"部署优化模型"| FC
+    ONLINE -->|"NG 自动上传<br/>fire-and-forget"| INGEST
+    DEPLOY -->|"online 自动加载<br/>mtime 缓存失效"| FC
 ```
 
 ---
@@ -123,6 +125,28 @@ flowchart TB
       </ul>
     </td>
   </tr>
+  <tr>
+    <td width="50%">
+      <h3>🔄 在线检测核心 (seat_defect_core)</h3>
+      <ul>
+        <li>完整在线推理 pipeline：YOLO → ROI → PatchCore → <b>Filter Classifier</b> → <b>Rule Engine</b> → Fusion</li>
+        <li>Filter Classifier 推理引擎：TorchScript 模型加载，ImageNet 标准化预处理，抑制 PatchCore 误报</li>
+        <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
+        <li>规则引擎后处理：可配置阈值规则（异常分数/patch 数/patch 比例），支持 suppress_to_ok / flag_for_review</li>
+        <li>多区域 PatchCore 支持，按区域独立判定 + 合并状态逻辑</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🔁 在线↔离线数据闭环</h3>
+      <ul>
+        <li><b>NG 自动上传</b>：检测完成后 daemon 线程异步 POST 到离线平台，不阻塞主流程</li>
+        <li><b>模型自动加载</b>：指向部署目录即可自动发现 <code>model.pt</code>，mtime 缓存自动失效</li>
+        <li><b>训练完成自动部署</b>：Filter Classifier 训练完成后自动触发 Celery 部署任务</li>
+        <li><b>原子部署</b>：模型文件先写 <code>.tmp</code> 再 rename，防止在线系统读到不完整文件</li>
+        <li><b>部署桥接</b>：<code>DeploymentService</code> 执行实际文件拷贝至配置的部署目标目录</li>
+      </ul>
+    </td>
+  </tr>
 </table>
 
 ---
@@ -168,7 +192,7 @@ offline-analysis-platform/
 │   │   ├── repositories/             # 5 个 Repository（封装所有 DB 访问）
 │   │   ├── models/                   # 9 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
-│   │   ├── workers/                  # 8 个 Celery Worker 模块（含 Pipeline 编排）
+│   │   ├── workers/                  # 9 个 Celery Worker 模块（含部署 + Pipeline 编排）
 │   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
 │   │   ├── core/                     # 配置类 · 异常体系 · 安全工具
 │   │   ├── common/                   # 共享类型 · structlog 结构化日志
@@ -203,6 +227,34 @@ offline-analysis-platform/
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
     ├── classifier/                   # MobileNetV3 训练器 + ONNX 导出
     └── vlm/                          # Qwen2.5-VL 多模态分析器
+```
+- `seat_defect_core/` 在线检测核心（38 个 Python 文件），详见下方
+
+### seat_defect_core — 在线实时检测核心
+
+```
+seat_defect_core/
+├── config.py                         # 全部运行时配置 dataclass（含 FilterClassifier / RuleEngine）
+├── runtime_config_parsers.py         # JSON / INI 配置解析器
+├── config_file.py                    # 配置文件加载入口
+├── rule_engine.py                    # 规则引擎：阈值条件命中 + 动作执行
+├── anomaly_uploader.py               # NG 结果 fire-and-forget 上传至离线平台
+├── fusion.py                         # 多机位融合判定
+├── serialization.py                  # 检测结果序列化（含 filter_result）
+├── api.py                            # SeatDefectInspector 入口，含自动上传调度
+├── classifier/
+│   ├── __init__.py
+│   └── engine.py                     # FilterClassifierService：TorchScript 推理 + 故障安全
+├── service/
+│   ├── core.py                       # InspectionService + ModelBundleCache（含分类器缓存/自动加载）
+│   ├── inspection_camera.py          # 单机位检测流程（含分类器推理 + 规则引擎接入）
+│   ├── inspection.py                 # 多机位检测编排
+│   └── ...
+├── types/                            # 类型定义（FramePacket, CameraInspectionResult 等）
+├── yolo/                             # YOLO 检测模块
+├── patchcore/                        # PatchCore 异常检测模块
+├── cvops/                            # 图像预处理（ROI / 质量 / 区域分割）
+└── artifacts/                        # 调试产物生成
 ```
 
 ---
@@ -276,7 +328,7 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 
 ```
                      POST   /api/anomaly/upload                    📥 上传异常
-                     POST   /api/anomaly/upload-with-files         (multipart 文件上传)
+                     POST   /api/anomaly/upload-with-files         (在线核心 fire-and-forget 上传)
                      GET    /api/anomaly/list · /{id}
                      POST   /api/anomaly/{id}/reprocess
 
@@ -302,7 +354,8 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
                      POST   /api/training/start                    🎯 模型训练
                      GET    /api/training/status/{task_id}
 
-                     POST   /api/model/deploy                      📦 模型部署
+                     GET    /api/model/deploy-targets              📦 模型部署
+                     POST   /api/model/deploy
                      POST   /api/model/deploy/{target}/rollback
 
                      POST   /api/multimodal/analyze/cluster/{id}    🤖 多模态分析
@@ -324,6 +377,93 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 | **Rules Engine** | `/rules` | 规则增删改查 · 启停开关 · 在线评估模拟器 · 从知识库生成规则 |
 | **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） |
 | **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 在线模型安全回滚 |
+
+---
+
+## 端到端 Demo
+
+```bash
+# 1. 启动离线平台后端服务
+cd backend && docker compose up -d
+
+# 2. 从根目录安装所有 workspace 成员
+cd .. && uv sync
+
+# 3. 生成合成测试图片
+python scripts/generate_sample_images.py --output ./sample_images --count 4
+
+# 4. 运行端到端验证 Demo
+python scripts/demo_full_loop.py --backend http://localhost:8000
+
+# 5. (可选) 启动在线检测核心 Docker 服务
+docker compose -f backend/docker-compose.yml --profile demo run --rm inspector \
+  --config /app/config.json --upload http://api:8000
+```
+
+---
+
+## 在线↔离线数据闭环
+
+本平台实现了完整的 **在线检测 → 离线学习 → 模型反哺** 数据飞轮。
+
+### 闭环流程
+
+```
+1. 在线 NG → seat_defect_core 检测到 NG 后，daemon 线程异步上传
+   ROI 图片 + 元数据到 POST /api/anomaly/upload-with-files
+                    ↓
+2. Embedding   → Celery Worker 提取 ResNet18 512 维特征向量
+                    ↓
+3. 聚类分析    → UMAP + HDBSCAN 无监督发现缺陷模式
+                    ↓
+4. VLM 解释    → Qwen2.5-VL 多模态大模型自动解释每个簇
+                    ↓
+5. 人工复核    → 工程师确认缺陷 / 标记误报 / 拆分合并簇
+                    ↓
+6. 分类器训练  → 基于已审核数据训练 Filter Classifier (MobileNetV3)
+                    ↓
+7. 自动部署    → 训练完成后自动触发 Celery 部署任务，
+   原子写入部署目录 (.tmp → rename)
+                    ↓
+8. 在线加载    → seat_defect_core 通过 mtime 缓存自动发现新模型，
+   Filter Classifier 抑制 PatchCore 误报 → 降低误报率
+                    ↓
+                   ↺ 循环往复，持续进化
+```
+
+### 配置在线核心
+
+在 `seat_defect_core` 的检测配置中启用数据闭环：
+
+```json
+{
+  "seat_defect_inspection": {
+    "upload_base_url": "http://offline-platform:8000",
+    "cameras": [{
+      "camera_id": "line_a_cam_01",
+      "filter_classifier": {
+        "enabled": true,
+        "model_path": "./deployed_models/line_a/filter_classifier/",
+        "device": "cuda",
+        "confidence_threshold": 0.5
+      },
+      "rule_engine": {
+        "enabled": true,
+        "rules": [
+          {
+            "name": "low_evidence_false_alarm",
+            "max_anomaly_score": 0.8,
+            "require_filter_false_alarm": true,
+            "action": "suppress_to_ok"
+          }
+        ]
+      }
+    }]
+  }
+}
+```
+
+> **关键设计**：Filter Classifier **只抑制不提升** — 仅在 PatchCore 报 NG 时介入，若判定为误报则降级为 OK，绝不将 OK 改为 NG。推理失败时默认 `is_real_defect=True`（故障安全）。
 
 ---
 
@@ -360,6 +500,10 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 | `MINIO_ENDPOINT` | `localhost:9000` |
 | `VLM_ENDPOINT` | `http://localhost:8888/v1` |
 | `MLFLOW_TRACKING_URI` | `http://localhost:5000` |
+| `INDUSTRIAL_DEFAULT_DEPLOY_TARGET` | `production_line_a` |
+| `DEPLOY_TARGETS` | `{"production_line_a": "./deployed_models/line_a"}` |
+| `DEPLOY_MODEL_SUBDIR` | `filter_classifier` |
+| `DEPLOY_ON_TRAIN_COMPLETE` | `false` |
 | `EMBEDDING_DIM` | `512` |
 | `CLUSTERING_MIN_SIZE` | `10` |
 | `DEBUG` | `false` |

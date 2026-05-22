@@ -11,7 +11,7 @@ class AnomalyUploadRequest(BaseModel):
         default="patchcore",
         pattern=r"^(patchcore|filter_classifier|rule_engine)$",
     )
-    anomaly_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    anomaly_score: float | None = Field(default=None, ge=0.0)
     date_folder: str = Field(..., max_length=16, description="YYYY-MM-DD")
     detected_at: datetime
     metadata: dict[str, object] | None = None
@@ -29,8 +29,8 @@ class AnomalyQueryParams(BaseModel):
     status: str | None = None
     date_from: str | None = None
     date_to: str | None = None
-    min_score: float | None = Field(default=None, ge=0.0, le=1.0)
-    max_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_score: float | None = Field(default=None, ge=0.0)
+    max_score: float | None = Field(default=None, ge=0.0)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
