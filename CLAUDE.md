@@ -31,8 +31,8 @@ PYTHONPATH=/path/to/repo uv run python -m seat_defect_core --config config.examp
 
 # Demo (from repo root)
 cd backend && docker compose up -d               # start backend services
-uv run --directory ../seat_defect_core python ../scripts/generate_sample_images.py
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py
+mkdir -p sample_images                           # 放入测试图片（文件名=camera_id）
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py --images ./sample_images
 
 # Frontend
 cd frontend

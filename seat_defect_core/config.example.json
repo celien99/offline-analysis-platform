@@ -1,6 +1,5 @@
 {
-  "$comment": "seat_defect_core 检测配置 — 完整闭环模式。路径类字段相对于本配置文件所在目录解析。",
-
+  "$comment": "seat_defect_core 检测配置。路径类字段相对于本配置文件所在目录解析。",
   "seat_defect_inspection": {
 
     "part_id": "seat_demo",
@@ -28,7 +27,7 @@
         "cameras": [
           {
             "camera_id": "cam_front",
-            "patchcore_model_path": "../models/seat_model_a/cam_front_patchcore.npz",
+            "patchcore_model_path": "../models/seat_model_a/cam_0_lower_patchcore.npz",
             "source": "",
             "enabled": true,
             "color_insensitive_mode": true,
@@ -42,7 +41,7 @@
             },
 
             "detection": {
-              "model_path": "../models/yolo/seat_model_a_best.pt",
+              "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
               "confidence": 0.25,
               "iou": 0.45,
@@ -100,95 +99,7 @@
             },
 
             "filter_classifier": {
-              "enabled": true,
-              "model_path": "../deployed_models/line_a/filter_classifier/",
-              "device": "mps",
-              "input_size": 224,
-              "confidence_threshold": 0.5
-            },
-
-            "rule_engine": {
-              "enabled": true,
-              "rules": [
-                {
-                  "name": "low_evidence_false_alarm",
-                  "enabled": true,
-                  "max_anomaly_score": 0.8,
-                  "max_strong_patch_ratio": 0.02,
-                  "require_filter_false_alarm": true,
-                  "action": "suppress_to_ok"
-                },
-                {
-                  "name": "few_strong_patches",
-                  "enabled": true,
-                  "min_strong_patch_count": 2,
-                  "action": "suppress_to_ok"
-                },
-                {
-                  "name": "flag_uncertain_for_review",
-                  "enabled": false,
-                  "max_anomaly_score": 1.2,
-                  "require_filter_false_alarm": false,
-                  "action": "flag_for_review"
-                }
-              ]
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.42],
-                "patchcore_model_path": "../models/seat_model_a/cam_front_upper_patchcore.npz",
-                "enabled": true,
-                "patchcore": {
-                  "backbone_pretrained": true,
-                  "min_target_coverage": 0.5,
-                  "min_valid_patch_ratio": 0.35
-                }
-              }
-            ]
-          },
-
-          {
-            "camera_id": "cam_side",
-            "patchcore_model_path": "../models/seat_model_a/cam_side_patchcore.npz",
-            "source": "",
-            "enabled": true,
-            "color_insensitive_mode": false,
-
-            "detection": {
-              "model_path": "../models/yolo/seat_model_a_best.pt",
-              "target_class": "seat",
-              "confidence": 0.25,
-              "iou": 0.45,
-              "device": "mps",
-              "imgsz": 960
-            },
-
-            "roi": {
-              "crop_expand_ratio": 0.02,
-              "mask_erode_pixels": 1,
-              "edge_ignore_pixels": 4,
-              "alignment": { "output_width": 256, "output_height": 256 }
-            },
-
-            "patchcore": {
-              "backend": "full",
-              "backbone_name": "wide_resnet50_2",
-              "feature_layers": ["layer2", "layer3"],
-              "backbone_pretrained": true,
-              "backbone_device": "mps",
-              "texture_input": "lab_l",
-              "min_target_coverage": 0.6,
-              "min_valid_patch_ratio": 0.4
-            },
-
-            "color_branch": {
-              "enabled": false
-            },
-
-            "filter_classifier": {
-              "enabled": true,
+              "enabled": false,
               "model_path": "../deployed_models/line_a/filter_classifier/",
               "device": "mps",
               "input_size": 224,
@@ -200,7 +111,30 @@
               "rules": []
             },
 
-            "regions": []
+            "regions": [
+              {
+                "region_id": "upper",
+                "box": [0.03, 0.03, 0.97, 0.42],
+                "patchcore_model_path": "../models/seat_model_a/cam_0_upper_patchcore.npz",
+                "enabled": true,
+                "patchcore": {
+                  "backbone_pretrained": true,
+                  "min_target_coverage": 0.5,
+                  "min_valid_patch_ratio": 0.35
+                }
+              },
+              {
+                "region_id": "middle",
+                "box": [0.03, 0.38, 0.97, 0.67],
+                "patchcore_model_path": "../models/seat_model_a/cam_0_middle_patchcore.npz",
+                "enabled": true,
+                "patchcore": {
+                  "backbone_pretrained": true,
+                  "min_target_coverage": 0.5,
+                  "min_valid_patch_ratio": 0.35
+                }
+              }
+            ]
           }
         ]
       }

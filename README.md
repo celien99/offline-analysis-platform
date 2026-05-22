@@ -386,14 +386,16 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 # 1. 启动离线平台后端服务
 cd backend && docker compose up -d
 
-# 2. 从根目录安装所有 workspace 成员
-cd .. && uv sync
+# 2. 安装 seat_defect_core 依赖
+cd ../seat_defect_core && uv sync && cd ..
 
-# 3. 生成合成测试图片
-python scripts/generate_sample_images.py --output ./sample_images --count 4
+# 3. 准备测试图片（放入 sample_images/ 目录，文件名即 camera_id）
+mkdir -p sample_images
+# cp /path/to/your/cam_front.jpg sample_images/
 
 # 4. 运行端到端验证 Demo
-python scripts/demo_full_loop.py --backend http://localhost:8000
+PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+  --backend http://localhost:8000 --images ./sample_images
 
 # 5. (可选) 启动在线检测核心 Docker 服务
 docker compose -f backend/docker-compose.yml --profile demo run --rm inspector \

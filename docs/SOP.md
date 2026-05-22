@@ -963,17 +963,18 @@ PYTHONPATH=. uv run --directory seat_defect_core python scripts/check_readiness.
  [  OK  ] YOLO: .../models/yolo/best.pt
 ```
 
-### 10.7 生成测试图片
+### 10.7 准备测试图片
 
-如果没有真实的座椅图片，可以生成合成测试图片：
+将产线采集的座椅图片放入 `sample_images/` 目录，文件名格式为 `{camera_id}.jpg`：
 
-```bash
-# 生成 4 张图片（50% 含模拟缺陷）
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/generate_sample_images.py \
-  --output ./sample_images --count 4 --defect-ratio 0.5 --seed 42
+```
+sample_images/
+├── cam_front.jpg      ← 正面机位图片
+├── cam_side.jpg       ← 侧面机位图片（如有）
+└── ...
 ```
 
-合成图片包含灰色背景（模拟座椅表面）、随机纹理噪声、暗色斑点（模拟缺陷）和划痕线条。
+文件名（不含扩展名）会自动映射为 `camera_id`，与配置文件中定义的机位 ID 对应。
 
 ### 10.8 运行单次检测
 
@@ -981,13 +982,13 @@ PYTHONPATH=. uv run --directory seat_defect_core python scripts/generate_sample_
 # 基本用法
 PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
-  --images "cam_front=sample_images/defect_01.jpg" \
+  --images "cam_front=sample_images/cam_front.jpg" \
   --part-id test_001
 
 # 带所有参数
 PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
-  --images "cam_front=sample_images/defect_01.jpg" \
+  --images "cam_front=sample_images/cam_front.jpg" \
   --part-id part_20260522_001 \
   --seat-model-id seat_model_a \
   --upload http://localhost:8000 \
@@ -996,7 +997,7 @@ PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
 # 预热模式（预加载模型，后续检测更快）
 PYTHONPATH=. uv run --directory seat_defect_core python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
-  --images "cam_front=sample_images/defect_01.jpg" \
+  --images "cam_front=sample_images/cam_front.jpg" \
   --warmup
 ```
 
@@ -1012,7 +1013,7 @@ inspector = SeatDefectInspector("seat_defect_core/config.example.json")
 
 # 方式 1：从图片路径检测
 response, camera_images = inspector.inspect_paths(
-    {"cam_front": "sample_images/defect_01.jpg"},
+    {"cam_front": "sample_images/cam_front.jpg"},
     part_id="test_001",
     seat_model_id="seat_model_a",
 )
@@ -1021,7 +1022,7 @@ print(f"reason: {response.decision_reason}")
 
 # 方式 2：从 numpy 数组检测
 import cv2
-img = cv2.imread("sample_images/defect_01.jpg")
+img = cv2.imread("sample_images/cam_front.jpg")
 response, camera_images = inspector.inspect(
     [{"camera_id": "cam_front", "image": img}],
     part_id="test_001",
@@ -1088,27 +1089,31 @@ cd backend && docker compose up -d
 docker compose ps
 curl http://localhost:8000/health
 
-# 3. 准备测试图片
-cd ..
-PYTHONPATH=. uv run --directory seat_defect_core python scripts/generate_sample_images.py \
-  -o sample_images -n 2
+# 3. 准备测试图片（放入 sample_images/ 目录）
+#    文件命名格式: {camera_id}.jpg
+#    例如: cam_front.jpg, cam_side.jpg
+mkdir -p sample_images
+# 将产线采集的座椅图片复制到此目录
 ```
 
 #### 运行端到端 Demo
 
 ```bash
-# 自动检测 + 上传（需要后端运行）
+# 完整闭环模式（需要后端运行 + 已放置测试图片）
+cd /path/to/offline-analysis-platform
 PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
-  --backend http://localhost:8000
+  --backend http://localhost:8000 \
+  --images ./sample_images
 
 # 纯检测模式（不需要后端）
 PYTHONPATH=. uv run --directory seat_defect_core python scripts/demo_full_loop.py \
+  --images ./sample_images \
   --no-upload
 ```
 
 Demo 自动执行 5 个步骤：
 1. 检查后端健康状态
-2. 准备/生成测试图片
+2. 从 `--images` 目录发现测试图片（按文件名匹配 camera_id）
 3. 加载检测配置
 4. 运行 seat_defect_core 检测
 5. 将 NG 结果上传到离线平台

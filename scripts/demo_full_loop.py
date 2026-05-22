@@ -47,42 +47,17 @@ def check_deploy_targets(base_url: str) -> list[dict]:
         return []
 
 
-def generate_sample_images(output_dir: Path, num_cameras: int = 2) -> dict[str, Path]:
-    """生成合成测试图片，返回 camera_id → path 映射。"""
-    import cv2
-    import numpy as np
+def discover_images(image_dir: Path) -> dict[str, Path]:
+    """从目录中发现测试图片，按文件名映射 camera_id。
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(42)
+    文件名格式: {camera_id}.jpg 或 {camera_id}.png
+    例如: cam_front.jpg → camera_id="cam_front"
+    """
     image_paths: dict[str, Path] = {}
-
-    for i in range(num_cameras):
-        # 灰色背景模拟座椅表面
-        img = np.ones((480, 640, 3), dtype=np.uint8) * 128
-        # 添加随机纹理
-        noise = rng.integers(0, 30, img.shape, dtype=np.uint8)
-        img = np.clip(img.astype(int) + noise.astype(int) - 15, 0, 255).astype(np.uint8)
-        # 随机斑点（模拟缺陷）
-        for _ in range(rng.integers(0, 4)):
-            x = int(rng.integers(100, 540))
-            y = int(rng.integers(80, 400))
-            radius = int(rng.integers(10, 40))
-            color = int(rng.integers(0, 80))
-            cv2.circle(img, (x, y), radius, (color, color, color), -1)
-        # 随机线条（模拟划痕）
-        if rng.random() > 0.5:
-            x1 = int(rng.integers(50, 250))
-            y1 = int(rng.integers(50, 430))
-            x2 = int(rng.integers(350, 590))
-            y2 = int(rng.integers(50, 430))
-            cv2.line(img, (x1, y1), (x2, y2), (60, 60, 60), int(rng.integers(1, 3)))
-
-        camera_id = f"demo_cam_{i + 1:02d}"
-        path = output_dir / f"{camera_id}.jpg"
-        cv2.imwrite(str(path), img)
-        image_paths[camera_id] = path
-
-    print(f"  生成了 {len(image_paths)} 张合成测试图片 → {output_dir}")
+    for ext in ("*.jpg", "*.jpeg", "*.png"):
+        for f in image_dir.glob(ext):
+            camera_id = f.stem  # 文件名（不含扩展名）作为 camera_id
+            image_paths[camera_id] = f
     return image_paths
 
 
@@ -132,7 +107,7 @@ def main() -> int:
     parser.add_argument("--backend", type=str, default="http://localhost:8000",
                         help="离线平台后端地址")
     parser.add_argument("--images", type=str, default=None,
-                        help="测试图片目录（不存在则自动生成合成图片）")
+                        help="测试图片目录（必填，包含 {camera_id}.jpg 格式图片）")
     parser.add_argument("--config", type=str, default=None,
                         help="seat_defect_core 配置 JSON 路径（不存在则使用内置最小配置）")
     parser.add_argument("--no-upload", action="store_true",
@@ -160,18 +135,18 @@ def main() -> int:
     # Step 2: 准备图片
     print("\n[2/5] 准备测试图片...")
     image_dir = Path(args.images) if args.images else REPO_ROOT / "sample_images"
-    image_paths: dict[str, Path] = {}
-    if image_dir.exists():
-        for f in image_dir.glob("*.jpg"):
-            image_paths[f"cam_{f.stem}"] = f
-        for f in image_dir.glob("*.png"):
-            image_paths[f"cam_{f.stem}"] = f
-        if image_paths:
-            print(f"  从 {image_dir} 读取 {len(image_paths)} 张图片")
-        else:
-            image_paths = generate_sample_images(image_dir)
-    else:
-        image_paths = generate_sample_images(image_dir)
+    if not image_dir.exists() or not any(image_dir.iterdir()):
+        print(f"  [错误] 图片目录不存在或为空: {image_dir}")
+        print(f"  请将测试图片放入该目录，文件名格式: {{camera_id}}.jpg")
+        print(f"  例如: cam_front.jpg, cam_side.jpg")
+        return 1
+    image_paths = discover_images(image_dir)
+    if not image_paths:
+        print(f"  [错误] 未在 {image_dir} 中找到图片（.jpg/.png）")
+        return 1
+    print(f"  从 {image_dir} 读取 {len(image_paths)} 张图片")
+    for cam_id, path in image_paths.items():
+        print(f"    {cam_id} ← {path.name}")
 
     # Step 3: 准备配置
     print("\n[3/5] 准备检测配置...")
