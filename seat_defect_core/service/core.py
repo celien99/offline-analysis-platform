@@ -299,17 +299,25 @@ class ModelBundleCache:
         camera: CameraConfig,
         seat_model_id: Optional[str],
     ) -> Optional[FilterClassifierService]:
-        """加载过滤器分类器模型，缓存复用。"""
+        """加载过滤器分类器模型，缓存复用。
+
+        支持两种 model_path 形式：
+        - 直接指向 model.pt 文件
+        - 指向部署目录（自动发现目录中的 model.pt）
+        """
         if not camera.filter_classifier.enabled:
             return None
         model_path = camera.filter_classifier.model_path
         if not model_path:
             return None
+        resolved = _resolve_model_file(model_path)
+        if resolved is None:
+            return None
         cache_key = self._cache_key(
             seat_model_id=seat_model_id,
             camera_id=camera.camera_id,
             model_id="filter_clf",
-            model_path=model_path,
+            model_path=resolved,
         )
         cached = self._filter_cache.get(cache_key)
         if cached is not None:
@@ -320,7 +328,7 @@ class ModelBundleCache:
         svc = FilterClassifierService(
             config=camera.filter_classifier,
             model=torch.jit.load(
-                model_path,
+                resolved,
                 map_location=camera.filter_classifier.device,
             ),
         )
@@ -447,3 +455,20 @@ def _dummy_patchcore_sample(config: PatchCoreConfig) -> Tuple[Any, Any, Any]:
     target_mask = np.ones((image_size, image_size), dtype=np.uint8)
     ignore_mask = np.zeros((image_size, image_size), dtype=np.uint8)
     return image, target_mask, ignore_mask
+
+
+def _resolve_model_file(model_path: str) -> Optional[str]:
+    """将 model_path 解析为实际 .pt 文件路径。
+
+    如果 model_path 是目录，自动发现目录中的 model.pt；
+    如果 model_path 是文件，直接返回。
+    """
+    path = Path(model_path)
+    if path.is_dir():
+        candidate = path / "model.pt"
+        if candidate.is_file():
+            return str(candidate)
+        return None
+    if path.is_file():
+        return str(path)
+    return None

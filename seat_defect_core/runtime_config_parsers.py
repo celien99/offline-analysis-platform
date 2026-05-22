@@ -19,6 +19,8 @@ from .config import (
     QualityGuardConfig,
     RegionConfig,
     RoiRefineConfig,
+    RuleConfig,
+    RuleEngineConfig,
     SeatModelConfig,
 )
 _LOCAL_PATH_SUFFIXES = {
@@ -86,6 +88,7 @@ def _parse_inspection_config(payload: Dict[str, Any], config_dir: Path) -> Inspe
             payload.get("fusion"),
             scope=f"{scope}.fusion",
         ),
+        upload_base_url=_optional_string(payload.get("upload_base_url")),
     )
 
 
@@ -169,6 +172,10 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
         filter_classifier=_parse_filter_classifier_config(
             payload.get("filter_classifier"),
             scope=f"{scope}.filter_classifier",
+        ),
+        rule_engine=_parse_rule_engine_config(
+            payload.get("rule_engine"),
+            scope=f"{scope}.rule_engine",
         ),
         regions=_parse_region_configs(
             payload.get("regions"),
@@ -451,6 +458,38 @@ def _parse_filter_classifier_config(payload: Any, *, scope: str) -> FilterClassi
     )
 
 
+def _parse_rule_engine_config(payload: Any, *, scope: str) -> RuleEngineConfig:
+    defaults = RuleEngineConfig()
+    if payload is None:
+        return defaults
+    payload = _expect_dict(payload, scope)
+    _reject_unknown_keys(payload, _field_names(RuleEngineConfig), scope)
+    rules_payload = payload.get("rules") or []
+    return RuleEngineConfig(
+        enabled=_bool_or_default(payload.get("enabled"), defaults.enabled),
+        rules=[
+            _parse_rule_config(item, scope=f"{scope}.rules[{index}]")
+            for index, item in enumerate(_ensure_list(rules_payload, f"{scope}.rules"))
+        ],
+    )
+
+
+def _parse_rule_config(payload: Any, *, scope: str) -> RuleConfig:
+    payload = _expect_dict(payload, scope)
+    _reject_unknown_keys(payload, _field_names(RuleConfig), scope)
+    return RuleConfig(
+        name=_require_string(payload, "name", scope),
+        enabled=_bool_or_default(payload.get("enabled"), True),
+        max_anomaly_score=_optional_float(payload.get("max_anomaly_score")),
+        min_strong_patch_count=_optional_int(payload.get("min_strong_patch_count")),
+        max_strong_patch_ratio=_optional_float(payload.get("max_strong_patch_ratio")),
+        require_filter_false_alarm=_bool_or_default(
+            payload.get("require_filter_false_alarm"), False
+        ),
+        action=_string_or_default(payload.get("action"), "suppress_to_ok"),
+    )
+
+
 def _parse_region_configs(
     payload: Any,
     config_dir: Path,
@@ -601,6 +640,12 @@ def _optional_float(value: Any) -> Optional[float]:
     if _is_missing(value):
         return None
     return float(value)
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    if _is_missing(value):
+        return None
+    return int(value)
 
 
 def _has_path_separator(value: str) -> bool:

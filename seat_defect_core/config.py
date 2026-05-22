@@ -127,6 +127,40 @@ class FilterClassifierConfig:
 
 
 @dataclass
+class RuleConfig:
+    """单条后处理规则配置。"""
+
+    name: str
+    """规则名称，用于调试和日志。"""
+
+    enabled: bool = True
+    """是否启用。"""
+
+    max_anomaly_score: Optional[float] = None
+    """异常分数低于此值触发。"""
+
+    min_strong_patch_count: Optional[int] = None
+    """强异常 patch 数低于此值触发。"""
+
+    max_strong_patch_ratio: Optional[float] = None
+    """强异常 patch 比例低于此值触发。"""
+
+    require_filter_false_alarm: bool = False
+    """要求 Filter Classifier 也将此判定为误报。"""
+
+    action: str = "suppress_to_ok"
+    """命中规则后的动作。"""
+
+
+@dataclass
+class RuleEngineConfig:
+    """规则引擎后处理配置，在 Filter Classifier 之后、Fusion 之前执行。"""
+
+    enabled: bool = False
+    rules: List[RuleConfig] = field(default_factory=list)
+
+
+@dataclass
 class RegionConfig:
     """单机位标准 ROI 内的局部 PatchCore 区域。"""
 
@@ -153,6 +187,7 @@ class CameraConfig:
     patchcore: PatchCoreConfig = field(default_factory=PatchCoreConfig)
     color_branch: ColorBranchConfig = field(default_factory=ColorBranchConfig)
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
+    rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
     regions: List[RegionConfig] = field(default_factory=list)
 
 
@@ -189,6 +224,8 @@ class InspectionConfig:
     )
     part_id: str = "seat_demo"
     fusion: FusionConfig = field(default_factory=FusionConfig)
+    # 如果设置了此 URL，检测完成后会自动将 NG 结果上传到离线平台
+    upload_base_url: Optional[str] = None
 
 
 __all__ = [
@@ -203,5 +240,7 @@ __all__ = [
     "QualityGuardConfig",
     "RegionConfig",
     "RoiRefineConfig",
+    "RuleConfig",
+    "RuleEngineConfig",
     "SeatModelConfig",
 ]
