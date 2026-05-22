@@ -36,6 +36,9 @@ dev = [
     "ruff>=0.4.0",
     "aiosqlite>=0.22.1",
 ]
+integration = [
+    "seat-defect-core @ {root:uri}/seat_defect_core",
+]
 
 [build-system]
 requires = ["setuptools>=75.0"]
