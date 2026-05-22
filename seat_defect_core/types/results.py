@@ -215,6 +215,9 @@ class CameraInspectionResult:
     overlay_image: Optional[Any] = field(default=None, repr=False, compare=False)
     """叠加了异常热力图的 BGR 调试图片，供调用方直接消费。"""
 
+    roi_aligned_image: Optional[Any] = field(default=None, repr=False, compare=False)
+    """原始 ROI 对齐图像 (BGR)，不含热力图叠加，供上传离线平台使用。"""
+
 
 @dataclass
 class InspectionResult:

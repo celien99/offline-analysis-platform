@@ -54,15 +54,31 @@ def upload_camera_result(
     # 异常分数
     if result.texture_result is not None:
         data["anomaly_score"] = float(result.texture_result.score)
+    elif result.region_results:
+        # 区域模式下从 region_results 收集最高异常分数
+        region_scores = [
+            r.texture_result.score
+            for r in result.region_results
+            if r.texture_result is not None
+        ]
+        if region_scores:
+            data["anomaly_score"] = float(max(region_scores))
 
-    # ROI 裁剪图
-    if result.overlay_image is not None:
-        roi_bytes = _encode_bgr_image(result.overlay_image, ".jpg")
-        files["roi_file"] = ("roi.jpg", roi_bytes, "image/jpeg")
+    # ROI 对齐图（干净图像，不含热力图叠加）
+    if result.roi_aligned_image is not None:
+        files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_aligned_image, ".jpg"), "image/jpeg")
+        # crop 图：resize 到 224x224，匹配分类器训练输入尺寸
+        crop_resized = cv2.resize(result.roi_aligned_image, (224, 224), interpolation=cv2.INTER_LINEAR)
+        files["crop_file"] = ("crop.jpg", _encode_bgr_image(crop_resized, ".jpg"), "image/jpeg")
 
-    # 热力图叠加图也作为 original 上传
+    # 原始叠加图（含热力图上下文）
     if result.overlay_image is not None:
         files["original_file"] = ("overlay.jpg", _encode_bgr_image(result.overlay_image, ".jpg"), "image/jpeg")
+
+    # 异常热力图（伪彩色 PNG）
+    heatmap = _extract_heatmap_for_upload(result)
+    if heatmap is not None:
+        files["heatmap_file"] = ("heatmap.png", _encode_heatmap(heatmap), "image/png")
 
     try:
         url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
@@ -107,6 +123,29 @@ def upload_inspection_response(
         if uploaded is not None:
             results.append(uploaded)
     return results
+
+
+def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | None:
+    """从检测结果中提取热力图（仅在完整 ROI 模式下可用）。"""
+    if result.texture_result is not None and result.texture_result.heatmap is not None:
+        return result.texture_result.heatmap
+    return None
+
+
+def _encode_heatmap(heatmap: np.ndarray) -> bytes:
+    """将 2D 热力图 float 数组编码为伪彩色 PNG。"""
+    normalized = np.zeros_like(heatmap, dtype=np.float32)
+    h_min = float(heatmap.min())
+    h_max = float(heatmap.max())
+    if h_max - h_min > 1e-8:
+        normalized = ((heatmap - h_min) / (h_max - h_min) * 255).astype(np.uint8)
+    else:
+        normalized = np.zeros_like(heatmap, dtype=np.uint8)
+    colored = cv2.applyColorMap(normalized, cv2.COLORMAP_JET)
+    success, encoded = cv2.imencode(".png", colored)
+    if not success:
+        raise ValueError("热力图编码失败")
+    return encoded.tobytes()
 
 
 def _encode_bgr_image(image: np.ndarray, ext: str = ".jpg") -> bytes:
