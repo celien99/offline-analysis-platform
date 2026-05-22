@@ -97,6 +97,8 @@ if [ ! -f seat_defect_core/.venv/bin/python ]; then
 fi
 
 # ---- 启动 Docker 基础设施 ----
+# 本地开发模式：API 跑在本地，Docker 只跑基础设施
+# 生产/全 Docker 模式：docker compose up -d（不加服务列表，含 API）
 log_step "启动 Docker 基础设施..."
 docker compose -f backend/docker-compose.yml up -d \
     db redis minio minio-init mlflow worker
@@ -119,6 +121,12 @@ log_step "运行数据库迁移..."
 (cd backend && .venv/bin/python -m alembic upgrade head) || log_warn "数据库迁移失败（可能已是最新）"
 
 # ---- 启动后端 API ----
+# 先停掉可能已在 Docker 中运行的 API 容器（避免端口 8000 冲突）
+if docker compose -f backend/docker-compose.yml ps api --status running 2>/dev/null | grep -q "api-1"; then
+    log_info "停掉 Docker api 容器（本地开发用本地 uvicorn）..."
+    docker compose -f backend/docker-compose.yml stop api
+fi
+
 log_step "启动后端 API (port 8000)..."
 (cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
 API_PID=$!
