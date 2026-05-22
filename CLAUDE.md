@@ -5,40 +5,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 Package manager is **uv** for Python (not pip). Python version: **3.11**.
-The repo is a uv workspace — run `uv sync` from root to install all members.
+此仓库包含 3 个独立组件，各自管理依赖：
 
 ```bash
-# Workspace (from repo root)
-uv sync                                          # sync all workspace members
+# ===================== 基础设施（Docker） =====================
+docker compose -f backend/docker-compose.yml up -d   # 启动 db/redis/minio/mlflow/worker
 
-# Backend
+# ===================== 后端 API =====================
 cd backend
-uv sync                                          # install all deps + create .venv
-uv run uvicorn app.main:app --reload --port 8000  # dev server (http://localhost:8000)
-uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2  # worker
-uv run alembic upgrade head                       # run migrations
-uv run pytest -v                                  # all 26 tests
-uv run pytest app/tests/test_api.py -v            # single test file
-uv run ruff check app                             # lint
-uv run mypy app                                   # type check (mypy strict)
+cp .env.example .env                                  # 首次：创建环境变量文件
+uv sync                                               # 安装依赖 + 创建 .venv
+uv run alembic upgrade head                           # 运行数据库迁移
+uv run uvicorn app.main:app --reload --port 8000      # 开发服务器 (http://localhost:8000)
 
-# seat_defect_core (online detection core)
+# Worker（本地开发用，Docker Worker 也可替代）
+uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2
+
+# 测试 & 检查
+uv run pytest -v                                      # 全部测试
+uv run pytest app/tests/test_api.py -v                # 单个测试文件
+uv run ruff check app                                 # lint
+uv run mypy app                                       # type check (mypy strict)
+
+# ===================== 在线检测核心 =====================
 cd seat_defect_core
-uv sync                                          # install deps (torch, cv2, ultralytics, etc.)
-# core_types/ 已重命名，无需 PYTHONPATH，从仓库根目录运行：
-cd ..
+uv sync                                               # 安装依赖 (torch, cv2, ultralytics, etc.)
+cd ..                                                 # 回到仓库根目录再运行
 ./seat_defect_core/.venv/bin/python -m seat_defect_core --help
-./seat_defect_core/.venv/bin/python -m seat_defect_core --config seat_defect_core/config.example.json --images cam1=img.jpg
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample.jpg"
 
-# Demo (from repo root)
-(cd backend && docker compose up -d)             # start backend services
-mkdir -p sample_images                           # 放入测试图片（文件名=camera_id）
-./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py --images ./sample_images
-
-# Frontend
+# ===================== 前端 =====================
 cd frontend
-npm install && npm run dev                        # dev server on port 3000 (proxies /api → :8000)
-npm run build                                     # typecheck + build
+pnpm install && pnpm run dev                          # 开发服务器 (http://localhost:3000)
+pnpm run build                                        # typecheck + build
+
+# ===================== 端到端 Demo =====================
+# 准备测试图片：mkdir -p sample_images，放入 {camera_id}.jpg 格式图片
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
+  --backend http://localhost:8000 --images ./sample_images
 ```
 
 ## Project Overview

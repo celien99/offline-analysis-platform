@@ -305,19 +305,26 @@ open http://localhost:8000/redoc      # ReDoc
 # 安装 uv（如果尚未安装）
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 后端
-cd backend
-uv sync                             # 自动创建 .venv + 安装所有依赖
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8000
+# 1. 启动基础设施（Docker）
+docker compose -f backend/docker-compose.yml up -d
+# → 启动 PostgreSQL / Redis / MinIO / MLflow / Celery Worker
 
-# 前端
+# 2. 后端 API
+cd backend
+cp .env.example .env
+uv sync                                       # 自动创建 .venv + 安装所有依赖
+uv run alembic upgrade head                   # 数据库迁移
+uv run uvicorn app.main:app --reload --port 8000  # → http://localhost:8000
+
+# 3. 前端
 cd frontend
-pnpm install && pnpm run dev          # → http://localhost:3000
+pnpm install && pnpm run dev                  # → http://localhost:3000
 
-# Celery Worker
-cd backend
-uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
+# 4. 在线检测核心
+cd seat_defect_core && uv sync && cd ..
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample.jpg"
 ```
 
 ---
@@ -383,23 +390,20 @@ uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 4
 ## 端到端 Demo
 
 ```bash
-# 1. 启动离线平台后端服务
-cd backend && docker compose up -d
+# 1. 启动离线平台基础设施 + Worker
+docker compose -f backend/docker-compose.yml up -d
 
-# 2. 安装 seat_defect_core 依赖
-cd ../seat_defect_core && uv sync && cd ..
+# 2. 启动后端 API（终端 2）
+cd backend && uv run uvicorn app.main:app --reload --port 8000
 
-# 3. 准备测试图片（放入 sample_images/ 目录，文件名即 camera_id）
+# 3. 安装 seat_defect_core 并准备图片
+cd seat_defect_core && uv sync && cd ..
 mkdir -p sample_images
-# cp /path/to/your/cam_front.jpg sample_images/
+# 放入测试图片，文件名 = camera_id，如 cam_front.jpg
 
-# 4. 运行端到端验证 Demo
+# 4. 运行端到端 Demo
 ./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
   --backend http://localhost:8000 --images ./sample_images
-
-# 5. (可选) 启动在线检测核心 Docker 服务
-docker compose -f backend/docker-compose.yml --profile demo run --rm inspector \
-  --config /app/config.json --upload http://api:8000
 ```
 
 ---
@@ -495,20 +499,21 @@ docker compose -f backend/docker-compose.yml --profile demo run --rm inspector \
 
 完整列表见 [`backend/.env.example`](backend/.env.example)。
 
-| 变量 | 默认值 |
-|---|---|
-| `POSTGRES_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/anomaly_db` |
-| `REDIS_URL` | `redis://localhost:6379/0` |
-| `MINIO_ENDPOINT` | `localhost:9000` |
-| `VLM_ENDPOINT` | `http://localhost:8888/v1` |
-| `MLFLOW_TRACKING_URI` | `http://localhost:5000` |
-| `INDUSTRIAL_DEFAULT_DEPLOY_TARGET` | `production_line_a` |
-| `DEPLOY_TARGETS` | `{"production_line_a": "./deployed_models/line_a"}` |
-| `DEPLOY_MODEL_SUBDIR` | `filter_classifier` |
-| `DEPLOY_ON_TRAIN_COMPLETE` | `false` |
-| `EMBEDDING_DIM` | `512` |
-| `CLUSTERING_MIN_SIZE` | `10` |
-| `DEBUG` | `false` |
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `INDUSTRIAL_POSTGRES_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/anomaly_db` | PostgreSQL 连接 |
+| `INDUSTRIAL_REDIS_URL` | `redis://localhost:6379/0` | Redis 缓存 |
+| `INDUSTRIAL_CELERY_BROKER_URL` | `redis://localhost:6379/1` | Celery 消息队列 |
+| `INDUSTRIAL_CELERY_RESULT_BACKEND` | `redis://localhost:6379/2` | Celery 结果存储 |
+| `INDUSTRIAL_MINIO_ENDPOINT` | `localhost:9000` | MinIO 对象存储 |
+| `INDUSTRIAL_MLFLOW_TRACKING_URI` | `http://localhost:5001` | MLflow 模型注册 |
+| `INDUSTRIAL_VLM_ENDPOINT` | `http://localhost:8001/v1` | VLM 推理端点 |
+| `INDUSTRIAL_DEFAULT_DEPLOY_TARGET` | `production_line_a` | 默认部署目标 |
+| `INDUSTRIAL_DEPLOY_TARGETS` | `{"production_line_a":"./deployed_models/line_a"}` | 部署目标映射 |
+| `INDUSTRIAL_DEPLOY_MODEL_SUBDIR` | `filter_classifier` | 模型子目录 |
+| `INDUSTRIAL_DEPLOY_ON_TRAIN_COMPLETE` | `false` | 训练后自动部署 |
+| `INDUSTRIAL_EMBEDDING_DIM` | `512` | Embedding 维度 |
+| `INDUSTRIAL_DEBUG` | `false` | 调试模式 |
 
 ---
 
@@ -535,13 +540,14 @@ uv run pytest app/tests/test_anomaly_service.py -v  # 单独文件
 
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request。开发环境使用 [uv](https://docs.astral.sh/uv/) 管理 Python 依赖：
+欢迎提交 Issue 和 Pull Request。各组件独立管理依赖：
 
 ```bash
-uv sync          # 安装依赖
-uv run pytest    # 运行测试
-uv run mypy app  # 类型检查
-uv run ruff check app  # 代码检查
+cd backend && uv sync          # 后端依赖
+cd seat_defect_core && uv sync # 在线检测核心依赖
+cd backend && uv run pytest    # 运行测试
+cd backend && uv run mypy app  # 类型检查
+cd backend && uv run ruff check app  # 代码检查
 ```
 
 请遵循项目代码规范：

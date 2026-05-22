@@ -1,0 +1,2 @@
+# 部署目标目录 — Filter Classifier 模型训练完成后自动部署至此
+# seat_defect_core 通过 mtime 缓存自动发现新模型

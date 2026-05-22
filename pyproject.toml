@@ -1,5 +1,0 @@
-[project]
-name = "offline-analysis-platform"
-version = "0.1.0"
-description = "Industrial AI offline intelligent analysis platform + online detection core"
-requires-python = ">=3.11"

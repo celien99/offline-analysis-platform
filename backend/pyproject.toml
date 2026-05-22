@@ -36,8 +36,9 @@ dev = [
     "ruff>=0.4.0",
     "aiosqlite>=0.22.1",
 ]
-# integration 组依赖 workspace 根目录 pyproject.toml 中的 [tool.uv.workspace]
-# 开发时通过 PYTHONPATH 或手动 pip install -e 引入 seat_defect_core
+# 各组件独立管理依赖（非 uv workspace）：
+#   cd backend && uv sync
+#   cd ../seat_defect_core && uv sync
 
 [build-system]
 requires = ["setuptools>=75.0"]

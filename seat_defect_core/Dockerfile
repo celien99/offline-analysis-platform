@@ -8,12 +8,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 安装 Python 依赖
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 复制源码和默认配置
-COPY . .
+# 先复制依赖描述文件（利用 Docker 层缓存）
+COPY seat_defect_core/pyproject.toml seat_defect_core/uv.lock ./
+RUN uv sync --frozen
 
+# 复制源码
+COPY seat_defect_core/ ./
+COPY ml/ ./ml/
+
+ENV PATH="/app/.venv/bin:$PATH"
 ENTRYPOINT ["python", "-m", "seat_defect_core"]
 CMD ["--help"]
