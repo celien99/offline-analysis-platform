@@ -50,13 +50,14 @@ services:
       minio:
         condition: service_healthy
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # GPU 保留仅在生产环境启用；Mac 开发环境注释掉
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
   db:
     image: pgvector/pgvector:pg16

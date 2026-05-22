@@ -26,7 +26,10 @@ RUN uv pip install --system --no-cache \
     structlog>=24.4.0 \
     httpx>=0.27.0 \
     python-multipart>=0.0.9 \
-    numpy>=1.26.0
+    numpy>=1.26.0 \
+    torch>=2.3.0 \
+    torchvision>=0.18.0 \
+    Pillow>=10.3.0
 
 COPY backend/app/ ./app/
 COPY backend/alembic.ini .
