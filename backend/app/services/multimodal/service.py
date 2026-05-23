@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from io import BytesIO
+
+import numpy as np
+from PIL import Image
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.logging import get_logger
 from app.core.exceptions import NotFoundError, VLMAnalysisError
 from app.domain.multimodal import VLMAnalyzer, VLMRequest, VLMResult
+from app.infrastructure.storage.minio_client import MinIOClient
 from app.models.cluster import Cluster
 from app.repositories.anomaly.repository import AnomalyRepository
 from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
@@ -20,12 +25,23 @@ class VLMService:
         self,
         session: AsyncSession,
         analyzer: VLMAnalyzer,
+        minio: MinIOClient,
     ) -> None:
         self._session = session
         self._analyzer = analyzer
+        self._minio = minio
         self._cluster_repo = ClusterRepository(session)
         self._membership_repo = ClusterMembershipRepository(session)
         self._anomaly_repo = AnomalyRepository(session)
+
+    async def _download_as_ndarray(self, minio_path: str) -> np.ndarray | None:
+        """从 MinIO 下载图片并转为 RGB numpy 数组。"""
+        try:
+            raw = await self._minio.download(minio_path)
+            return np.array(Image.open(BytesIO(raw)).convert("RGB"))
+        except Exception as e:
+            logger.warning("vlm_download_failed", path=minio_path, error=str(e))
+            return None
 
     async def analyze_cluster(self, cluster_id: str) -> VLMResult:
         cluster = await self._cluster_repo.get_by_id(cluster_id)
@@ -35,26 +51,36 @@ class VLMService:
         representative_ids = json.loads(cluster.representative_ids or "[]")
         anomaly_ids = representative_ids or await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
         anomalies = await self._anomaly_repo.get_by_ids(anomaly_ids)
-        image_paths: list[str] = []
+
+        # 下载代表 anomaly 的图片，转为 numpy 数组传给 VLM
+        crop_images: list[np.ndarray] = []
         for anomaly in anomalies:
-            for path in [
-                anomaly.crop_path,
-                anomaly.roi_path,
-                anomaly.original_path,
-                anomaly.heatmap_path,
-            ]:
+            for path in [anomaly.crop_path, anomaly.roi_path, anomaly.original_path]:
                 if path:
-                    image_paths.append(path)
-                    break
+                    arr = await self._download_as_ndarray(path)
+                    if arr is not None:
+                        crop_images.append(arr)
+                        break
 
         request = VLMRequest(
-            cluster_representative_paths=image_paths,
+            # 将代表图片列表放入 cluster_representative_paths 中作为路径标识，
+            # 同时用 crop_image 字段传第一张图（兼容旧版 analyzer）
+            cluster_representative_paths=[
+                p for a in anomalies
+                for p in [a.crop_path, a.roi_path, a.original_path]
+                if p is not None
+            ][:5],  # 最多 5 张
             cluster_metadata={
                 "cluster_id": cluster_id,
                 "sample_count": cluster.sample_count,
                 "possible_type": cluster.possible_type or "",
             },
         )
+        # 设置 numpy 图片数组（新版 analyzer 支持）
+        if crop_images:
+            request.crop_image = crop_images[0]
+            if len(crop_images) > 1:
+                request.original_image = crop_images[1]
 
         try:
             result = await self._analyzer.analyze(request)

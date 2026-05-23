@@ -3,9 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_session, get_vlm_analyzer
+from app.api.deps import get_minio, get_session, get_vlm_analyzer
 from app.common.logging import get_logger
 from app.domain.multimodal import VLMAnalyzer
+from app.infrastructure.storage.minio_client import MinIOClient
 from app.schemas.multimodal import (
     VLMAnalyzeRequest,
     VLMAnomalyAnalysisResponse,
@@ -24,8 +25,9 @@ async def analyze_cluster(
     cluster_id: str,
     session: AsyncSession = Depends(get_session),
     analyzer: VLMAnalyzer = Depends(get_vlm_analyzer),
+    minio: MinIOClient = Depends(get_minio),
 ) -> VLMAnalysisResponse:
-    service = VLMService(session, analyzer)
+    service = VLMService(session, analyzer, minio)
     try:
         result = await service.analyze_cluster(cluster_id)
         return VLMAnalysisResponse(
@@ -54,8 +56,9 @@ async def analyze_clusters_batch(
     request: VLMAnalyzeRequest,
     session: AsyncSession = Depends(get_session),
     analyzer: VLMAnalyzer = Depends(get_vlm_analyzer),
+    minio: MinIOClient = Depends(get_minio),
 ) -> VLMBatchAnalysisResponse:
-    service = VLMService(session, analyzer)
+    service = VLMService(session, analyzer, minio)
     results_map = await service.batch_analyze_clusters(request.cluster_ids)
 
     results: list[VLMAnalysisResponse] = []
@@ -89,8 +92,9 @@ async def analyze_anomaly(
     anomaly_id: str,
     session: AsyncSession = Depends(get_session),
     analyzer: VLMAnalyzer = Depends(get_vlm_analyzer),
+    minio: MinIOClient = Depends(get_minio),
 ) -> VLMAnomalyAnalysisResponse:
-    service = VLMService(session, analyzer)
+    service = VLMService(session, analyzer, minio)
     try:
         result = await service.analyze_anomaly_by_id(anomaly_id)
         return VLMAnomalyAnalysisResponse(

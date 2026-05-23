@@ -4,6 +4,7 @@ from app.api.deps import get_vlm_analyzer
 from app.common.logging import get_logger
 from app.infrastructure.database.session import async_session_factory
 from app.infrastructure.queue.celery_app import celery_app
+from app.infrastructure.storage.minio_client import minio_client
 from app.services.multimodal.service import VLMService
 from app.workers import run_async
 
@@ -15,7 +16,7 @@ async def _analyze_cluster(
 ) -> dict[str, object]:
     try:
         async with async_session_factory() as session:
-            service = VLMService(session, get_vlm_analyzer())
+            service = VLMService(session, get_vlm_analyzer(), minio_client)
             result = await service.analyze_cluster(cluster_id)
         logger.info(
             "vlm_analysis_complete",
