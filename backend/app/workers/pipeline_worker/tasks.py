@@ -32,15 +32,15 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
         batch = [
             {
                 "anomaly_id": a.id,
-                "crop_path": a.crop_path or a.roi_path or "",
+                "crop_path": a.crop_path or "",
             }
             for a in pending
-            if a.crop_path or a.roi_path
+            if a.crop_path
         ]
 
         if not batch:
             logger.info("pipeline_no_crops")
-            return {"status": "skipped", "reason": "no_crop_or_roi_paths"}
+            return {"status": "skipped", "reason": "no_crop_path"}
 
         pipeline = chain(
             celery_app.signature(

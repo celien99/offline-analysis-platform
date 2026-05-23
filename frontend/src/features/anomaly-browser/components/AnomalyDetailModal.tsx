@@ -22,10 +22,16 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
   if (!anomaly) return null;
 
+  const cropItems = (anomaly.crop_urls ?? []).map((url, i) => ({
+    label: `Crop ${i + 1}`,
+    url,
+    alt: `crop-${i}`,
+  }));
+
   const imageItems = [
     { label: "Original", url: anomaly.original_url, alt: "original" },
     { label: "Heatmap", url: anomaly.heatmap_url, alt: "heatmap" },
-    { label: "ROI", url: anomaly.roi_url, alt: "roi" },
+    ...cropItems,
   ].filter((item): item is { label: string; url: string; alt: string } => Boolean(item.url));
 
   const handleSearchSimilar = async () => {
@@ -66,10 +72,10 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
         </Descriptions.Item>
       </Descriptions>
 
-      <Row gutter={8} className="mb-4">
+      <Row gutter={[8, 12]} className="mb-4">
         <PhotoProvider>
           {imageItems.map((item) => (
-            <Col span={8} key={item.alt}>
+            <Col span={Math.min(8, Math.floor(24 / Math.max(1, imageItems.length)))} key={item.alt}>
               <Text strong>{item.label}</Text>
               <PhotoView src={item.url}>
                 <img src={item.url} alt={item.alt} className="w-full cursor-zoom-in rounded object-cover" />

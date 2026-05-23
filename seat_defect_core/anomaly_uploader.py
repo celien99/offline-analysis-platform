@@ -72,21 +72,28 @@ def upload_camera_result(
             "image/jpeg",
         )
 
-    # ROI：原图坐标系下的感兴趣区域裁剪，保留原始 ROI 形状。
-    if result.roi_image is not None:
-        files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_image, ".jpg"), "image/jpeg")
-
     # Crop：利用热力图裁剪异常高响应区域，供离线平台 embedding 提取使用。
-    # 优先从热力图热点裁剪 → 回退到 roi_aligned_image → 回退到 roi_image
-    anomaly_crop = _extract_anomaly_crop(result)
-    if anomaly_crop is not None:
-        crop_img = anomaly_crop
+    # 一张图可能存在多处异常 → 提取全部连通域，每张 crop 单独上传。
+    anomaly_crops = _extract_anomaly_crop(result)
+    if anomaly_crops:
+        for i, crop_img in enumerate(anomaly_crops):
+            files[f"crop_files"] = (
+                f"crop_{i}.jpg",
+                _encode_bgr_image(crop_img, ".jpg"),
+                "image/jpeg",
+            )
     elif result.roi_aligned_image is not None:
-        crop_img = result.roi_aligned_image
-    else:
-        crop_img = result.roi_image
-    if crop_img is not None:
-        files["crop_file"] = ("crop.jpg", _encode_bgr_image(crop_img, ".jpg"), "image/jpeg")
+        files["crop_files"] = (
+            "crop_0.jpg",
+            _encode_bgr_image(result.roi_aligned_image, ".jpg"),
+            "image/jpeg",
+        )
+    elif result.roi_image is not None:
+        files["crop_files"] = (
+            "crop_0.jpg",
+            _encode_bgr_image(result.roi_image, ".jpg"),
+            "image/jpeg",
+        )
 
     # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
     # PatchCore 的热力图统一映射回原图坐标系。
@@ -153,14 +160,14 @@ def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | 
     return None
 
 
-def _extract_anomaly_crop(result: CameraInspectionResult) -> np.ndarray | None:
+def _extract_anomaly_crop(result: CameraInspectionResult) -> list[np.ndarray]:
     """利用热力图定位异常高响应区域，从 ROI 图中裁剪出异常部位。
 
-    相比上传整张 ROI 图，仅保留异常部位可以大幅提升后续 embedding
-    聚类精度——不同缺陷类型的热力分布不同，crop 后特征更聚焦。
+    一张图可能存在多处缺陷 → 提取热力图中所有显著连通域，
+    按面积降序排列。无法定位热点时返回空列表，由调用方回退。
 
     Returns:
-        异常区域 BGR 裁剪图；无法定位热点时返回 None，由调用方回退到完整 ROI。
+        异常区域 BGR 裁剪图列表（按面积降序）。
     """
     heatmap: np.ndarray | None = None
     crop_base: np.ndarray | None = None
@@ -199,7 +206,7 @@ def _extract_anomaly_crop(result: CameraInspectionResult) -> np.ndarray | None:
                 )
 
     if heatmap is None or crop_base is None:
-        return None
+        return []
 
     return _crop_by_heatmap(heatmap, crop_base)
 
@@ -211,8 +218,12 @@ def _crop_by_heatmap(
     threshold_ratio: float = 0.3,
     padding_ratio: float = 0.15,
     min_crop_size: int = 32,
-) -> np.ndarray | None:
-    """按热力图高响应连通域裁剪图像。
+    min_component_area: int = 9,
+) -> list[np.ndarray]:
+    """按热力图高响应连通域裁剪图像，支持多异常区域。
+
+    一张 ROI 图可能存在多个离散的缺陷热力区域——提取所有满足
+    面积阈值的连通域，按面积降序排列返回。
 
     Args:
         heatmap: 浮点热力图 (H, W)
@@ -220,15 +231,16 @@ def _crop_by_heatmap(
         threshold_ratio: 阈值 = max * ratio，控制热点敏感度
         padding_ratio: 裁剪框外扩比例
         min_crop_size: 最小裁剪边长 (px)
+        min_component_area: 连通域最小面积 (px)
 
     Returns:
-        裁剪后的 BGR 图像；热力图无明显热点时返回 None
+        裁剪后的 BGR 图像列表（按连通域面积降序）；热力图无明显热点时返回空列表
     """
     # 归一化到 0-1
     h_min = float(heatmap.min())
     h_max = float(heatmap.max())
     if h_max - h_min < 1e-8:
-        return None
+        return []
 
     normalized = (heatmap - h_min) / (h_max - h_min)
 
@@ -244,36 +256,40 @@ def _crop_by_heatmap(
     threshold = max(float(normalized.max()) * threshold_ratio, 0.05)
     binary = (normalized >= threshold).astype(np.uint8)
 
-    # 连通域分析，取最大分量
+    # 连通域分析，收集所有显著分量
     num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
         binary, connectivity=8
     )
     if num_labels <= 1:
-        return None
+        return []
 
-    largest_idx = max(
-        range(1, num_labels),
-        key=lambda i: stats[i, cv2.CC_STAT_AREA],
-    )
-    x, y, w, h, area = stats[largest_idx]
+    # 按面积降序收集所有有效分量
+    components = []
+    for i in range(1, num_labels):
+        x, y, w, h, area = stats[i]
+        if area < min_component_area:
+            continue
+        components.append((area, x, y, w, h))
+    components.sort(key=lambda c: c[0], reverse=True)
 
-    if area < 9:
-        return None
-
-    # 外扩 padding 保留周边上下文
-    pad_w = max(1, int(w * padding_ratio))
-    pad_h = max(1, int(h * padding_ratio))
+    # 裁剪每个分量
+    crops: list[np.ndarray] = []
     img_h, img_w = image.shape[:2]
+    for _area, x, y, w, h in components:
+        pad_w = max(1, int(w * padding_ratio))
+        pad_h = max(1, int(h * padding_ratio))
 
-    x1 = max(0, x - pad_w)
-    y1 = max(0, y - pad_h)
-    x2 = min(img_w, x + w + pad_w)
-    y2 = min(img_h, y + h + pad_h)
+        x1 = max(0, x - pad_w)
+        y1 = max(0, y - pad_h)
+        x2 = min(img_w, x + w + pad_w)
+        y2 = min(img_h, y + h + pad_h)
 
-    if (x2 - x1) < min_crop_size or (y2 - y1) < min_crop_size:
-        return None
+        if (x2 - x1) < min_crop_size or (y2 - y1) < min_crop_size:
+            continue
 
-    return image[y1:y2, x1:x2]
+        crops.append(image[y1:y2, x1:x2])
+
+    return crops
 
 
 def _encode_heatmap(heatmap: np.ndarray) -> bytes:

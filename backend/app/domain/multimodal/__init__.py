@@ -9,7 +9,6 @@ import numpy as np
 @dataclass
 class VLMRequest:
     original_image: np.ndarray | None = None
-    roi_image: np.ndarray | None = None
     heatmap_image: np.ndarray | None = None
     crop_image: np.ndarray | None = None
     cluster_representative_paths: list[str] = field(default_factory=list)

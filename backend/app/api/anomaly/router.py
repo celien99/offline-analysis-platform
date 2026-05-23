@@ -35,9 +35,8 @@ async def upload_anomaly_with_files(
     date_folder: str = Form(..., max_length=16),
     detected_at: str = Form(...),
     original_file: UploadFile | None = File(default=None),
-    roi_file: UploadFile | None = File(default=None),
     heatmap_file: UploadFile | None = File(default=None),
-    crop_file: UploadFile | None = File(default=None),
+    crop_files: list[UploadFile] = File(default=[]),
     session: AsyncSession = Depends(get_session),
     minio: MinIOClient = Depends(get_minio),
 ) -> AnomalyUploadResponse:
@@ -50,6 +49,8 @@ async def upload_anomaly_with_files(
             return None
         return await f.read()
 
+    crop_data_list = [await _read(f) for f in crop_files]
+
     service = AnomalyService(session, minio)
     anomaly = await service.create_anomaly_with_files(
         camera_id=camera_id,
@@ -58,13 +59,10 @@ async def upload_anomaly_with_files(
         date_folder=date_folder,
         detected_at=detected_dt,
         original_data=await _read(original_file),
-        roi_data=await _read(roi_file),
         heatmap_data=await _read(heatmap_file),
-        crop_data=await _read(crop_file),
+        crop_data_list=crop_data_list,
         original_content_type=original_file.content_type if original_file else "image/jpeg",
-        roi_content_type=roi_file.content_type if roi_file else "image/jpeg",
         heatmap_content_type=heatmap_file.content_type if heatmap_file else "image/jpeg",
-        crop_content_type=crop_file.content_type if crop_file else "image/jpeg",
     )
     return AnomalyUploadResponse(anomaly_id=anomaly.id, status="received")
 
@@ -156,11 +154,17 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
         except Exception:
             return None
 
-    original_url, roi_url, heatmap_url, crop_url = await asyncio.gather(
+    crop_paths = record.crop_path_list
+    crop_url = None
+    crop_urls: list[str] = []
+    if crop_paths:
+        results = await asyncio.gather(*[_presigned(p) for p in crop_paths])
+        crop_url = results[0]
+        crop_urls = [u for u in results[1:] if u is not None]
+
+    original_url, heatmap_url = await asyncio.gather(
         _presigned(record.original_path),
-        _presigned(record.roi_path),
         _presigned(record.heatmap_path),
-        _presigned(record.crop_path),
     )
     return AnomalyResponse(
         anomaly_id=record.id,
@@ -171,9 +175,9 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
         status=record.status,
         detected_at=record.detected_at,
         original_url=original_url,
-        roi_url=roi_url,
         heatmap_url=heatmap_url,
         crop_url=crop_url,
+        crop_urls=crop_urls if crop_urls else [],
         created_at=record.created_at,
         trace_id=record.trace_id,
     )

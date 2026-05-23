@@ -67,12 +67,11 @@ class VLMService:
         # 下载缺陷裁剪图
         crop_images: list[np.ndarray] = []
         for anomaly in anomalies[:2]:  # 最多 2 个 NG 图 + 1 张 OK 图 = 3 张
-            for path in [anomaly.crop_path, anomaly.roi_path]:
-                if path:
-                    arr = await self._download_as_ndarray(path)
-                    if arr is not None:
-                        crop_images.append(arr)
-                        break
+            for path in anomaly.crop_path_list:
+                arr = await self._download_as_ndarray(path)
+                if arr is not None:
+                    crop_images.append(arr)
+                    break
 
         if not crop_images:
             raise VLMAnalysisError(
@@ -153,7 +152,6 @@ class VLMService:
 
         return await self.analyze_single_anomaly(
             original_image_path=anomaly.original_path,
-            roi_path=anomaly.roi_path,
             heatmap_path=anomaly.heatmap_path,
             crop_path=anomaly.crop_path,
         )
@@ -161,13 +159,12 @@ class VLMService:
     async def analyze_single_anomaly(
         self,
         original_image_path: str | None = None,
-        roi_path: str | None = None,
         heatmap_path: str | None = None,
         crop_path: str | None = None,
     ) -> VLMResult:
         request = VLMRequest(
             cluster_representative_paths=[
-                p for p in [crop_path, roi_path, original_image_path, heatmap_path] if p is not None
+                p for p in [crop_path, original_image_path, heatmap_path] if p is not None
             ],
         )
         return await self._analyzer.analyze(request)

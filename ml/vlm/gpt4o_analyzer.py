@@ -60,7 +60,6 @@ class GPT4oAnalyzer:
             request.crop_image,
             request.heatmap_image,
             request.original_image,
-            request.roi_image,
         ]:
             if img_field is not None:
                 b64 = self._ndarray_to_base64(img_field)

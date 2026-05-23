@@ -13,9 +13,9 @@ class AnomalySample:
     anomaly_score: float | None
     date_folder: str
     original_path: str | None
-    roi_path: str | None
     heatmap_path: str | None
     crop_path: str | None
+    crop_paths: list[str] = field(default_factory=list)
     status: str = "pending"
     detected_at: Timestamp | None = None
     metadata: dict[str, object] = field(default_factory=dict)

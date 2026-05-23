@@ -30,20 +30,17 @@ class AnomalyService:
         date_folder: str,
         detected_at: datetime,
         original_data: bytes | None = None,
-        roi_data: bytes | None = None,
         heatmap_data: bytes | None = None,
-        crop_data: bytes | None = None,
+        crop_data_list: list[bytes] | None = None,
         original_content_type: str = "image/jpeg",
-        roi_content_type: str = "image/jpeg",
         heatmap_content_type: str = "image/jpeg",
-        crop_content_type: str = "image/jpeg",
     ) -> AnomalyRecord:
         trace_id = generate_trace_id()
         anomaly_id = generate_uuid()
 
         base_path = f"anomaly_data/{date_folder}/{camera_id}/{anomaly_id}"
 
-        async def _save(data: bytes | None, suffix: str, ct: str) -> str | None:
+        async def _save(data: bytes | None, suffix: str, ct: str = "image/jpeg") -> str | None:
             if data is None:
                 return None
             path = f"{base_path}_{suffix}.jpg"
@@ -51,9 +48,15 @@ class AnomalyService:
             return path
 
         original_path = await _save(original_data, "original", original_content_type)
-        roi_path = await _save(roi_data, "roi", roi_content_type)
         heatmap_path = await _save(heatmap_data, "heatmap", heatmap_content_type)
-        crop_path = await _save(crop_data, "crop", crop_content_type)
+
+        # 多张异常裁剪图：crop_0, crop_1, ...
+        crop_paths: list[str] = []
+        for i, crop_data in enumerate(crop_data_list or []):
+            path = await _save(crop_data, f"crop_{i}")
+            if path:
+                crop_paths.append(path)
+        crop_path = crop_paths[0] if crop_paths else None
 
         anomaly = AnomalyRecord(
             id=anomaly_id,
@@ -63,9 +66,9 @@ class AnomalyService:
             date_folder=date_folder,
             detected_at=detected_at,
             original_path=original_path,
-            roi_path=roi_path,
             heatmap_path=heatmap_path,
             crop_path=crop_path,
+            crop_paths=json.dumps(crop_paths) if crop_paths else None,
             status="pending",
             trace_id=trace_id,
         )
@@ -76,7 +79,7 @@ class AnomalyService:
             anomaly_id=anomaly.id,
             trace_id=trace_id,
             has_original=original_path is not None,
-            has_crop=crop_path is not None,
+            crop_count=len(crop_paths),
         )
 
         # 自动触发 embedding → clustering 流水线（独立 session，不阻塞上传响应）
@@ -165,7 +168,7 @@ class AnomalyService:
         from app.repositories.embedding.repository import EmbeddingRepository
 
         # 1. Embedding
-        crop_path = anomaly.crop_path or anomaly.roi_path
+        crop_path = anomaly.crop_path
         if not crop_path:
             logger.warning("pipeline_no_image", anomaly_id=anomaly.id)
             return
