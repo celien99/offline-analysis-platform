@@ -98,9 +98,16 @@ def _run_inspect(args) -> int:
                 print("  上传失败（网络不通或后端未运行）")
 
         if args.output:
+            import cv2
             output_path = Path(args.output)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            out_dir = output_path.parent
+            out_dir.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 保存各机位叠加图像到输出目录
+            for cam_id, overlay_bgr in camera_images.items():
+                if overlay_bgr is not None:
+                    overlay_path = out_dir / f"{cam_id}_overlay.jpg"
+                    cv2.imwrite(str(overlay_path), overlay_bgr)
             print(f"结果已写入：{output_path}")
 
         return 0

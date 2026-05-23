@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import subprocess
@@ -87,7 +88,17 @@ def run_inspection_task(
         with open(result_path, "r", encoding="utf-8") as f:
             inspection_result = json.load(f)
 
-        camera_results = _extract_camera_results(inspection_result)
+        # 读取各机位叠加图像并 Base64 编码
+        overlay_images: dict[str, str] = {}
+        result_dir = Path(result_path).parent
+        for camera_id in camera_image_paths:
+            overlay_path = result_dir / f"{camera_id}_overlay.jpg"
+            if overlay_path.exists():
+                overlay_images[camera_id] = base64.b64encode(
+                    overlay_path.read_bytes()
+                ).decode("utf-8")
+
+        camera_results = _extract_camera_results(inspection_result, overlay_images)
 
         logger.info(
             "inspection_complete",
@@ -141,7 +152,10 @@ def _extract_decision_reason(result: dict) -> str | None:
     return None
 
 
-def _extract_camera_results(result: dict) -> list[dict[str, object]]:
+def _extract_camera_results(
+    result: dict,
+    overlay_images: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
     """从 seat_defect_core 返回结果中提取各相机检测结果。"""
     resp = result.get("result", result)
     if not isinstance(resp, dict):
@@ -151,16 +165,20 @@ def _extract_camera_results(result: dict) -> list[dict[str, object]]:
     if not camera_results:
         return []
 
+    overlays = overlay_images or {}
+
     parsed: list[dict[str, object]] = []
     for cr in camera_results:
+        cam_id = str(cr.get("camera_id", "unknown"))
         texture = cr.get("texture_result") or {}
         parsed.append({
-            "camera_id": str(cr.get("camera_id", "unknown")),
+            "camera_id": cam_id,
             "status": str(cr.get("status", "unknown")),
             "anomaly_score": float(texture.get("score", 0)) if texture else None,
             "threshold": float(texture.get("threshold", 0)) if texture else None,
             "is_anomaly": bool(texture.get("is_anomaly", False)) if texture else None,
             "decision_reason": str(cr.get("reason", "")),
             "error_message": str(cr.get("error", {}).get("message", "")) if cr.get("error") else None,
+            "overlay_image_base64": overlays.get(cam_id),
         })
     return parsed
