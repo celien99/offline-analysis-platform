@@ -10,31 +10,21 @@ from PIL import Image
 
 from app.domain.multimodal import VLMRequest, VLMResult
 
-ANALYSIS_PROMPT = """You are an industrial vision defect analysis expert.
+ANALYSIS_PROMPT = """你是一名工业视觉缺陷分析专家。请仔细观察以下裁剪图片，这些图片是从汽车座椅生产线上检测到的异常区域。
 
-Please analyze the following anomaly region.
-
-Input information:
-- Original image
-- ROI image
-- Heatmap
-- Anomaly crop
-- Current cluster representative images
-
-Please output in JSON format:
-1. suspected anomaly type
-2. whether it looks more like a false alarm
-3. possible reasons
-4. suggested handling method
-5. whether to suggest adding to false alarm library
+请分析并返回 JSON 格式的结果：
+{
+  "type": "缺陷类型 (wrinkle/scratch/reflection/stain/seam_shift/other)",
+  "is_false_alarm": true或false,
+  "reason": "判定原因的简要说明（中文）",
+  "confidence": 0.0到1.0之间的置信度,
+  "suggestion": "manual_review 或 add_to_false_alarm_library"
+}
 """
 
 
 class QwenVLMAnalyzer:
-    """Qwen2.5-VL based VLM analyzer for industrial defect explanation.
-
-    Communicates with a VLM endpoint (vLLM/Ollama) to analyze anomaly images.
-    """
+    """基于 OpenAI 兼容 API 的视觉分析器，用于工业缺陷分析。"""
 
     def __init__(
         self,
@@ -68,11 +58,18 @@ class QwenVLMAnalyzer:
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     async def analyze(self, request: VLMRequest) -> VLMResult:
-        """Analyze anomaly images using the VLM."""
+        """Analyze anomaly images using the VLM.
+
+        发送图片优先级：
+        1. crop_image: 缺陷区域裁剪（最重要）
+        2. original_image: 原图全局上下文
+        不发送 heatmap_image（热力图叠加热图会遮挡原图内容，干扰 VLM 判断）。
+        """
         content_parts: list[dict[str, object]] = [
             {"type": "text", "text": ANALYSIS_PROMPT}
         ]
 
+        # 主图：缺陷区域裁剪
         if request.crop_image is not None:
             b64 = self._ndarray_to_base64(request.crop_image)
             content_parts.append({
@@ -80,12 +77,15 @@ class QwenVLMAnalyzer:
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
             })
 
-        if request.heatmap_image is not None:
-            b64 = self._ndarray_to_base64(request.heatmap_image)
+        # 辅图：原图全局上下文（放后面，模型可据此判断缺陷位置）
+        if request.original_image is not None:
+            b64 = self._ndarray_to_base64(request.original_image)
             content_parts.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
             })
+
+        # 不发送 heatmap_image：热力图叠加会遮挡原图纹理，影响模型判断
 
         payload = {
             "model": self._model_name,

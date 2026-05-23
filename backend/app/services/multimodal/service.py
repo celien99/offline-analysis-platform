@@ -52,35 +52,33 @@ class VLMService:
         anomaly_ids = representative_ids or await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
         anomalies = await self._anomaly_repo.get_by_ids(anomaly_ids)
 
-        # 下载代表 anomaly 的图片，转为 numpy 数组传给 VLM
+        # 下载缺陷裁剪图传给 VLM。
+        # 只用 crop_path 和 roi_path（缺陷区域），不用 heatmap（叠加图会遮挡纹理）
+        # 也不用原图（全图太大，缺陷占比太小 VLM 难以识别）。
         crop_images: list[np.ndarray] = []
         for anomaly in anomalies:
-            for path in [anomaly.crop_path, anomaly.roi_path, anomaly.original_path]:
+            for path in [anomaly.crop_path, anomaly.roi_path]:
                 if path:
                     arr = await self._download_as_ndarray(path)
                     if arr is not None:
                         crop_images.append(arr)
                         break
 
+        if not crop_images:
+            raise VLMAnalysisError(
+                f"Cluster {cluster_id} 没有可用的缺陷裁剪图"
+            )
+
         request = VLMRequest(
-            # 将代表图片列表放入 cluster_representative_paths 中作为路径标识，
-            # 同时用 crop_image 字段传第一张图（兼容旧版 analyzer）
-            cluster_representative_paths=[
-                p for a in anomalies
-                for p in [a.crop_path, a.roi_path, a.original_path]
-                if p is not None
-            ][:5],  # 最多 5 张
+            crop_image=crop_images[0],                              # 主图：缺陷裁剪
+            original_image=crop_images[1] if len(crop_images) > 1 else None,  # 辅图：另一角度
+            cluster_representative_paths=[],
             cluster_metadata={
                 "cluster_id": cluster_id,
                 "sample_count": cluster.sample_count,
                 "possible_type": cluster.possible_type or "",
             },
         )
-        # 设置 numpy 图片数组（新版 analyzer 支持）
-        if crop_images:
-            request.crop_image = crop_images[0]
-            if len(crop_images) > 1:
-                request.original_image = crop_images[1]
 
         try:
             result = await self._analyzer.analyze(request)
