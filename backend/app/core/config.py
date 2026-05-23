@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     deploy_on_train_complete: bool = False
     default_deploy_target: str = "production_line_a"
 
+    # PatchCore Training
+    patchcore_models_dir: Path = Path("./models/patchcore")
+
+    # Inspection (seat_defect_core 子进程调用，训练与检测共用)
+    seat_defect_core_python: str = "../seat_defect_core/.venv/bin/python"
+    default_inspection_config: str = "../seat_defect_core/config.example.json"
+
     # Pagination
     default_page_size: int = 20
     max_page_size: int = 100
