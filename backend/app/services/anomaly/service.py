@@ -246,7 +246,8 @@ class AnomalyService:
         membership_repo = ClusterMembershipRepository(self._session)
 
         all_embeddings = await embedding_repo.get_all_embeddings_with_ids()
-        if len(all_embeddings) < 3:
+        # UMAP 要求 n_neighbors < n_samples，至少需要 4 个样本才能稳定运行
+        if len(all_embeddings) < 4:
             logger.info("pipeline_clustering_skip", count=len(all_embeddings))
             await self._session.commit()
             return
@@ -269,86 +270,91 @@ class AnomalyService:
         else:
             min_cluster_size, min_samples, n_neighbors = 5, 2, min(15, n_samples - 1)
 
-        from ml.clustering.pipeline import ClusteringPipeline
-        pipeline_cls = ClusteringPipeline(
-            umap_n_components=2,
-            umap_n_neighbors=n_neighbors,
-            umap_min_dist=0.1,
-            hdbscan_min_cluster_size=min_cluster_size,
-            hdbscan_min_samples=min_samples,
-        )
-        ids = list(embeddings_map.keys())
-        matrix = np.stack([embeddings_map[i] for i in ids])
-        result = pipeline_cls.fit_predict(matrix, ids)
-
-        labels = result["labels"]
-        probabilities = result["probabilities"]
-        umap_coords = result["umap_coords"]
-        representatives = pipeline_cls.get_representatives(labels, probabilities, n_per_cluster=5)
-
-        unique_labels = set(int(lb) for lb in labels)
-        has_clusters = any(lb != -1 for lb in unique_labels)
-        if not has_clusters:
-            noise_count = sum(1 for lb in labels if int(lb) == -1)
-            logger.info("pipeline_clustering_all_noise", total=n_samples, noise=noise_count)
-            await self._session.commit()
-            return
-
-        # 写入新的聚类结果
-        from app.models.cluster import Cluster, ClusterMembership
-        for label in sorted(unique_labels):
-            if label == -1:
-                continue
-            label_indices = [i for i, lb in enumerate(labels) if int(lb) == label]
-            rep_indices = representatives.get(label, [])
-            rep_ids = [ids[i] for i in rep_indices] if rep_indices else []
-
-            cluster = Cluster(
-                id=generate_uuid(),
-                hdbscan_label=label,
-                sample_count=len(label_indices),
-                representative_ids=json.dumps(rep_ids),
-                centroid=json.dumps(matrix[label_indices].mean(axis=0).tolist()),
-                umap_x=float(umap_coords[label_indices].mean(axis=0)[0]),
-                umap_y=float(umap_coords[label_indices].mean(axis=0)[1]),
-                hdbscan_probability=float(probabilities[label_indices].mean()),
-                status="pending_review",
-                clustering_run_at=datetime.now(tz=timezone.utc),
+        try:
+            from ml.clustering.pipeline import ClusteringPipeline
+            pipeline_cls = ClusteringPipeline(
+                umap_n_components=2,
+                umap_n_neighbors=n_neighbors,
+                umap_min_dist=0.1,
+                hdbscan_min_cluster_size=min_cluster_size,
+                hdbscan_min_samples=min_samples,
             )
-            await cluster_repo.create(cluster)
+            ids = list(embeddings_map.keys())
+            matrix = np.stack([embeddings_map[i] for i in ids])
+            result = pipeline_cls.fit_predict(matrix, ids)
 
-            memberships = [
-                ClusterMembership(
+            labels = result["labels"]
+            probabilities = result["probabilities"]
+            umap_coords = result["umap_coords"]
+            representatives = pipeline_cls.get_representatives(labels, probabilities, n_per_cluster=5)
+
+            unique_labels = set(int(lb) for lb in labels)
+            has_clusters = any(lb != -1 for lb in unique_labels)
+            if not has_clusters:
+                noise_count = sum(1 for lb in labels if int(lb) == -1)
+                logger.info("pipeline_clustering_all_noise", total=n_samples, noise=noise_count)
+                await self._session.commit()
+                return
+
+            # 写入新的聚类结果
+            from app.models.cluster import Cluster, ClusterMembership
+            for label in sorted(unique_labels):
+                if label == -1:
+                    continue
+                label_indices = [i for i, lb in enumerate(labels) if int(lb) == label]
+                rep_indices = representatives.get(label, [])
+                rep_ids = [ids[i] for i in rep_indices] if rep_indices else []
+
+                cluster = Cluster(
                     id=generate_uuid(),
-                    cluster_id=cluster.id,
-                    anomaly_id=ids[i],
-                    membership_score=float(probabilities[i]),
+                    hdbscan_label=label,
+                    sample_count=len(label_indices),
+                    representative_ids=json.dumps(rep_ids),
+                    centroid=json.dumps(matrix[label_indices].mean(axis=0).tolist()),
+                    umap_x=float(umap_coords[label_indices].mean(axis=0)[0]),
+                    umap_y=float(umap_coords[label_indices].mean(axis=0)[1]),
+                    hdbscan_probability=float(probabilities[label_indices].mean()),
+                    status="pending_review",
+                    clustering_run_at=datetime.now(tz=timezone.utc),
                 )
-                for i in label_indices
-            ]
-            await membership_repo.bulk_create(memberships)
+                await cluster_repo.create(cluster)
 
-            for i in label_indices:
-                await self._repo.update_status(ids[i], "clustered")
+                memberships = [
+                    ClusterMembership(
+                        id=generate_uuid(),
+                        cluster_id=cluster.id,
+                        anomaly_id=ids[i],
+                        membership_score=float(probabilities[i]),
+                    )
+                    for i in label_indices
+                ]
+                await membership_repo.bulk_create(memberships)
 
-        await self._session.commit()
-        num_clusters = len([l for l in unique_labels if l != -1])
-        logger.info("pipeline_clustering_done", num_clusters=num_clusters)
+                for i in label_indices:
+                    await self._repo.update_status(ids[i], "clustered")
 
-        # 自动 VLM
-        if num_clusters > 0:
-            new_cluster_ids = [
-                c.id for c in await cluster_repo.list_all(
-                    status="pending_review", offset=0, limit=100
-                )
-            ]
-            if new_cluster_ids:
-                logger.info("pipeline_auto_vlm", cluster_ids=new_cluster_ids)
-                from app.api.deps import get_vlm_analyzer
-                from app.services.multimodal.service import VLMService
-                vlm = VLMService(self._session, get_vlm_analyzer(), self._minio)
-                for cid in new_cluster_ids:
-                    try:
-                        await vlm.analyze_cluster(cid)
-                    except Exception as e:
-                        logger.warning("pipeline_auto_vlm_failed", cluster_id=cid, error=str(e))
+            await self._session.commit()
+            num_clusters = len([l for l in unique_labels if l != -1])
+            logger.info("pipeline_clustering_done", num_clusters=num_clusters)
+
+            # 自动 VLM
+            if num_clusters > 0:
+                new_cluster_ids = [
+                    c.id for c in await cluster_repo.list_all(
+                        status="pending_review", offset=0, limit=100
+                    )
+                ]
+                if new_cluster_ids:
+                    logger.info("pipeline_auto_vlm", cluster_ids=new_cluster_ids)
+                    from app.api.deps import get_vlm_analyzer
+                    from app.services.multimodal.service import VLMService
+                    vlm = VLMService(self._session, get_vlm_analyzer(), self._minio)
+                    for cid in new_cluster_ids:
+                        try:
+                            await vlm.analyze_cluster(cid)
+                        except Exception as e:
+                            logger.warning("pipeline_auto_vlm_failed", cluster_id=cid, error=str(e))
+
+        except Exception as e:
+            logger.error("pipeline_clustering_failed", error=str(e))
+            await self._session.rollback()
