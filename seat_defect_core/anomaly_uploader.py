@@ -64,21 +64,30 @@ def upload_camera_result(
         if region_scores:
             data["anomaly_score"] = float(max(region_scores))
 
-    # ROI 对齐图（干净图像，不含热力图叠加）
-    if result.roi_aligned_image is not None:
-        files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_aligned_image, ".jpg"), "image/jpeg")
-        # crop 图：resize 到 224x224，匹配分类器训练输入尺寸
-        crop_resized = cv2.resize(result.roi_aligned_image, (224, 224), interpolation=cv2.INTER_LINEAR)
-        files["crop_file"] = ("crop.jpg", _encode_bgr_image(crop_resized, ".jpg"), "image/jpeg")
+    # 原图：用户/产线上传到 inspection 的原始大图，不含热力图叠加。
+    if result.original_image is not None:
+        files["original_file"] = (
+            "original.jpg",
+            _encode_bgr_image(result.original_image, ".jpg"),
+            "image/jpeg",
+        )
 
-    # 原始叠加图（含热力图上下文）
+    # ROI：原图坐标系下的感兴趣区域裁剪，保留原始 ROI 形状。
+    if result.roi_image is not None:
+        files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_image, ".jpg"), "image/jpeg")
+
+    # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
+    # PatchCore 的热力图统一映射回原图坐标系。
     if result.overlay_image is not None:
-        files["original_file"] = ("overlay.jpg", _encode_bgr_image(result.overlay_image, ".jpg"), "image/jpeg")
-
-    # 异常热力图（伪彩色 PNG）
-    heatmap = _extract_heatmap_for_upload(result)
-    if heatmap is not None:
-        files["heatmap_file"] = ("heatmap.png", _encode_heatmap(heatmap), "image/png")
+        files["heatmap_file"] = (
+            "heatmap.jpg",
+            _encode_bgr_image(result.overlay_image, ".jpg"),
+            "image/jpeg",
+        )
+    else:
+        heatmap = _extract_heatmap_for_upload(result)
+        if heatmap is not None:
+            files["heatmap_file"] = ("heatmap.png", _encode_heatmap(heatmap), "image/png")
 
     try:
         url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
@@ -126,7 +135,7 @@ def upload_inspection_response(
 
 
 def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | None:
-    """从检测结果中提取热力图（仅在完整 ROI 模式下可用）。"""
+    """从检测结果中提取原始热力图，作为无 overlay 时的兼容兜底。"""
     if result.texture_result is not None and result.texture_result.heatmap is not None:
         return result.texture_result.heatmap
     return None
@@ -150,10 +159,20 @@ def _encode_heatmap(heatmap: np.ndarray) -> bytes:
 
 def _encode_bgr_image(image: np.ndarray, ext: str = ".jpg") -> bytes:
     """将 BGR numpy 图像编码为 JPEG/PNG 字节。"""
-    success, encoded = cv2.imencode(ext, image)
+    normalized = _normalize_bgr_image(image)
+    success, encoded = cv2.imencode(ext, normalized)
     if not success:
         raise ValueError("图像编码失败")
     return encoded.tobytes()
+
+
+def _normalize_bgr_image(image: np.ndarray) -> np.ndarray:
+    """Normalize grayscale/BGRA arrays to BGR before storage."""
+    if image.ndim == 2:
+        return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    if image.ndim == 3 and image.shape[2] == 4:
+        return cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    return image
 
 
 __all__ = [

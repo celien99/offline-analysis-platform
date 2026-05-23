@@ -20,6 +20,12 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
   if (!anomaly) return null;
 
+  const imageItems = [
+    { label: "Original", url: anomaly.original_url, alt: "original" },
+    { label: "Heatmap", url: anomaly.heatmap_url, alt: "heatmap" },
+    { label: "ROI", url: anomaly.roi_url, alt: "roi" },
+  ].filter((item): item is { label: string; url: string; alt: string } => Boolean(item.url));
+
   const handleSearchSimilar = async () => {
     setSearchingSimilar(true);
     try {
@@ -47,38 +53,14 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
       <Row gutter={8} className="mb-4">
         <PhotoProvider>
-          {anomaly.crop_url && (
-            <Col span={6}>
-              <Text strong>Crop</Text>
-              <PhotoView src={anomaly.crop_url}>
-                <img src={anomaly.crop_url} alt="crop" className="w-full cursor-zoom-in rounded object-cover" />
+          {imageItems.map((item) => (
+            <Col span={8} key={item.alt}>
+              <Text strong>{item.label}</Text>
+              <PhotoView src={item.url}>
+                <img src={item.url} alt={item.alt} className="w-full cursor-zoom-in rounded object-cover" />
               </PhotoView>
             </Col>
-          )}
-          {anomaly.roi_url && (
-            <Col span={6}>
-              <Text strong>ROI</Text>
-              <PhotoView src={anomaly.roi_url}>
-                <img src={anomaly.roi_url} alt="roi" className="w-full cursor-zoom-in rounded object-cover" />
-              </PhotoView>
-            </Col>
-          )}
-          {anomaly.heatmap_url && (
-            <Col span={6}>
-              <Text strong>Heatmap</Text>
-              <PhotoView src={anomaly.heatmap_url}>
-                <img src={anomaly.heatmap_url} alt="heatmap" className="w-full cursor-zoom-in rounded object-cover" />
-              </PhotoView>
-            </Col>
-          )}
-          {anomaly.original_url && (
-            <Col span={6}>
-              <Text strong>Original</Text>
-              <PhotoView src={anomaly.original_url}>
-                <img src={anomaly.original_url} alt="original" className="w-full cursor-zoom-in rounded object-cover" />
-              </PhotoView>
-            </Col>
-          )}
+          ))}
         </PhotoProvider>
       </Row>
 

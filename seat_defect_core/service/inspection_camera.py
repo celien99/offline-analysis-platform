@@ -552,9 +552,14 @@ def _finish_camera_result(
         texture_result=texture_result,
         region_results=region_results,
     )
-    # 保存干净 ROI 对齐图像，供 anomaly_uploader 上传至离线平台
-    if prepared is not None and prepared.roi is not None and prepared.roi.aligned_roi_image is not None:
-        result.roi_aligned_image = prepared.roi.aligned_roi_image.copy()
+    # 保存干净图像，供 anomaly_uploader 按 original / roi 语义上传。
+    if frame_packet.image is not None:
+        result.original_image = frame_packet.image.copy()
+    if prepared is not None and prepared.roi is not None:
+        if prepared.roi.roi_image is not None:
+            result.roi_image = prepared.roi.roi_image.copy()
+        if prepared.roi.aligned_roi_image is not None:
+            result.roi_aligned_image = prepared.roi.aligned_roi_image.copy()
     result = _attach_debug_artifacts(
         service,
         frame_packet,
