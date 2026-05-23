@@ -20,35 +20,6 @@ class AnomalyService:
         self._minio = minio
         self._repo = AnomalyRepository(session)
 
-    async def create_anomaly(
-        self,
-        *,
-        camera_id: str,
-        source: str = "patchcore",
-        anomaly_score: float | None = None,
-        date_folder: str,
-        detected_at: datetime,
-        metadata_json: str | None = None,
-    ) -> AnomalyRecord:
-        trace_id = generate_trace_id()
-        logger.info("anomaly_upload", camera_id=camera_id, trace_id=trace_id)
-
-        anomaly = AnomalyRecord(
-            id=generate_uuid(),
-            camera_id=camera_id,
-            source=source,
-            anomaly_score=anomaly_score,
-            date_folder=date_folder,
-            detected_at=detected_at,
-            metadata_json=metadata_json,
-            status="pending",
-            trace_id=trace_id,
-        )
-        await self._repo.create(anomaly)
-
-        logger.info("anomaly_created", anomaly_id=anomaly.id, trace_id=trace_id)
-        return anomaly
-
     async def create_anomaly_with_files(
         self,
         *,

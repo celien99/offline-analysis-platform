@@ -5,18 +5,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class AnomalyUploadRequest(BaseModel):
-    camera_id: str = Field(..., max_length=64)
-    source: str = Field(
-        default="patchcore",
-        pattern=r"^(patchcore|filter_classifier|rule_engine)$",
-    )
-    anomaly_score: float | None = Field(default=None, ge=0.0)
-    date_folder: str = Field(..., max_length=16, description="YYYY-MM-DD")
-    detected_at: datetime
-    metadata: dict[str, object] | None = None
-
-
 class AnomalyUploadResponse(BaseModel):
     anomaly_id: str
     status: str = "received"

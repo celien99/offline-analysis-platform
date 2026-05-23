@@ -11,7 +11,6 @@ from app.infrastructure.storage.minio_client import MinIOClient
 from app.models.anomaly import AnomalyRecord
 from app.schemas.anomaly import (
     AnomalyResponse,
-    AnomalyUploadRequest,
     AnomalyUploadResponse,
 )
 from app.schemas.common import ErrorResponse
@@ -19,28 +18,6 @@ from app.services.anomaly import AnomalyService
 
 router = APIRouter(prefix="/api/anomaly", tags=["anomaly"])
 logger = get_logger(__name__)
-
-
-@router.post(
-    "/upload",
-    response_model=AnomalyUploadResponse,
-    responses={400: {"model": ErrorResponse}},
-)
-async def upload_anomaly(
-    request: AnomalyUploadRequest,
-    session: AsyncSession = Depends(get_session),
-    minio: MinIOClient = Depends(get_minio),
-) -> AnomalyUploadResponse:
-    service = AnomalyService(session, minio)
-    anomaly = await service.create_anomaly(
-        camera_id=request.camera_id,
-        source=request.source,
-        anomaly_score=request.anomaly_score,
-        date_folder=request.date_folder,
-        detected_at=request.detected_at,
-        metadata_json=str(request.metadata) if request.metadata else None,
-    )
-    return AnomalyUploadResponse(anomaly_id=anomaly.id, status="received")
 
 
 @router.post(

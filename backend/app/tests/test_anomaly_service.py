@@ -20,11 +20,13 @@ def mock_minio() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_create_anomaly(db_session: AsyncSession, mock_minio: AsyncMock) -> None:
+async def test_create_anomaly_with_files_basic(
+    db_session: AsyncSession, mock_minio: AsyncMock,
+) -> None:
     service = AnomalyService(db_session, mock_minio)
     detected = datetime(2025, 6, 15, 10, 30, tzinfo=timezone.utc)
 
-    anomaly = await service.create_anomaly(
+    anomaly = await service.create_anomaly_with_files(
         camera_id="cam_01",
         source="patchcore",
         anomaly_score=0.87,
@@ -45,7 +47,7 @@ async def test_create_and_retrieve_anomaly(
     service = AnomalyService(db_session, mock_minio)
     detected = datetime(2025, 7, 1, tzinfo=timezone.utc)
 
-    created = await service.create_anomaly(
+    created = await service.create_anomaly_with_files(
         camera_id="cam_02",
         date_folder="2025-07-01",
         detected_at=detected,
@@ -72,8 +74,8 @@ async def test_list_anomalies(
     service = AnomalyService(db_session, mock_minio)
     dt = datetime(2025, 8, 1, tzinfo=timezone.utc)
 
-    await service.create_anomaly(camera_id="cam_a", date_folder="2025-08-01", detected_at=dt)
-    await service.create_anomaly(camera_id="cam_b", date_folder="2025-08-01", detected_at=dt)
+    await service.create_anomaly_with_files(camera_id="cam_a", date_folder="2025-08-01", detected_at=dt)
+    await service.create_anomaly_with_files(camera_id="cam_b", date_folder="2025-08-01", detected_at=dt)
 
     records, total = await service.list_anomalies(offset=0, limit=20)
     assert total >= 2
@@ -87,8 +89,8 @@ async def test_list_anomalies_filtered(
     service = AnomalyService(db_session, mock_minio)
     dt = datetime(2025, 9, 1, tzinfo=timezone.utc)
 
-    await service.create_anomaly(camera_id="cam_x", date_folder="2025-09-01", detected_at=dt)
-    await service.create_anomaly(camera_id="cam_y", date_folder="2025-09-01", detected_at=dt)
+    await service.create_anomaly_with_files(camera_id="cam_x", date_folder="2025-09-01", detected_at=dt)
+    await service.create_anomaly_with_files(camera_id="cam_y", date_folder="2025-09-01", detected_at=dt)
 
     records, total = await service.list_anomalies(camera_id="cam_x", offset=0, limit=20)
     assert total >= 1
@@ -102,7 +104,7 @@ async def test_reprocess_anomaly(
     service = AnomalyService(db_session, mock_minio)
     dt = datetime(2025, 10, 1, tzinfo=timezone.utc)
 
-    created = await service.create_anomaly(
+    created = await service.create_anomaly_with_files(
         camera_id="cam_r", date_folder="2025-10-01", detected_at=dt,
     )
     updated = await service.reprocess_anomaly(created.id)

@@ -1,5 +1,4 @@
 import { del, get, post } from "./client";
-import http from "./client";
 import type { AnomalyRecord, PaginatedResponse } from "../types";
 
 export const anomalyApi = {
@@ -27,20 +26,5 @@ export const anomalyApi = {
       signal,
     }),
 
-  upload: (params: {
-    camera_id: string;
-    source?: string;
-    anomaly_score?: number;
-    date_folder: string;
-    detected_at: string;
-    metadata?: Record<string, unknown>;
-  }, signal?: AbortSignal) =>
-    post<{ anomaly_id: string; status: string }>("/anomaly/upload", params, { signal }),
 
-  uploadWithFiles: (formData: FormData) =>
-    http.post<{ anomaly_id: string; status: string }>(
-      "/anomaly/upload-with-files",
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
-    ).then((res) => res.data),
 };
