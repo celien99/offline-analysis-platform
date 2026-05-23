@@ -256,7 +256,8 @@ class ReviewService:
         cluster_id: str,
         review_action: str,
         defect_type: str | None,
-    ) -> None:
+    ):
+        """根据 review 结果自动创建 knowledge entry，并返回它以便联动生成 rules。"""
         from app.services.knowledge import KnowledgeService
 
         anomaly_ids = await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
@@ -264,7 +265,7 @@ class ReviewService:
         camera_ids = list({a.camera_id for a in anomalies}) if anomalies else None
 
         knowledge_service = KnowledgeService(self._session)
-        await knowledge_service.auto_generate_from_review(
+        return await knowledge_service.auto_generate_from_review(
             cluster_id=cluster_id,
             review_action=review_action,
             defect_type=defect_type,
