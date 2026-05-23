@@ -108,28 +108,9 @@ class QwenVLMAnalyzer:
             )
             response.raise_for_status()
             data = response.json()
-            raw_text = data["choices"][0]["message"]["content"]
+            raw_text: str = data["choices"][0]["message"]["content"]
 
-            import json
-            try:
-                parsed = json.loads(raw_text)
-                return VLMResult(
-                    anomaly_type=parsed.get("type", "unknown"),
-                    is_false_alarm=parsed.get("is_false_alarm", False),
-                    reason=parsed.get("reason", ""),
-                    confidence=float(parsed.get("confidence", 0.5)),
-                    suggestion=parsed.get("suggestion", "manual_review"),
-                    raw_response=raw_text,
-                )
-            except (json.JSONDecodeError, KeyError):
-                return VLMResult(
-                    anomaly_type="unknown",
-                    is_false_alarm=False,
-                    reason="Failed to parse VLM response",
-                    confidence=0.0,
-                    suggestion="manual_review",
-                    raw_response=raw_text,
-                )
+            return self._parse_response(raw_text)
 
         except httpx.HTTPError as e:
             return VLMResult(
@@ -139,6 +120,78 @@ class QwenVLMAnalyzer:
                 confidence=0.0,
                 suggestion="retry",
             )
+
+    @staticmethod
+    def _parse_response(raw_text: str) -> VLMResult:
+        """Robustly parse VLM response, handling various JSON formats."""
+        import json
+        import re
+
+        cleaned = raw_text.strip()
+
+        # 1. Strip markdown code fences
+        cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+
+        parsed: dict[str, object] = {}
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            # 2. Try to extract JSON object from text
+            m = re.search(r"\{[^{}]*\}", cleaned, re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group())
+                except json.JSONDecodeError:
+                    pass
+
+        if not parsed:
+            return VLMResult(
+                anomaly_type="unknown",
+                is_false_alarm=False,
+                reason=f"Failed to parse VLM response: {raw_text[:200]}",
+                confidence=0.0,
+                suggestion="manual_review",
+                raw_response=raw_text,
+            )
+
+        # 3. Extract fields with multiple possible key names
+        anomaly_type = str(
+            parsed.get("type")
+            or parsed.get("anomaly_type")
+            or parsed.get("suspected_anomaly_type")
+            or "unknown"
+        )
+        is_false_alarm = bool(
+            parsed.get("is_false_alarm")
+            or parsed.get("whether_it_looks_more_like_a_false_alarm")
+            or False
+        )
+        reason = str(
+            parsed.get("reason")
+            or parsed.get("possible_reasons")
+            or parsed.get("failure_reason")
+            or ""
+        )
+        # reason 可能是 list → join 成 string
+        if isinstance(parsed.get("possible_reasons"), list):
+            reason = "; ".join(str(r) for r in parsed["possible_reasons"])
+
+        confidence = float(parsed.get("confidence", 0.5))
+        suggestion = str(
+            parsed.get("suggestion")
+            or parsed.get("suggested_handling_method")
+            or "manual_review"
+        )
+
+        return VLMResult(
+            anomaly_type=anomaly_type,
+            is_false_alarm=is_false_alarm,
+            reason=reason,
+            confidence=confidence,
+            suggestion=suggestion,
+            raw_response=raw_text,
+        )
 
     async def batch_analyze(
         self, requests: list[VLMRequest]
