@@ -163,18 +163,24 @@ class AnomalyService:
         from app.core.security import generate_uuid
         from app.models.embedding import EmbeddingVector
 
-        embedding = EmbeddingVector(
-            id=generate_uuid(),
-            anomaly_id=anomaly.id,
-            embedding=vector.tolist(),
-            model_name=extractor.model_name,
-            model_version="local",
-            dimension=extractor.dimension,
-        )
         embedding_repo = EmbeddingRepository(self._session)
-        await embedding_repo.create(embedding)
-        await self._repo.update_status(anomaly.id, "embedded")
-        logger.info("pipeline_embedding_done", anomaly_id=anomaly.id)
+        existing_emb = await embedding_repo.get_by_anomaly_id(anomaly.id)
+        if existing_emb is not None:
+            # 已有 embedding 则跳过创建，仅更新状态
+            logger.info("pipeline_embedding_exists", anomaly_id=anomaly.id)
+            await self._repo.update_status(anomaly.id, "embedded")
+        else:
+            embedding = EmbeddingVector(
+                id=generate_uuid(),
+                anomaly_id=anomaly.id,
+                embedding=vector.tolist(),
+                model_name=extractor.model_name,
+                model_version="local",
+                dimension=extractor.dimension,
+            )
+            await embedding_repo.create(embedding)
+            await self._repo.update_status(anomaly.id, "embedded")
+            logger.info("pipeline_embedding_done", anomaly_id=anomaly.id)
 
         # 2. Clustering（收集所有 embedded anomalies 进行聚类）
         try:
