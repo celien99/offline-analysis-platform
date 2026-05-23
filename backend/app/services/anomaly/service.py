@@ -194,13 +194,28 @@ class AnomalyService:
                 aid: np.array(vec, dtype=np.float32) for aid, vec in all_embeddings
             }
 
+            n_samples = len(all_embeddings)
+            # 根据样本数动态调参：小样本时放宽聚类条件
+            if n_samples <= 10:
+                min_cluster_size = 2
+                min_samples = 1
+                n_neighbors = max(2, n_samples - 1)
+            elif n_samples <= 30:
+                min_cluster_size = 3
+                min_samples = 1
+                n_neighbors = min(10, n_samples - 1)
+            else:
+                min_cluster_size = 5
+                min_samples = 2
+                n_neighbors = min(15, n_samples - 1)
+
             from ml.clustering.pipeline import ClusteringPipeline
             pipeline_cls = ClusteringPipeline(
                 umap_n_components=2,
-                umap_n_neighbors=min(15, len(all_embeddings) - 1),
+                umap_n_neighbors=n_neighbors,
                 umap_min_dist=0.1,
-                hdbscan_min_cluster_size=3,
-                hdbscan_min_samples=1,
+                hdbscan_min_cluster_size=min_cluster_size,
+                hdbscan_min_samples=min_samples,
             )
             ids = list(embeddings_map.keys())
             matrix = np.stack([embeddings_map[i] for i in ids])
@@ -214,7 +229,20 @@ class AnomalyService:
             cluster_repo = ClusterRepository(self._session)
             membership_repo = ClusterMembershipRepository(self._session)
 
-            for label in sorted(set(int(lb) for lb in labels)):
+            unique_labels = set(int(lb) for lb in labels)
+            has_clusters = any(lb != -1 for lb in unique_labels)
+            if not has_clusters:
+                noise_count = sum(1 for lb in labels if int(lb) == -1)
+                logger.info(
+                    "pipeline_clustering_all_noise",
+                    total=n_samples,
+                    noise=noise_count,
+                    hint="样本特征差异过大，无法形成聚类。尝试上传更相似的异常图片。",
+                )
+                await self._session.commit()
+                return
+
+            for label in sorted(unique_labels):
                 if label == -1:
                     continue
                 label_indices = [i for i, lb in enumerate(labels) if int(lb) == label]
