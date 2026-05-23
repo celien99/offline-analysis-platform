@@ -179,13 +179,40 @@ def _extract_camera_results(
     parsed: list[dict[str, object]] = []
     for cr in camera_results:
         cam_id = str(cr.get("camera_id", "unknown"))
+
+        # 提取异常分数和判定：优先从顶层 texture_result，回退到 region_results
         texture = cr.get("texture_result") or {}
+        anomaly_score = None
+        is_anomaly = None
+        threshold = None
+
+        if texture:
+            anomaly_score = float(texture.get("score", 0))
+            threshold = float(texture.get("threshold", 0))
+            is_anomaly = bool(texture.get("is_anomaly", False))
+        else:
+            # regions 模式：从 region_results 中收集最高异常分数和判定
+            region_results = cr.get("region_results") or []
+            region_scores = []
+            for rr in region_results:
+                rt = rr.get("texture_result") or {}
+                if rt:
+                    region_scores.append(float(rt.get("score", 0)))
+                    if rt.get("is_anomaly"):
+                        is_anomaly = True
+                    if threshold is None:
+                        threshold = float(rt.get("threshold", 0))
+            if region_scores:
+                anomaly_score = max(region_scores)
+                if is_anomaly is None:
+                    is_anomaly = anomaly_score > (threshold or 0)
+
         parsed.append({
             "camera_id": cam_id,
             "status": str(cr.get("status", "unknown")),
-            "anomaly_score": float(texture.get("score", 0)) if texture else None,
-            "threshold": float(texture.get("threshold", 0)) if texture else None,
-            "is_anomaly": bool(texture.get("is_anomaly", False)) if texture else None,
+            "anomaly_score": anomaly_score,
+            "threshold": threshold,
+            "is_anomaly": is_anomaly,
             "decision_reason": str(cr.get("reason", "")),
             "error_message": str(cr.get("error", {}).get("message", "")) if cr.get("error") else None,
             "overlay_image_base64": overlays.get(cam_id),
