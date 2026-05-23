@@ -22,8 +22,9 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
   if (!anomaly) return null;
 
-  const cropItems = (anomaly.crop_urls ?? []).map((url, i) => ({
-    label: `Crop ${i + 1}`,
+  const allCropUrls = [anomaly.crop_url, ...(anomaly.crop_urls ?? [])].filter(Boolean) as string[];
+  const cropItems = allCropUrls.map((url, i) => ({
+    label: allCropUrls.length > 1 ? `Crop ${i + 1}` : "Crop",
     url,
     alt: `crop-${i}`,
   }));
