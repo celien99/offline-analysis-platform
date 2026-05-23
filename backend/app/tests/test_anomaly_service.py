@@ -125,11 +125,10 @@ async def test_create_anomaly_with_files(
         camera_id="cam_f",
         date_folder="2025-11-01",
         detected_at=dt,
-        crop_data=fake_bytes,
-        roi_data=fake_bytes,
+        crop_data_list=[fake_bytes],
     )
 
     assert anomaly.crop_path is not None
-    assert anomaly.roi_path is not None
+    assert anomaly.crop_paths is not None
     assert anomaly.status == "pending"
-    assert mock_minio.upload.call_count == 2
+    assert mock_minio.upload.call_count == 1  # crop_0.jpg

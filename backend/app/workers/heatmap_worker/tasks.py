@@ -80,7 +80,6 @@ def _generate_gradcam(image: np.ndarray) -> np.ndarray:
 def generate_heatmap(
     anomaly_id: str,
     original_path: str,
-    roi_path: str | None = None,
 ) -> dict[str, object]:
     logger.info("heatmap_task_started", anomaly_id=anomaly_id)
 

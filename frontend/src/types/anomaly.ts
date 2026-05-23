@@ -7,9 +7,9 @@ export interface AnomalyRecord {
   status: string;
   detected_at: string;
   original_url: string | null;
-  roi_url: string | null;
   heatmap_url: string | null;
   crop_url: string | null;
+  crop_urls: string[];
   cluster_id: string | null;
   created_at: string;
   trace_id: string | null;

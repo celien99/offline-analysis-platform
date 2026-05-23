@@ -32,9 +32,9 @@ class AnomalyResponse(BaseModel):
     status: str
     detected_at: datetime
     original_url: str | None = None
-    roi_url: str | None = None
     heatmap_url: str | None = None
     crop_url: str | None = None
+    crop_urls: list[str] = []
     cluster_id: str | None = None
     created_at: datetime
     trace_id: str | None = None
