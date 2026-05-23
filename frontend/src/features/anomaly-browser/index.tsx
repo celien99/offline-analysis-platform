@@ -51,7 +51,21 @@ export default function AnomalyBrowser() {
     }
   };
 
-  const columns = useAnomalyColumns({ onViewDetail: handleViewDetail, onReprocess: handleReprocess });
+  const handleDelete = async (anomalyId: string) => {
+    try {
+      await anomalyApi.delete(anomalyId);
+      message.success("Anomaly deleted");
+      refetch();
+    } catch {
+      message.error("Delete failed");
+    }
+  };
+
+  const columns = useAnomalyColumns({
+    onViewDetail: handleViewDetail,
+    onReprocess: handleReprocess,
+    onDelete: handleDelete,
+  });
 
   return (
     <div>

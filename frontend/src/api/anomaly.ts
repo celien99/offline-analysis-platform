@@ -1,4 +1,4 @@
-import { get, post } from "./client";
+import { del, get, post } from "./client";
 import http from "./client";
 import type { AnomalyRecord, PaginatedResponse } from "../types";
 
@@ -17,6 +17,9 @@ export const anomalyApi = {
 
   reprocess: (anomalyId: string, signal?: AbortSignal) =>
     post(`/anomaly/${anomalyId}/reprocess`, undefined, { signal }),
+
+  delete: (anomalyId: string) =>
+    del<{ status: string; anomaly_id: string }>(`/anomaly/${anomalyId}`),
 
   searchSimilar: (anomalyId: string, topK = 20, threshold = 0.7, signal?: AbortSignal) =>
     get("/embedding/search", {

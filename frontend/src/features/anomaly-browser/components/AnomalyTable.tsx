@@ -1,5 +1,5 @@
-import { Space, Tag, Button, Typography } from "antd";
-import { RetweetOutlined } from "@ant-design/icons";
+import { Space, Tag, Button, Typography, Popconfirm } from "antd";
+import { RetweetOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { AnomalyRecord } from "../../../types";
 import { ANOMALY_STATUS_COLOR_MAP } from "../../../lib/constants";
@@ -9,9 +9,10 @@ const { Text } = Typography;
 interface Props {
   onViewDetail: (id: string) => void;
   onReprocess: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-export function useAnomalyColumns({ onViewDetail, onReprocess }: Props): ColumnsType<AnomalyRecord> {
+export function useAnomalyColumns({ onViewDetail, onReprocess, onDelete }: Props): ColumnsType<AnomalyRecord> {
   return [
     {
       title: "ID",
@@ -50,6 +51,17 @@ export function useAnomalyColumns({ onViewDetail, onReprocess }: Props): Columns
           >
             Reprocess
           </Button>
+          <Popconfirm
+            title="Delete this anomaly?"
+            description="The data will be soft-deleted and excluded from pipeline."
+            onConfirm={() => onDelete(record.anomaly_id)}
+            okText="Delete"
+            cancelText="Cancel"
+          >
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+              Delete
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },

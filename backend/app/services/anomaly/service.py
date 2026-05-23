@@ -135,10 +135,20 @@ class AnomalyService:
             raise NotFoundError("Anomaly", anomaly_id)
         return record
 
+    async def soft_delete_anomaly(self, anomaly_id: str) -> None:
+        record = await self._repo.get_by_id(anomaly_id)
+        if record is None:
+            raise NotFoundError("Anomaly", anomaly_id)
+        await self._repo.soft_delete(anomaly_id)
+        logger.info("anomaly_soft_deleted", anomaly_id=anomaly_id)
+
     async def reprocess_anomaly(self, anomaly_id: str) -> AnomalyRecord:
         record = await self._repo.get_by_id(anomaly_id)
         if record is None:
             raise NotFoundError("Anomaly", anomaly_id)
         await self._repo.update_status(anomaly_id, "pending")
+        # 触发 pipeline 重新处理该异常
+        from app.workers.pipeline_worker.tasks import process_new_anomalies
+        process_new_anomalies.delay(limit=500)
         logger.info("anomaly_reprocess_queued", anomaly_id=anomaly_id)
         return record

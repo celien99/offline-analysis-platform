@@ -149,6 +149,21 @@ async def reprocess_anomaly(
     return {"status": "queued", "anomaly_id": anomaly_id}
 
 
+@router.delete(
+    "/{anomaly_id}",
+    responses={404: {"model": ErrorResponse}},
+)
+async def delete_anomaly(
+    anomaly_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> dict[str, str]:
+    """软删除异常记录（设置 deleted_at）。"""
+    service = AnomalyService(session, minio)
+    await service.soft_delete_anomaly(anomaly_id)
+    return {"status": "deleted", "anomaly_id": anomaly_id}
+
+
 async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResponse:
     async def _presigned(path: str | None) -> str | None:
         if path is None:
