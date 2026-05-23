@@ -19,7 +19,7 @@ uv run alembic upgrade head                           # 运行数据库迁移
 uv run uvicorn app.main:app --reload --port 8000      # 开发服务器 (http://localhost:8000)
 
 # Worker（本地开发用，Docker Worker 也可替代）
-uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2
+PYTHONPATH=.. uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2
 
 # 测试 & 检查
 uv run pytest -v                                      # 全部测试

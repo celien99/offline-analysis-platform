@@ -50,7 +50,8 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
             celery_app.signature(
                 "clustering.run",
                 kwargs={},
-            ).si(),  # immutable: 丢弃前一步结果，只用 kwargs
+                immutable=True,  # 丢弃前一步 embedding 结果，只用自己的 kwargs
+            ),
             celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
         )
         result = pipeline.delay()
