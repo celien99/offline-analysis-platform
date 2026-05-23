@@ -133,6 +133,17 @@
                   "min_target_coverage": 0.5,
                   "min_valid_patch_ratio": 0.35
                 }
+              },
+              {
+                "region_id": "lower",
+                "box": [0.03, 0.66, 0.97, 0.97],
+                "patchcore_model_path": "../models/seat_model_a/cam_0_lower_patchcore.npz",
+                "enabled": true,
+                "patchcore": {
+                  "backbone_pretrained": true,
+                  "min_target_coverage": 0.5,
+                  "min_valid_patch_ratio": 0.35
+                }
               }
             ]
           }

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi } from "../api";
+import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
 import type { ReviewSubmit, TrainingStartParams, DeployRequest } from "../types";
 
 // ── Cluster queries ──
@@ -263,5 +263,33 @@ export function useVLMAnalyzeAnomaly() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["anomalies"] });
     },
+  });
+}
+
+// ── PatchCore Training hooks ──
+
+export function usePatchCoreTrainingStart() {
+  return useMutation({
+    mutationFn: (formData: FormData) => patchcoreTrainingApi.start(formData),
+  });
+}
+
+// ── Inspection hooks ──
+
+export function useInspectionRun() {
+  return useMutation({
+    mutationFn: (formData: FormData) => inspectionApi.run(formData),
+  });
+}
+
+export function useInspectionResult(taskId: string | null) {
+  return useQuery({
+    queryKey: ["inspection", "result", taskId],
+    queryFn: ({ signal }) => inspectionApi.result(taskId!, signal),
+    enabled: !!taskId,
+    refetchInterval: (query) =>
+      query.state.data?.status === "SUCCESS" || query.state.data?.status === "FAILURE"
+        ? false
+        : 3000,
   });
 }

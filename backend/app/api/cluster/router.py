@@ -5,8 +5,10 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_session
+from app.api.deps import get_minio, get_session
 from app.common.logging import get_logger
+from app.infrastructure.storage.minio_client import MinIOClient
+from app.repositories.anomaly.repository import AnomalyRepository
 from app.services.clustering.service import ClusteringService
 from app.schemas.cluster import (
     ClusterDetailResponse,
@@ -21,6 +23,31 @@ router = APIRouter(prefix="/api/cluster", tags=["cluster"])
 logger = get_logger(__name__)
 
 
+async def _resolve_image_urls(
+    representative_ids: list[str],
+    session,
+    minio: MinIOClient,
+) -> list[str]:
+    """将 representative_ids (anomaly IDs) 解析为 presigned MinIO URL。"""
+    if not representative_ids:
+        return []
+    anomaly_repo = AnomalyRepository(session)
+    anomalies = await anomaly_repo.get_by_ids(representative_ids)
+    id_to_crop = {a.id: a.crop_path for a in anomalies if a.crop_path}
+
+    urls: list[str] = []
+    for aid in representative_ids:
+        crop_path = id_to_crop.get(aid)
+        if crop_path:
+            try:
+                urls.append(await minio.get_presigned_url(crop_path, expires_seconds=3600))
+            except Exception:
+                urls.append("")
+        else:
+            urls.append("")
+    return urls
+
+
 @router.get("/list", response_model=ClusterListResponse)
 async def list_clusters(
     status: str | None = Query(default=None),
@@ -29,6 +56,7 @@ async def list_clusters(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
 ) -> ClusterListResponse:
     service = ClusteringService(session)
     offset = (page - 1) * page_size
@@ -38,8 +66,11 @@ async def list_clusters(
         limit=page_size,
     )
 
-    summaries = [
-        ClusterSummary(
+    summaries: list[ClusterSummary] = []
+    for c in clusters:
+        rep_ids = json.loads(c.representative_ids or "[]")
+        urls = await _resolve_image_urls(rep_ids, session, minio)
+        summaries.append(ClusterSummary(
             cluster_id=c.id,
             name=c.name,
             sample_count=c.sample_count,
@@ -51,16 +82,14 @@ async def list_clusters(
             status=c.status,
             review_status=c.review_status,
             defect_type=c.defect_type,
-            representative_image_urls=[],
+            representative_image_urls=urls,
             reviewed_by=c.reviewed_by,
             reviewed_at=c.reviewed_at,
             vlm_anomaly_type=_vlm_value(c.vlm_analysis_json, "anomaly_type"),
             vlm_is_false_alarm=_vlm_value(c.vlm_analysis_json, "is_false_alarm"),
             vlm_analyzed_at=c.vlm_analyzed_at,
             created_at=c.created_at,
-        )
-        for c in clusters
-    ]
+        ))
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     return ClusterListResponse(
@@ -125,6 +154,7 @@ async def get_cluster_visualization(
 async def get_cluster_detail(
     cluster_id: str,
     session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
 ) -> ClusterDetailResponse:
     service = ClusteringService(session)
     cluster = await service.get_cluster_detail(cluster_id)
@@ -132,6 +162,7 @@ async def get_cluster_detail(
         raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
 
     rep_ids = json.loads(cluster.representative_ids or "[]")
+    urls = await _resolve_image_urls(rep_ids, session, minio)
     centroid = json.loads(cluster.centroid) if cluster.centroid else None
 
     return ClusterDetailResponse(
@@ -147,7 +178,7 @@ async def get_cluster_detail(
         review_status=cluster.review_status,
         defect_type=cluster.defect_type,
         representative_ids=rep_ids,
-        representative_image_urls=[],
+        representative_image_urls=urls,
         centroid=centroid,
         reviewed_by=cluster.reviewed_by,
         reviewed_at=cluster.reviewed_at,

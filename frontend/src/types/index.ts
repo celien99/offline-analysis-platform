@@ -12,3 +12,4 @@ export type { ApiError, PaginatedParams, PaginatedResponse, ReviewSubmit } from 
 export type { TrainingStartParams, TrainingStatus, TrainedModel, TrainedModelList } from "./training";
 export type { DeployRequest, DeploymentRecord } from "./model";
 export type { VLMResult, VLMAnalysisResponse, VLMBatchAnalysisResponse } from "./multimodal";
+export type { InspectionResult, CameraInspectionResult } from "./inspection";

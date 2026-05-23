@@ -13,21 +13,28 @@ import {
   Typography,
   Progress,
   Descriptions,
+  Tabs,
+  Input,
+  Upload,
 } from "antd";
 import {
   PlayCircleOutlined,
   ReloadOutlined,
+  InboxOutlined,
 } from "@ant-design/icons";
+
+const { Dragger } = Upload;
 import PageHeader from "../../components/ui/PageHeader";
 import {
   useTrainingStart,
   useTrainedModels,
   useTrainingStatus,
+  usePatchCoreTrainingStart,
 } from "../../hooks/queries";
 import type { TrainingStartParams, TrainedModel } from "../../types";
 import dayjs from "dayjs";
 
-const MODEL_TYPE_OPTIONS = [
+const FILTER_MODEL_TYPE_OPTIONS = [
   { value: "mobilenet_v3_small", label: "MobileNetV3-Small" },
   { value: "efficientnet_lite", label: "EfficientNet-B0" },
   { value: "resnet18", label: "ResNet18" },
@@ -35,18 +42,25 @@ const MODEL_TYPE_OPTIONS = [
 
 export default function TrainingPage() {
   const [page, setPage] = useState(1);
-  const [trainVisible, setTrainVisible] = useState(false);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [trainForm] = Form.useForm();
+  const [filterVisible, setFilterVisible] = useState(false);
   const [statusVisible, setStatusVisible] = useState(false);
   const [statusTaskId, setStatusTaskId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("models");
+
+  // PatchCore inline form state
+  const [pcCameraId, setPcCameraId] = useState("");
+  const [pcImageFiles, setPcImageFiles] = useState<File[]>([]);
+
+  const [filterForm] = Form.useForm();
 
   const { data: modelsData, refetch: refetchModels } = useTrainedModels({ page });
-  const trainingStart = useTrainingStart();
-  const { data: statusData } = useTrainingStatus(taskId);
+  const filterStart = useTrainingStart();
+  const patchcoreStart = usePatchCoreTrainingStart();
+  const { data: statusData } = useTrainingStatus(statusTaskId);
 
-  const handleStartTraining = (values: TrainingStartParams) => {
-    trainingStart.mutate(
+  // ── Filter Classifier ──
+  const handleFilterStart = (values: TrainingStartParams) => {
+    filterStart.mutate(
       {
         model_type: values.model_type ?? "mobilenet_v3_small",
         num_classes: values.num_classes ?? 2,
@@ -58,12 +72,41 @@ export default function TrainingPage() {
       },
       {
         onSuccess: () => {
-          setTrainVisible(false);
-          message.success("Training queued");
+          setFilterVisible(false);
+          message.success("Filter Classifier training queued");
           refetchModels();
         },
       },
     );
+  };
+
+  // ── PatchCore ──
+  const handlePatchcoreStart = () => {
+    if (!pcCameraId.trim()) {
+      message.error("请输入 Camera ID");
+      return;
+    }
+    if (pcImageFiles.length === 0) {
+      message.error("请上传正常参考图像");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("camera_id", pcCameraId.trim());
+    pcImageFiles.forEach((f) => formData.append("good_images", f));
+
+    patchcoreStart.mutate(formData, {
+      onSuccess: () => {
+        message.success("PatchCore training queued");
+        setPcImageFiles([]);
+        refetchModels();
+      },
+    });
+  };
+
+  const modelTypeColor = (t: string) => {
+    if (t === "patchcore") return "purple";
+    return "green";
   };
 
   const columns = [
@@ -73,8 +116,8 @@ export default function TrainingPage() {
       title: "Type",
       dataIndex: "model_type",
       key: "model_type",
-      width: 140,
-      render: (t: string) => <Tag color="blue">{t}</Tag>,
+      width: 120,
+      render: (t: string) => <Tag color={modelTypeColor(t)}>{t}</Tag>,
     },
     {
       title: "Framework",
@@ -102,19 +145,111 @@ export default function TrainingPage() {
     {
       title: "Actions",
       key: "actions",
-      width: 120,
+      width: 100,
       render: (_: unknown, record: TrainedModel) => (
-        <Space>
-          <Button
-            size="small"
-            onClick={() => {
-              setStatusTaskId(record.model_id);
-              setStatusVisible(true);
+        <Button
+          size="small"
+          onClick={() => {
+            setStatusTaskId(record.model_id);
+            setStatusVisible(true);
+          }}
+        >
+          Status
+        </Button>
+      ),
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: "models",
+      label: "Trained Models",
+      children: (
+        <Card>
+          <Table
+            columns={columns}
+            dataSource={modelsData?.models ?? []}
+            rowKey="model_id"
+            loading={!modelsData}
+            pagination={{
+              current: page,
+              total: modelsData?.total ?? 0,
+              onChange: (p) => setPage(p),
             }}
+          />
+        </Card>
+      ),
+    },
+    {
+      key: "filter",
+      label: "Filter Classifier",
+      children: (
+        <Card>
+          <Typography.Paragraph type="secondary">
+            从已审核的聚类数据中训练二分类过滤器，用于在线检测中抑制 PatchCore 误报。
+          </Typography.Paragraph>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={() => setFilterVisible(true)}
           >
-            Status
+            Start Filter Classifier Training
           </Button>
-        </Space>
+        </Card>
+      ),
+    },
+    {
+      key: "patchcore",
+      label: "PatchCore Training",
+      children: (
+        <Card>
+          <Typography.Paragraph type="secondary" className="mb-4">
+            使用正常参考图像训练 PatchCore 异常检测模型。训练参数由内置配置文件控制，仅需提供目标相机 ID 和正常参考图像。
+          </Typography.Paragraph>
+
+          <Form layout="vertical" className="max-w-lg">
+            <Form.Item label="Camera ID" required>
+              <Input
+                placeholder="例如: cam_front"
+                value={pcCameraId}
+                onChange={(e) => setPcCameraId(e.target.value)}
+              />
+            </Form.Item>
+
+            <Form.Item label="Good Reference Images" required>
+              <Dragger
+                multiple
+                accept="image/*"
+                beforeUpload={(file) => {
+                  setPcImageFiles((prev) => [...prev, file]);
+                  return false;
+                }}
+                onRemove={(file) => {
+                  setPcImageFiles((prev) => prev.filter((f) => f.name !== file.name || f.size !== file.size));
+                }}
+                fileList={pcImageFiles.map((f, i) => ({ uid: `pc-${i}`, name: f.name, status: "done" as const, originFileObj: f })) as any}
+              >
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p className="ant-upload-text">点击或拖拽图像文件到此处上传</p>
+                <p className="ant-upload-hint">支持批量上传，每张图片作为正常参考样本</p>
+              </Dragger>
+            </Form.Item>
+
+            <Form.Item>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                size="large"
+                onClick={handlePatchcoreStart}
+                loading={patchcoreStart.isPending}
+              >
+                Start PatchCore Training
+              </Button>
+            </Form.Item>
+          </Form>
+        </Card>
       ),
     },
   ];
@@ -128,43 +263,25 @@ export default function TrainingPage() {
             <Button icon={<ReloadOutlined />} onClick={() => refetchModels()}>
               Refresh
             </Button>
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={() => setTrainVisible(true)}
-            >
-              Start New Training
-            </Button>
           </Space>
         }
       />
 
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={modelsData?.models ?? []}
-          rowKey="model_id"
-          loading={!modelsData}
-          pagination={{
-            current: page,
-            total: modelsData?.total ?? 0,
-            onChange: (p) => setPage(p),
-          }}
-        />
-      </Card>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
+      {/* ── Filter Classifier Modal ── */}
       <Modal
-        title="Start New Training"
-        open={trainVisible}
-        onCancel={() => setTrainVisible(false)}
-        onOk={() => trainForm.submit()}
-        confirmLoading={trainingStart.isPending}
+        title="Start Filter Classifier Training"
+        open={filterVisible}
+        onCancel={() => setFilterVisible(false)}
+        onOk={() => filterForm.submit()}
+        confirmLoading={filterStart.isPending}
         width={600}
       >
         <Form
-          form={trainForm}
+          form={filterForm}
           layout="vertical"
-          onFinish={handleStartTraining}
+          onFinish={handleFilterStart}
           initialValues={{
             model_type: "mobilenet_v3_small",
             num_classes: 2,
@@ -176,7 +293,7 @@ export default function TrainingPage() {
           }}
         >
           <Form.Item name="model_type" label="Model Architecture">
-            <Select options={MODEL_TYPE_OPTIONS} />
+            <Select options={FILTER_MODEL_TYPE_OPTIONS} />
           </Form.Item>
           <Space size="middle">
             <Form.Item name="num_classes" label="Num Classes">
@@ -203,6 +320,7 @@ export default function TrainingPage() {
         </Form>
       </Modal>
 
+      {/* ── Status Modal ── */}
       <Modal
         title="Training Status"
         open={statusVisible}

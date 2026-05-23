@@ -4,11 +4,13 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.embedding import EmbeddingExtractor
 from app.domain.multimodal import VLMAnalyzer
 from app.infrastructure.database.session import get_db
 from app.infrastructure.storage.minio_client import MinIOClient, minio_client
 
 _vlm_analyzer: VLMAnalyzer | None = None
+_embedding_extractor: EmbeddingExtractor | None = None
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -31,3 +33,16 @@ def get_vlm_analyzer() -> VLMAnalyzer:
             model_name=settings.vlm_model,
         )
     return _vlm_analyzer
+
+
+def get_embedding_extractor() -> EmbeddingExtractor:
+    global _embedding_extractor
+    if _embedding_extractor is None:
+        from app.core.config import settings
+        from ml.embedding.extractor import ResNet18EmbeddingExtractor
+
+        _embedding_extractor = ResNet18EmbeddingExtractor(
+            model_name=settings.embedding_model,
+            device="cpu",
+        )
+    return _embedding_extractor

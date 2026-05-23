@@ -18,6 +18,8 @@ celery_app = Celery(
         "app.workers.thumbnail_worker.tasks",
         "app.workers.maintenance_worker.tasks",
         "app.workers.pipeline_worker.tasks",
+        "app.workers.patchcore_training_worker.tasks",
+        "app.workers.inspection_worker.tasks",
     ],
 )
 

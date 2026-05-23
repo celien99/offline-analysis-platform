@@ -28,3 +28,4 @@ class ErrorResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str
     message: str | None = None
+    task_id: str | None = None
