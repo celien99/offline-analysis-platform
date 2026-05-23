@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -118,8 +119,133 @@ class AnomalyService:
         if record is None:
             raise NotFoundError("Anomaly", anomaly_id)
         await self._repo.update_status(anomaly_id, "pending")
-        # 触发 pipeline 重新处理该异常
-        from app.workers.pipeline_worker.tasks import process_new_anomalies
-        process_new_anomalies.delay(limit=500)
-        logger.info("anomaly_reprocess_queued", anomaly_id=anomaly_id)
+        await self._session.commit()
+        await self._session.refresh(record)
+
+        # 本地开发模式：直接在 API 进程内同步执行 pipeline
+        # （Celery worker 仅用于生产部署）
+        logger.info("anomaly_reprocess_start", anomaly_id=anomaly_id)
+        await self._run_pipeline_sync(record)
         return record
+
+    async def _run_pipeline_sync(self, anomaly: AnomalyRecord) -> None:
+        """同步执行单条 anomaly 的 embedding → clustering 流水线。"""
+        import asyncio
+        from io import BytesIO
+
+        import numpy as np
+        from PIL import Image
+
+        from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
+        from app.repositories.embedding.repository import EmbeddingRepository
+
+        # 1. Embedding
+        crop_path = anomaly.crop_path or anomaly.roi_path
+        if not crop_path:
+            logger.warning("pipeline_no_image", anomaly_id=anomaly.id)
+            return
+
+        try:
+            raw = await self._minio.download(crop_path)
+            image = np.array(Image.open(BytesIO(raw)).convert("RGB"))
+        except Exception as e:
+            logger.error("pipeline_download_failed", anomaly_id=anomaly.id, error=str(e))
+            return
+
+        try:
+            from ml.embedding.extractor import ResNet18EmbeddingExtractor
+            extractor = ResNet18EmbeddingExtractor(device="cpu")
+            vector = extractor.extract_sync(image)
+        except Exception as e:
+            logger.error("pipeline_embedding_failed", anomaly_id=anomaly.id, error=str(e))
+            return
+
+        from app.core.security import generate_uuid
+        from app.models.embedding import EmbeddingVector
+
+        embedding = EmbeddingVector(
+            id=generate_uuid(),
+            anomaly_id=anomaly.id,
+            embedding=vector.tolist(),
+            model_name=extractor.model_name,
+            model_version="local",
+            dimension=extractor.dimension,
+        )
+        embedding_repo = EmbeddingRepository(self._session)
+        await embedding_repo.create(embedding)
+        await self._repo.update_status(anomaly.id, "embedded")
+        logger.info("pipeline_embedding_done", anomaly_id=anomaly.id)
+
+        # 2. Clustering（收集所有 embedded anomalies 进行聚类）
+        try:
+            all_embeddings = await embedding_repo.get_all_embeddings_with_ids()
+            if len(all_embeddings) < 3:
+                logger.info("pipeline_clustering_skip", count=len(all_embeddings))
+                await self._session.commit()
+                return
+
+            embeddings_map: dict[str, np.ndarray] = {
+                aid: np.array(vec, dtype=np.float32) for aid, vec in all_embeddings
+            }
+
+            from ml.clustering.pipeline import ClusteringPipeline
+            pipeline_cls = ClusteringPipeline(
+                umap_n_components=2,
+                umap_n_neighbors=min(15, len(all_embeddings) - 1),
+                umap_min_dist=0.1,
+                hdbscan_min_cluster_size=3,
+                hdbscan_min_samples=1,
+            )
+            ids = list(embeddings_map.keys())
+            matrix = np.stack([embeddings_map[i] for i in ids])
+            result = pipeline_cls.fit_predict(matrix, ids)
+
+            labels = result["labels"]
+            probabilities = result["probabilities"]
+            umap_coords = result["umap_coords"]
+            representatives = pipeline_cls.get_representatives(labels, probabilities, n_per_cluster=5)
+
+            cluster_repo = ClusterRepository(self._session)
+            membership_repo = ClusterMembershipRepository(self._session)
+
+            for label in sorted(set(int(lb) for lb in labels)):
+                if label == -1:
+                    continue
+                label_indices = [i for i, lb in enumerate(labels) if int(lb) == label]
+                rep_indices = representatives.get(label, [])
+                rep_ids = [ids[i] for i in rep_indices] if rep_indices else []
+
+                from app.models.cluster import Cluster, ClusterMembership
+                cluster = Cluster(
+                    id=generate_uuid(),
+                    hdbscan_label=label,
+                    sample_count=len(label_indices),
+                    representative_ids=json.dumps(rep_ids),
+                    centroid=json.dumps(matrix[label_indices].mean(axis=0).tolist()),
+                    umap_x=float(umap_coords[label_indices].mean(axis=0)[0]),
+                    umap_y=float(umap_coords[label_indices].mean(axis=0)[1]),
+                    hdbscan_probability=float(probabilities[label_indices].mean()),
+                    status="pending_review",
+                    clustering_run_at=datetime.now(tz=timezone.utc),
+                )
+                await cluster_repo.create(cluster)
+
+                memberships = [
+                    ClusterMembership(
+                        id=generate_uuid(),
+                        cluster_id=cluster.id,
+                        anomaly_id=ids[i],
+                        membership_score=float(probabilities[i]),
+                    )
+                    for i in label_indices
+                ]
+                await membership_repo.bulk_create(memberships)
+
+                for i in label_indices:
+                    await self._repo.update_status(ids[i], "clustered")
+
+            await self._session.commit()
+            logger.info("pipeline_clustering_done", num_clusters=len(set(lb for lb in labels if lb != -1)))
+
+        except Exception as e:
+            logger.error("pipeline_clustering_failed", error=str(e))
