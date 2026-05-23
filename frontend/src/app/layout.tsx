@@ -50,7 +50,7 @@ export default function AppLayout({ children }: Props) {
         />
       </Sider>
       <Layout>
-        <Header className="bg-white px-6 text-lg font-semibold">
+        <Header className="bg-white px-6 text-lg font-semibold flex items-center">
           Industrial Defect Detection — Offline Analysis Platform
         </Header>
         <Content className="m-6 min-h-[280px]">{children}</Content>
