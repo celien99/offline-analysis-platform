@@ -101,11 +101,22 @@ class ReviewService:
         await self._review_repo.create(review)
 
         if action in ("confirm_defect", "mark_false_alarm"):
-            await self._auto_generate_knowledge(
+            knowledge_entry = await self._auto_generate_knowledge(
                 cluster_id=cluster_id,
                 review_action=action,
                 defect_type=defect_type,
             )
+            # 自动从 knowledge 生成 rules，闭合 Knowledge → Rules 链路
+            if knowledge_entry is not None:
+                from app.services.rule_engine import RuleEngineService
+                rule_service = RuleEngineService(self._session)
+                camera_ids_list: list[str] | None = None
+                if knowledge_entry.camera_ids:
+                    camera_ids_list = json.loads(knowledge_entry.camera_ids)
+                await rule_service.auto_generate_rules_from_knowledge(
+                    knowledge_entry_id=knowledge_entry.id,
+                    camera_ids=camera_ids_list,
+                )
 
         logger.info(
             "review_submitted",

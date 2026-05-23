@@ -59,6 +59,12 @@ class KnowledgeService:
         defect_type: str | None,
         camera_ids: list[str] | None = None,
     ) -> KnowledgeEntry | None:
+        # 读取 cluster 的 VLM 分析结果
+        from app.repositories.cluster.repository import ClusterRepository
+        cluster_repo = ClusterRepository(self._session)
+        cluster = await cluster_repo.get_by_id(cluster_id)
+        vlm_json = cluster.vlm_analysis_json if cluster else None
+
         if review_action == "mark_false_alarm":
             return await self.create_entry(
                 category="false_alarm",
@@ -67,6 +73,7 @@ class KnowledgeService:
                 cluster_id=cluster_id,
                 action="ignore",
                 camera_ids=camera_ids,
+                vlm_analysis_json=vlm_json,
             )
 
         if review_action == "confirm_defect" and defect_type:
@@ -78,6 +85,7 @@ class KnowledgeService:
                 cluster_id=cluster_id,
                 action="NG",
                 camera_ids=camera_ids,
+                vlm_analysis_json=vlm_json,
             )
 
         return None

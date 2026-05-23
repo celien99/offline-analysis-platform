@@ -53,10 +53,10 @@ class VLMService:
         anomalies = await self._anomaly_repo.get_by_ids(anomaly_ids)
 
         # 下载缺陷裁剪图传给 VLM。
-        # 只用 crop_path 和 roi_path（缺陷区域），不用 heatmap（叠加图会遮挡纹理）
-        # 也不用原图（全图太大，缺陷占比太小 VLM 难以识别）。
+        # 只用 crop_path 和 roi_path（缺陷区域），不用 heatmap（叠加图会遮挡纹理）。
+        # 从 cluster 中取最多 3 个 representative anomaly 的缺陷图。
         crop_images: list[np.ndarray] = []
-        for anomaly in anomalies:
+        for anomaly in anomalies[:3]:  # 最多 3 个 anomaly，减少 token 消耗
             for path in [anomaly.crop_path, anomaly.roi_path]:
                 if path:
                     arr = await self._download_as_ndarray(path)
@@ -70,8 +70,9 @@ class VLMService:
             )
 
         request = VLMRequest(
-            crop_image=crop_images[0],                              # 主图：缺陷裁剪
-            original_image=crop_images[1] if len(crop_images) > 1 else None,  # 辅图：另一角度
+            crop_image=crop_images[0],                               # 主图：缺陷裁剪
+            original_image=crop_images[1] if len(crop_images) > 1 else None,  # 辅图
+            heatmap_image=crop_images[2] if len(crop_images) > 2 else None,   # VLMRequest 第三张图字段
             cluster_representative_paths=[],
             cluster_metadata={
                 "cluster_id": cluster_id,
