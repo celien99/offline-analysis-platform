@@ -31,6 +31,7 @@ def get_vlm_analyzer() -> VLMAnalyzer:
         _vlm_analyzer = QwenVLMAnalyzer(
             endpoint=settings.vlm_endpoint,
             model_name=settings.vlm_model,
+            api_key=settings.vlm_api_key,
         )
     return _vlm_analyzer
 

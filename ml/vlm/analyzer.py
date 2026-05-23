@@ -40,10 +40,12 @@ class QwenVLMAnalyzer:
         self,
         endpoint: str = "http://localhost:8001/v1",
         model_name: str = "qwen2.5-vl",
+        api_key: str = "",
         timeout: float = 120.0,
     ) -> None:
         self._endpoint = endpoint
         self._model_name = model_name
+        self._api_key = api_key
         self._timeout = timeout
         self._client = httpx.AsyncClient(timeout=timeout)
 
@@ -94,10 +96,15 @@ class QwenVLMAnalyzer:
             "max_tokens": 512,
         }
 
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+
         try:
             response = await self._client.post(
                 f"{self._endpoint}/chat/completions",
                 json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()

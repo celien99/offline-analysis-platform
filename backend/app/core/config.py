@@ -48,9 +48,10 @@ class Settings(BaseSettings):
     umap_n_components: int = 2
     umap_n_neighbors: int = 15
 
-    # VLM
+    # VLM（支持任意 OpenAI 兼容的视觉模型 API）
     vlm_model: str = "qwen2.5-vl"
     vlm_endpoint: str = "http://localhost:8001/v1"
+    vlm_api_key: str = ""
 
     # MLflow
     mlflow_tracking_uri: str = "http://localhost:5001"
