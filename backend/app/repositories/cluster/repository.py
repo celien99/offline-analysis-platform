@@ -114,10 +114,15 @@ class ClusterMembershipRepository(BaseRepository):
     async def get_cluster_ids_by_anomaly(
         self, anomaly_id: str
     ) -> list[str]:
-        """获取 anomaly 所属的 cluster ID 列表（通常只有 0 或 1 个）。"""
-        stmt = select(ClusterMembership.cluster_id).where(
-            ClusterMembership.deleted_at.is_(None),
-            ClusterMembership.anomaly_id == anomaly_id,
+        """获取 anomaly 所属的活跃 cluster ID 列表。JOIN clusters 过滤已删除的。"""
+        stmt = (
+            select(ClusterMembership.cluster_id)
+            .join(Cluster, Cluster.id == ClusterMembership.cluster_id)
+            .where(
+                ClusterMembership.deleted_at.is_(None),
+                Cluster.deleted_at.is_(None),
+                ClusterMembership.anomaly_id == anomaly_id,
+            )
         )
         result = await self._session.execute(stmt)
         return [row[0] for row in result.all()]
