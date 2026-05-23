@@ -22,9 +22,11 @@ import {
   InboxOutlined,
   ScanOutlined,
   ReloadOutlined,
+  CameraOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
 import { useInspectionRun, useInspectionResult } from "../../hooks/queries";
+import { referenceApi } from "../../api/reference";
 
 const { Dragger } = Upload;
 
@@ -124,8 +126,8 @@ export default function InspectionPage() {
               </Button>
             }
           >
-            <Typography.Paragraph type="secondary" className="text-xs mb-4">
-              为每个相机填写 ID 并拖拽上传对应图像，配置已内置无需额外提供。
+            <Typography.Paragraph type="secondary" className="text-xs mb-2">
+              为每个相机填写 ID 并拖拽上传对应图像。点击 📷 上传 OK 参照图供 VLM 对比分析。
             </Typography.Paragraph>
 
             {slots.map((slot) => (
@@ -139,6 +141,34 @@ export default function InspectionPage() {
                       disabled={isRunning}
                       size="small"
                     />
+                  </Col>
+                  <Col>
+                    <Upload
+                      accept="image/*"
+                      maxCount={1}
+                      showUploadList={false}
+                      disabled={isRunning || !slot.cameraId.trim()}
+                      beforeUpload={async (file) => {
+                        if (!slot.cameraId.trim()) {
+                          message.warning("请先填写 Camera ID");
+                          return false;
+                        }
+                        try {
+                          await referenceApi.upload(slot.cameraId.trim(), file);
+                          message.success(`${slot.cameraId} OK 参照图已上传`);
+                        } catch {
+                          message.error("参照图上传失败");
+                        }
+                        return false;
+                      }}
+                    >
+                      <Button
+                        icon={<CameraOutlined />}
+                        size="small"
+                        disabled={isRunning || !slot.cameraId.trim()}
+                        title="上传 OK 参照图"
+                      />
+                    </Upload>
                   </Col>
                   <Col>
                     <Button
