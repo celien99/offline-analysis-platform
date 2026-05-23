@@ -76,6 +76,16 @@ def upload_camera_result(
     if result.roi_image is not None:
         files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_image, ".jpg"), "image/jpeg")
 
+    # Crop：供离线平台 embedding 提取使用的 ROI 裁剪图。
+    # 优先使用 roi_aligned_image（标准化尺寸），回退到 roi_image。
+    crop_img = (
+        result.roi_aligned_image
+        if result.roi_aligned_image is not None
+        else result.roi_image
+    )
+    if crop_img is not None:
+        files["crop_file"] = ("crop.jpg", _encode_bgr_image(crop_img, ".jpg"), "image/jpeg")
+
     # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
     # PatchCore 的热力图统一映射回原图坐标系。
     if result.overlay_image is not None:
