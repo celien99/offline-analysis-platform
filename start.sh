@@ -101,7 +101,7 @@ fi
 # 生产/全 Docker 模式：docker compose up -d（不加服务列表，含 API）
 log_step "启动 Docker 基础设施..."
 docker compose -f backend/docker-compose.yml up -d \
-    db redis minio minio-init mlflow worker
+    db redis minio minio-init mlflow
 
 # 等待就绪
 log_info "等待 PostgreSQL 就绪..."
@@ -138,6 +138,19 @@ if kill -0 $API_PID 2>/dev/null; then
     log_info "  健康检查:    http://localhost:8000/health"
 else
     log_error "后端 API 启动失败，请检查日志"
+    exit 1
+fi
+
+# ---- 启动 Celery Worker ----
+log_step "启动 Celery Worker（本地开发模式）..."
+(cd backend && PYTHONPATH=.. .venv/bin/celery -A app.infrastructure.queue.celery_app worker -l info -c 2) &
+WORKER_PID=$!
+sleep 2
+
+if kill -0 $WORKER_PID 2>/dev/null; then
+    log_info "Celery Worker 已启动"
+else
+    log_error "Celery Worker 启动失败，请检查日志"
     exit 1
 fi
 
@@ -181,5 +194,5 @@ echo "  停止服务: ./start.sh --stop"
 echo ""
 
 # 等待后台进程（Ctrl+C 时优雅退出）
-trap "log_info '正在关闭...'; kill $API_PID ${FRONTEND_PID:-} 2>/dev/null; docker compose -f backend/docker-compose.yml stop; exit 0" INT TERM
+trap "log_info '正在关闭...'; kill $API_PID $WORKER_PID ${FRONTEND_PID:-} 2>/dev/null; docker compose -f backend/docker-compose.yml stop; exit 0" INT TERM
 wait
