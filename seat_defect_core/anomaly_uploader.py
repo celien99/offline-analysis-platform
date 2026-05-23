@@ -215,20 +215,20 @@ def _crop_by_heatmap(
     heatmap: np.ndarray,
     image: np.ndarray,
     *,
-    threshold_ratio: float = 0.3,
+    threshold_ratio: float = 0.1,
     padding_ratio: float = 0.15,
-    min_crop_size: int = 32,
-    min_component_area: int = 9,
+    min_crop_size: int = 20,
+    min_component_area: int = 4,
 ) -> list[np.ndarray]:
     """按热力图高响应连通域裁剪图像，支持多异常区域。
 
-    一张 ROI 图可能存在多个离散的缺陷热力区域——提取所有满足
-    面积阈值的连通域，按面积降序排列返回。
+    PatchCore 热力图通常是高度局部化的尖锐热点，需要较低的阈值
+    和较小的 min_crop_size 才能捕获有效区域。
 
     Args:
         heatmap: 浮点热力图 (H, W)
         image: BGR 图像 (H, W, 3)，与 heatmap 同坐标系
-        threshold_ratio: 阈值 = max * ratio，控制热点敏感度
+        threshold_ratio: 阈值 = max * ratio
         padding_ratio: 裁剪框外扩比例
         min_crop_size: 最小裁剪边长 (px)
         min_component_area: 连通域最小面积 (px)
@@ -252,25 +252,10 @@ def _crop_by_heatmap(
             interpolation=cv2.INTER_LINEAR,
         )
 
-    # 二值化：取 max 的一定比例作为阈值
-    threshold = max(float(normalized.max()) * threshold_ratio, 0.05)
-    binary = (normalized >= threshold).astype(np.uint8)
-
-    # 连通域分析，收集所有显著分量
-    num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
-        binary, connectivity=8
-    )
-    if num_labels <= 1:
-        return []
-
-    # 按面积降序收集所有有效分量
-    components = []
-    for i in range(1, num_labels):
-        x, y, w, h, area = stats[i]
-        if area < min_component_area:
-            continue
-        components.append((area, x, y, w, h))
-    components.sort(key=lambda c: c[0], reverse=True)
+    components = _find_components(normalized, threshold_ratio, min_component_area)
+    # 若标准阈值没有结果，用更宽松的阈值重试
+    if not components:
+        components = _find_components(normalized, threshold_ratio * 0.5, max(2, min_component_area // 2))
 
     # 裁剪每个分量
     crops: list[np.ndarray] = []
@@ -290,6 +275,32 @@ def _crop_by_heatmap(
         crops.append(image[y1:y2, x1:x2])
 
     return crops
+
+
+def _find_components(
+    normalized: np.ndarray,
+    threshold_ratio: float,
+    min_area: int,
+) -> list[tuple[int, int, int, int, int]]:
+    """在归一化热力图中查找所有显著连通域，返回 (area, x, y, w, h) 列表。"""
+    threshold = max(float(normalized.max()) * threshold_ratio, 0.03)
+    binary = (normalized >= threshold).astype(np.uint8)
+
+    num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8
+    )
+    if num_labels <= 1:
+        return []
+
+    components: list[tuple[int, int, int, int, int]] = []
+    for i in range(1, num_labels):
+        x, y, w, h, area = stats[i]
+        if area < min_area:
+            continue
+        components.append((int(area), int(x), int(y), int(w), int(h)))
+
+    components.sort(key=lambda c: c[0], reverse=True)
+    return components
 
 
 def _encode_heatmap(heatmap: np.ndarray) -> bytes:
