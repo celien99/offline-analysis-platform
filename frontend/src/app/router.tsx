@@ -25,14 +25,14 @@ export default function AppRouter() {
     <Suspense fallback={<LazyFallback />}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/clusters" element={<ClusterReview />} />
+        <Route path="/inspection" element={<Inspection />} />
         <Route path="/anomalies" element={<AnomalyBrowser />} />
+        <Route path="/clusters" element={<ClusterReview />} />
 
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/rules" element={<RulesManagement />} />
         <Route path="/training" element={<Training />} />
         <Route path="/deploy" element={<ModelDeploy />} />
-        <Route path="/inspection" element={<Inspection />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
