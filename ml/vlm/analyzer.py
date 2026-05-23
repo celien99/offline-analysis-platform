@@ -12,10 +12,10 @@ from app.domain.multimodal import VLMRequest, VLMResult
 
 ANALYSIS_PROMPT = """你是一名工业视觉缺陷分析专家。你将看到多张汽车座椅检测图片：
 
-- 第一张为 **OK 参照图**（正常产品的标准样本，供对比参考）
-- 后续为 **NG 缺陷图**（生产线上检测到的异常区域裁剪）
+- 第一张为 **NG 缺陷图**（生产线上检测到的异常区域裁剪）
+- 后续为 **OK 参照图**（正常产品的标准样本，供对比参考）
 
-请通过对比 OK 参照图与 NG 缺陷图，分析缺陷并返回 JSON：
+请通过对比 NG 缺陷图与 OK 参照图，分析缺陷并返回 JSON：
 {
   "type": "缺陷类型 (wrinkle/scratch/reflection/stain/seam_shift/other/none)",
   "is_false_alarm": true或false,
