@@ -52,6 +52,8 @@ def run_inspection_task(
             "--config", config_path,
             "--output", result_path,
             "--warmup",
+            # 同步上传 NG 异常到离线平台，填充数据闭环
+            "--upload", settings.backend_base_url,
         ]
 
         for camera_id, img_path in camera_image_paths.items():
@@ -99,15 +101,22 @@ def run_inspection_task(
                 ).decode("utf-8")
 
         camera_results = _extract_camera_results(inspection_result, overlay_images)
+        overall_status = _extract_overall_status(inspection_result)
 
-        logger.info(
-            "inspection_complete",
-            overall_status=_extract_overall_status(inspection_result),
-        )
+        logger.info("inspection_complete", overall_status=overall_status)
+
+        # NG 结果上传成功后，触发离线分析 pipeline（embedding → clustering → VLM）
+        if overall_status == "NG":
+            from app.workers.pipeline_worker.tasks import process_new_anomalies
+            pipeline_result = process_new_anomalies.delay(limit=500)
+            logger.info(
+                "pipeline_triggered_after_inspection",
+                pipeline_task_id=pipeline_result.id,
+            )
 
         return {
             "status": "SUCCESS",
-            "overall_status": _extract_overall_status(inspection_result),
+            "overall_status": overall_status,
             "decision_reason": _extract_decision_reason(inspection_result),
             "camera_results": camera_results,
         }

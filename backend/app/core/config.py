@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     # Inspection (seat_defect_core 子进程调用，训练与检测共用)
     seat_defect_core_python: str = "../seat_defect_core/.venv/bin/python"
     default_inspection_config: str = "../seat_defect_core/config.example.json"
+    backend_base_url: str = "http://localhost:8000"  # 子进程回调上传 NG 异常的 API 地址
 
     # Pagination
     default_page_size: int = 20

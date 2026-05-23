@@ -69,7 +69,8 @@ def _run_inspect(args) -> int:
 
         inspector = SeatDefectInspector(args.config)
         if args.upload:
-            inspector.config.upload_base_url = args.upload
+            # 显式 --upload 时禁用 config 中的自动上传（避免 daemon 线程与同步上传重复）
+            inspector.config.upload_base_url = ""
         if args.warmup:
             print("预热模型中...")
             inspector.warmup(seat_model_id=args.seat_model_id)
