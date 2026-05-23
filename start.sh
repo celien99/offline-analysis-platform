@@ -128,7 +128,7 @@ if docker compose -f backend/docker-compose.yml ps api --status running 2>/dev/n
 fi
 
 log_step "启动后端 API (port 8000)..."
-(cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
+(cd backend && PYTHONPATH=.. .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
 API_PID=$!
 sleep 2
 

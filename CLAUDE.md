@@ -17,6 +17,8 @@ cp .env.example .env                                  # 首次：创建环境变
 uv sync                                               # 安装依赖 + 创建 .venv
 uv run alembic upgrade head                           # 运行数据库迁移
 uv run uvicorn app.main:app --reload --port 8000      # 开发服务器 (http://localhost:8000)
+# 注意：需要 PYTHONPATH=.. 才能导入仓库根目录的 ml/ 模块
+# 或直接使用 PYTHONPATH=.. uv run uvicorn app.main:app --reload --port 8000
 
 # Worker（本地开发用，start.sh 已自动启动）
 # 或手动：cd backend && PYTHONPATH=.. uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2
