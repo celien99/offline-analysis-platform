@@ -9,6 +9,7 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
+        "app.infrastructure.queue.worker_init",  # 必须在 worker tasks 之前加载，注册子进程初始化信号
         "app.workers.embedding_worker.tasks",
         "app.workers.clustering_worker.tasks",
         "app.workers.deployment_worker.tasks",
