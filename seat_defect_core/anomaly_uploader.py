@@ -76,13 +76,15 @@ def upload_camera_result(
     if result.roi_image is not None:
         files["roi_file"] = ("roi.jpg", _encode_bgr_image(result.roi_image, ".jpg"), "image/jpeg")
 
-    # Crop：供离线平台 embedding 提取使用的 ROI 裁剪图。
-    # 优先使用 roi_aligned_image（标准化尺寸），回退到 roi_image。
-    crop_img = (
-        result.roi_aligned_image
-        if result.roi_aligned_image is not None
-        else result.roi_image
-    )
+    # Crop：利用热力图裁剪异常高响应区域，供离线平台 embedding 提取使用。
+    # 优先从热力图热点裁剪 → 回退到 roi_aligned_image → 回退到 roi_image
+    anomaly_crop = _extract_anomaly_crop(result)
+    if anomaly_crop is not None:
+        crop_img = anomaly_crop
+    elif result.roi_aligned_image is not None:
+        crop_img = result.roi_aligned_image
+    else:
+        crop_img = result.roi_image
     if crop_img is not None:
         files["crop_file"] = ("crop.jpg", _encode_bgr_image(crop_img, ".jpg"), "image/jpeg")
 
@@ -149,6 +151,129 @@ def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | 
     if result.texture_result is not None and result.texture_result.heatmap is not None:
         return result.texture_result.heatmap
     return None
+
+
+def _extract_anomaly_crop(result: CameraInspectionResult) -> np.ndarray | None:
+    """利用热力图定位异常高响应区域，从 ROI 图中裁剪出异常部位。
+
+    相比上传整张 ROI 图，仅保留异常部位可以大幅提升后续 embedding
+    聚类精度——不同缺陷类型的热力分布不同，crop 后特征更聚焦。
+
+    Returns:
+        异常区域 BGR 裁剪图；无法定位热点时返回 None，由调用方回退到完整 ROI。
+    """
+    heatmap: np.ndarray | None = None
+    crop_base: np.ndarray | None = None
+
+    # 完整 ROI 模式：heatmap + roi_aligned_image 同坐标系
+    if (
+        result.texture_result is not None
+        and result.texture_result.heatmap is not None
+    ):
+        heatmap = np.asarray(result.texture_result.heatmap, dtype=np.float32)
+        crop_base = (
+            result.roi_aligned_image
+            if result.roi_aligned_image is not None
+            else result.roi_image
+        )
+
+    # regions 模式：取异常分数最高的 NG region
+    elif result.region_results:
+        ng_regions = [
+            r for r in result.region_results
+            if r.status == "NG" and r.texture_result is not None and r.texture_result.heatmap is not None
+        ]
+        if ng_regions:
+            best = max(
+                ng_regions,
+                key=lambda r: float(r.texture_result.score) if r.texture_result is not None else 0.0,
+            )
+            heatmap = np.asarray(best.texture_result.heatmap, dtype=np.float32)
+            if best.sample is not None and best.sample.image is not None:
+                crop_base = np.asarray(best.sample.image)
+            else:
+                crop_base = (
+                    result.roi_aligned_image
+                    if result.roi_aligned_image is not None
+                    else result.roi_image
+                )
+
+    if heatmap is None or crop_base is None:
+        return None
+
+    return _crop_by_heatmap(heatmap, crop_base)
+
+
+def _crop_by_heatmap(
+    heatmap: np.ndarray,
+    image: np.ndarray,
+    *,
+    threshold_ratio: float = 0.3,
+    padding_ratio: float = 0.15,
+    min_crop_size: int = 32,
+) -> np.ndarray | None:
+    """按热力图高响应连通域裁剪图像。
+
+    Args:
+        heatmap: 浮点热力图 (H, W)
+        image: BGR 图像 (H, W, 3)，与 heatmap 同坐标系
+        threshold_ratio: 阈值 = max * ratio，控制热点敏感度
+        padding_ratio: 裁剪框外扩比例
+        min_crop_size: 最小裁剪边长 (px)
+
+    Returns:
+        裁剪后的 BGR 图像；热力图无明显热点时返回 None
+    """
+    # 归一化到 0-1
+    h_min = float(heatmap.min())
+    h_max = float(heatmap.max())
+    if h_max - h_min < 1e-8:
+        return None
+
+    normalized = (heatmap - h_min) / (h_max - h_min)
+
+    # 对齐 heatmap 与 image 尺寸
+    if normalized.shape[:2] != image.shape[:2]:
+        normalized = cv2.resize(
+            normalized,
+            (image.shape[1], image.shape[0]),
+            interpolation=cv2.INTER_LINEAR,
+        )
+
+    # 二值化：取 max 的一定比例作为阈值
+    threshold = max(float(normalized.max()) * threshold_ratio, 0.05)
+    binary = (normalized >= threshold).astype(np.uint8)
+
+    # 连通域分析，取最大分量
+    num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8
+    )
+    if num_labels <= 1:
+        return None
+
+    largest_idx = max(
+        range(1, num_labels),
+        key=lambda i: stats[i, cv2.CC_STAT_AREA],
+    )
+    x, y, w, h, area = stats[largest_idx]
+
+    if area < 9:
+        return None
+
+    # 外扩 padding 保留周边上下文
+    pad_w = max(1, int(w * padding_ratio))
+    pad_h = max(1, int(h * padding_ratio))
+    img_h, img_w = image.shape[:2]
+
+    x1 = max(0, x - pad_w)
+    y1 = max(0, y - pad_h)
+    x2 = min(img_w, x + w + pad_w)
+    y2 = min(img_h, y + h + pad_h)
+
+    if (x2 - x1) < min_crop_size or (y2 - y1) < min_crop_size:
+        return None
+
+    return image[y1:y2, x1:x2]
 
 
 def _encode_heatmap(heatmap: np.ndarray) -> bytes:
