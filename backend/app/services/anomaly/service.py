@@ -235,7 +235,11 @@ class AnomalyService:
             logger.info("pipeline_embedding_done", anomaly_id=anomaly.id)
 
     async def _run_clustering(self) -> None:
-        """收集所有 embedded 异常的向量，重新聚类。"""
+        """收集所有 embedded 异常的向量，重新聚类。
+
+        样本充足时用 UMAP+HDBSCAN 自动发现缺陷模式；
+        样本不足时每个 anomaly 独立成 cluster，保证 VLM→review 流水线不中断。
+        """
         import numpy as np
 
         from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
@@ -246,11 +250,17 @@ class AnomalyService:
         membership_repo = ClusterMembershipRepository(self._session)
 
         all_embeddings = await embedding_repo.get_all_embeddings_with_ids()
-        # UMAP 要求 n_neighbors < n_samples，至少需要 4 个样本才能稳定运行
-        if len(all_embeddings) < 4:
-            logger.info("pipeline_clustering_skip", count=len(all_embeddings))
-            await self._session.commit()
+        n_samples = len(all_embeddings)
+        if n_samples == 0:
             return
+
+        # 动态计算 HDBSCAN 最小簇大小
+        if n_samples <= 10:
+            min_cluster_size = 2
+        elif n_samples <= 30:
+            min_cluster_size = 3
+        else:
+            min_cluster_size = 5
 
         # 清理旧聚类数据
         old_clusters = await cluster_repo.list_all(offset=0, limit=10000)
@@ -261,14 +271,26 @@ class AnomalyService:
         embeddings_map: dict[str, np.ndarray] = {
             aid: np.array(vec, dtype=np.float32) for aid, vec in all_embeddings
         }
+        ids = list(embeddings_map.keys())
 
-        n_samples = len(all_embeddings)
+        # ---- 样本不足：单例 cluster ----
+        if n_samples < min_cluster_size:
+            logger.info("pipeline_singleton_clustering", count=n_samples)
+            for aid in ids:
+                await self._create_singleton_cluster(
+                    aid, cluster_repo, membership_repo
+                )
+            await self._session.commit()
+            await self._trigger_vlm_for_pending(cluster_repo)
+            return
+
+        # ---- 正常聚类：UMAP + HDBSCAN ----
         if n_samples <= 10:
-            min_cluster_size, min_samples, n_neighbors = 2, 1, max(2, n_samples - 1)
+            min_samples, n_neighbors = 1, max(2, n_samples - 1)
         elif n_samples <= 30:
-            min_cluster_size, min_samples, n_neighbors = 3, 1, min(10, n_samples - 1)
+            min_samples, n_neighbors = 1, min(10, n_samples - 1)
         else:
-            min_cluster_size, min_samples, n_neighbors = 5, 2, min(15, n_samples - 1)
+            min_samples, n_neighbors = 2, min(15, n_samples - 1)
 
         try:
             from ml.clustering.pipeline import ClusteringPipeline
@@ -279,7 +301,6 @@ class AnomalyService:
                 hdbscan_min_cluster_size=min_cluster_size,
                 hdbscan_min_samples=min_samples,
             )
-            ids = list(embeddings_map.keys())
             matrix = np.stack([embeddings_map[i] for i in ids])
             result = pipeline_cls.fit_predict(matrix, ids)
 
@@ -291,12 +312,16 @@ class AnomalyService:
             unique_labels = set(int(lb) for lb in labels)
             has_clusters = any(lb != -1 for lb in unique_labels)
             if not has_clusters:
+                # 所有点被 HDBSCAN 判定为噪声 → 退化为单例 cluster
                 noise_count = sum(1 for lb in labels if int(lb) == -1)
-                logger.info("pipeline_clustering_all_noise", total=n_samples, noise=noise_count)
+                logger.info("pipeline_clustering_all_noise_fallback", total=n_samples, noise=noise_count)
+                for aid in ids:
+                    await self._create_singleton_cluster(aid, cluster_repo, membership_repo)
                 await self._session.commit()
+                await self._trigger_vlm_for_pending(cluster_repo)
                 return
 
-            # 写入新的聚类结果
+            # 写入 HDBSCAN 聚类结果
             from app.models.cluster import Cluster, ClusterMembership
             for label in sorted(unique_labels):
                 if label == -1:
@@ -336,25 +361,59 @@ class AnomalyService:
             await self._session.commit()
             num_clusters = len([l for l in unique_labels if l != -1])
             logger.info("pipeline_clustering_done", num_clusters=num_clusters)
-
-            # 自动 VLM
-            if num_clusters > 0:
-                new_cluster_ids = [
-                    c.id for c in await cluster_repo.list_all(
-                        status="pending_review", offset=0, limit=100
-                    )
-                ]
-                if new_cluster_ids:
-                    logger.info("pipeline_auto_vlm", cluster_ids=new_cluster_ids)
-                    from app.api.deps import get_vlm_analyzer
-                    from app.services.multimodal.service import VLMService
-                    vlm = VLMService(self._session, get_vlm_analyzer(), self._minio)
-                    for cid in new_cluster_ids:
-                        try:
-                            await vlm.analyze_cluster(cid)
-                        except Exception as e:
-                            logger.warning("pipeline_auto_vlm_failed", cluster_id=cid, error=str(e))
+            await self._trigger_vlm_for_pending(cluster_repo)
 
         except Exception as e:
             logger.error("pipeline_clustering_failed", error=str(e))
             await self._session.rollback()
+
+    async def _create_singleton_cluster(
+        self,
+        anomaly_id: str,
+        cluster_repo,
+        membership_repo,
+    ) -> None:
+        """为单条 anomaly 创建一个仅包含自身的 cluster。"""
+        from app.models.cluster import Cluster, ClusterMembership
+
+        cluster = Cluster(
+            id=generate_uuid(),
+            hdbscan_label=0,
+            sample_count=1,
+            representative_ids=json.dumps([anomaly_id]),
+            centroid=None,
+            umap_x=0.0,
+            umap_y=0.0,
+            hdbscan_probability=1.0,
+            status="pending_review",
+            clustering_run_at=datetime.now(tz=timezone.utc),
+        )
+        await cluster_repo.create(cluster)
+
+        membership = ClusterMembership(
+            id=generate_uuid(),
+            cluster_id=cluster.id,
+            anomaly_id=anomaly_id,
+            membership_score=1.0,
+        )
+        await membership_repo.create(membership)
+        await self._repo.update_status(anomaly_id, "clustered")
+        logger.info("singleton_cluster_created", anomaly_id=anomaly_id, cluster_id=cluster.id)
+
+    async def _trigger_vlm_for_pending(self, cluster_repo) -> None:
+        """对状态为 pending_review 的 cluster 自动触发 VLM 分析。"""
+        new_cluster_ids = [
+            c.id for c in await cluster_repo.list_all(
+                status="pending_review", offset=0, limit=100
+            )
+        ]
+        if new_cluster_ids:
+            logger.info("pipeline_auto_vlm", cluster_ids=new_cluster_ids)
+            from app.api.deps import get_vlm_analyzer
+            from app.services.multimodal.service import VLMService
+            vlm = VLMService(self._session, get_vlm_analyzer(), self._minio)
+            for cid in new_cluster_ids:
+                try:
+                    await vlm.analyze_cluster(cid)
+                except Exception as e:
+                    logger.warning("pipeline_auto_vlm_failed", cluster_id=cid, error=str(e))
