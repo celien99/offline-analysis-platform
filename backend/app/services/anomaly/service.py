@@ -262,9 +262,12 @@ class AnomalyService:
         else:
             min_cluster_size = 5
 
-        # 清理旧聚类数据
+        # 清理旧聚类数据（cluster + membership 一起清）
         old_clusters = await cluster_repo.list_all(offset=0, limit=10000)
         for old_c in old_clusters:
+            old_members = await membership_repo.get_by_cluster(old_c.id)
+            for m in old_members:
+                await membership_repo.soft_delete(m.id)
             await cluster_repo.soft_delete(old_c.id)
         logger.info("pipeline_cleaned_old_clusters", count=len(old_clusters))
 
