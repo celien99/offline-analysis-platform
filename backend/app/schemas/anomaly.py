@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 
 
 class AnomalyUploadResponse(BaseModel):
-    anomaly_id: str
+    anomaly_ids: list[str]
+    count: int
     status: str = "received"
     message: str = "Anomaly queued for processing"
 

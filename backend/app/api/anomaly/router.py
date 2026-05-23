@@ -52,7 +52,7 @@ async def upload_anomaly_with_files(
     crop_data_list = [await _read(f) for f in crop_files]
 
     service = AnomalyService(session, minio)
-    anomaly = await service.create_anomaly_with_files(
+    anomalies = await service.create_anomaly_with_files(
         camera_id=camera_id,
         source=source,
         anomaly_score=anomaly_score,
@@ -64,7 +64,11 @@ async def upload_anomaly_with_files(
         original_content_type=original_file.content_type if original_file else "image/jpeg",
         heatmap_content_type=heatmap_file.content_type if heatmap_file else "image/jpeg",
     )
-    return AnomalyUploadResponse(anomaly_id=anomaly.id, status="received")
+    return AnomalyUploadResponse(
+        anomaly_ids=[a.id for a in anomalies],
+        count=len(anomalies),
+        status="received",
+    )
 
 
 @router.get(

@@ -26,7 +26,7 @@ async def test_create_anomaly_with_files_basic(
     service = AnomalyService(db_session, mock_minio)
     detected = datetime(2025, 6, 15, 10, 30, tzinfo=timezone.utc)
 
-    anomaly = await service.create_anomaly_with_files(
+    anomalies = await service.create_anomaly_with_files(
         camera_id="cam_01",
         source="patchcore",
         anomaly_score=0.87,
@@ -34,10 +34,11 @@ async def test_create_anomaly_with_files_basic(
         detected_at=detected,
     )
 
-    assert isinstance(anomaly, AnomalyRecord)
-    assert anomaly.camera_id == "cam_01"
-    assert anomaly.status == "pending"
-    assert anomaly.anomaly_score == 0.87
+    assert isinstance(anomalies, list)
+    assert len(anomalies) == 1  # 无 crop 时仍创建一条
+    assert anomalies[0].camera_id == "cam_01"
+    assert anomalies[0].status == "pending"
+    assert anomalies[0].anomaly_score == 0.87
 
 
 @pytest.mark.asyncio
@@ -47,11 +48,12 @@ async def test_create_and_retrieve_anomaly(
     service = AnomalyService(db_session, mock_minio)
     detected = datetime(2025, 7, 1, tzinfo=timezone.utc)
 
-    created = await service.create_anomaly_with_files(
+    created_list = await service.create_anomaly_with_files(
         camera_id="cam_02",
         date_folder="2025-07-01",
         detected_at=detected,
     )
+    created = created_list[0]
     retrieved = await service.get_anomaly(created.id)
 
     assert retrieved.id == created.id
@@ -104,9 +106,10 @@ async def test_reprocess_anomaly(
     service = AnomalyService(db_session, mock_minio)
     dt = datetime(2025, 10, 1, tzinfo=timezone.utc)
 
-    created = await service.create_anomaly_with_files(
+    created_list = await service.create_anomaly_with_files(
         camera_id="cam_r", date_folder="2025-10-01", detected_at=dt,
     )
+    created = created_list[0]
     updated = await service.reprocess_anomaly(created.id)
 
     assert updated.status == "pending"
@@ -121,14 +124,26 @@ async def test_create_anomaly_with_files(
     dt = datetime(2025, 11, 1, tzinfo=timezone.utc)
     fake_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF"
 
-    anomaly = await service.create_anomaly_with_files(
+    anomalies = await service.create_anomaly_with_files(
         camera_id="cam_f",
         date_folder="2025-11-01",
         detected_at=dt,
         crop_data_list=[fake_bytes],
     )
 
-    assert anomaly.crop_path is not None
-    assert anomaly.crop_paths is not None
-    assert anomaly.status == "pending"
+    assert len(anomalies) == 1
+    assert anomalies[0].crop_path is not None
+    assert anomalies[0].crop_paths is not None
+    assert anomalies[0].status == "pending"
     assert mock_minio.upload.call_count == 1  # crop_0.jpg
+
+    # 多 crop：每个 patch 独立为一条 anomaly
+    anomalies2 = await service.create_anomaly_with_files(
+        camera_id="cam_multi",
+        date_folder="2025-11-01",
+        detected_at=dt,
+        crop_data_list=[fake_bytes, fake_bytes, fake_bytes],
+    )
+    assert len(anomalies2) == 3
+    assert all(a.camera_id == "cam_multi" for a in anomalies2)
+    assert all(a.crop_path is not None for a in anomalies2)
