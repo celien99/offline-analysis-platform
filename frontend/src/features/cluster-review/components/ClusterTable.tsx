@@ -60,6 +60,20 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
       render: (t: string | null) => <Tag color="purple">{t || "-"}</Tag>,
     },
     {
+      title: "VLM",
+      key: "vlm",
+      render: (_: unknown, record: ClusterSummary) =>
+        record.vlm_analyzed_at ? (
+          <Space size={4}>
+            <Tag color={record.vlm_is_false_alarm ? "green" : "orange"}>
+              {record.vlm_anomaly_type || "analyzed"}
+            </Tag>
+          </Space>
+        ) : (
+          <Text type="secondary" className="text-xs">-</Text>
+        ),
+    },
+    {
       title: "Actions",
       key: "actions",
       width: 320,

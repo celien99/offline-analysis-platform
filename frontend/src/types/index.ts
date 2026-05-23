@@ -1,4 +1,4 @@
-export type { AnomalyRecord } from "./anomaly";
+export type { AnomalyRecord, AnomalySummary } from "./anomaly";
 export type {
   ClusterSummary,
   ClusterDetail,

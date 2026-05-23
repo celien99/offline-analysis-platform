@@ -9,6 +9,7 @@ from app.api.deps import get_minio, get_session
 from app.common.logging import get_logger
 from app.infrastructure.storage.minio_client import MinIOClient
 from app.models.anomaly import AnomalyRecord
+from app.repositories.cluster.repository import ClusterMembershipRepository
 from app.schemas.anomaly import (
     AnomalyResponse,
     AnomalyUploadResponse,
@@ -112,7 +113,12 @@ async def get_anomaly(
 ) -> AnomalyResponse:
     service = AnomalyService(session, minio)
     record = await service.get_anomaly(anomaly_id)
-    return await _to_response(record, minio)
+    response = await _to_response(record, minio)
+    # 查询该 anomaly 所属的 cluster
+    membership_repo = ClusterMembershipRepository(session)
+    cluster_ids = await membership_repo.get_cluster_ids_by_anomaly(anomaly_id)
+    response.cluster_id = cluster_ids[0] if cluster_ids else None
+    return response
 
 
 @router.post("/{anomaly_id}/reprocess")

@@ -1,5 +1,5 @@
 import { get, post } from "./client";
-import type { ClusterListResponse, ClusterDetail, ClusterVizData, ReviewSubmit } from "../types";
+import type { ClusterListResponse, ClusterDetail, ClusterVizData, ReviewSubmit, AnomalySummary } from "../types";
 
 export const clusterApi = {
   list: (page = 1, pageSize = 20, status?: string, signal?: AbortSignal) =>
@@ -10,6 +10,10 @@ export const clusterApi = {
 
   detail: (clusterId: string, signal?: AbortSignal) =>
     get<ClusterDetail>(`/cluster/${clusterId}`, { signal }),
+
+  /** 获取某个 cluster 下的所有 anomaly 摘要。 */
+  anomalies: (clusterId: string, signal?: AbortSignal) =>
+    get<AnomalySummary[]>(`/cluster/${clusterId}/anomalies`, { signal }),
 
   review: (review: ReviewSubmit, signal?: AbortSignal) =>
     post("/cluster/review", review, { signal }),

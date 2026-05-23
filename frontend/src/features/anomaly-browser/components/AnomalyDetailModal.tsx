@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal, Descriptions, Tag, Row, Col, Button, Table, Typography } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined, ClusterOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import type { AnomalyRecord } from "../../../types";
 import { anomalyApi } from "../../../api";
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
+  const navigate = useNavigate();
   const [similarResults, setSimilarResults] = useState<unknown[]>([]);
   const [searchingSimilar, setSearchingSimilar] = useState(false);
 
@@ -49,6 +51,19 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
           <Tag color={ANOMALY_STATUS_COLOR_MAP[anomaly.status]}>{anomaly.status}</Tag>
         </Descriptions.Item>
         <Descriptions.Item label="Date">{anomaly.date_folder}</Descriptions.Item>
+        <Descriptions.Item label="Cluster" span={2}>
+          {anomaly.cluster_id ? (
+            <Button
+              type="link"
+              icon={<ClusterOutlined />}
+              onClick={() => { navigate(`/clusters?cluster_id=${anomaly.cluster_id}`); onClose(); }}
+            >
+              {anomaly.cluster_id}
+            </Button>
+          ) : (
+            <Text type="secondary">未分配</Text>
+          )}
+        </Descriptions.Item>
       </Descriptions>
 
       <Row gutter={8} className="mb-4">

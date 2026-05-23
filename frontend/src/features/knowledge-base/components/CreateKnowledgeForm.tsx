@@ -1,6 +1,7 @@
 import type { FormInstance } from "antd";
-import { Modal, Form, Input, Select, Row, Col } from "antd";
+import { Modal, Form, Input, Select, Row, Col, Spin } from "antd";
 import { CATEGORY_OPTIONS, DEFECT_TYPES, ACTION_OPTIONS } from "../../../lib/constants";
+import { useClusterList } from "../../../hooks/queries";
 
 const { TextArea } = Input;
 
@@ -8,11 +9,30 @@ interface Props {
   form: FormInstance;
   open: boolean;
   submitting: boolean;
+  /** 如果从 cluster 页面跳转，预填 cluster_id。 */
+  initialClusterId?: string;
   onSubmit: (values: Record<string, unknown>) => void;
   onClose: () => void;
 }
 
-export default function CreateKnowledgeForm({ form, open, submitting, onSubmit, onClose }: Props) {
+export default function CreateKnowledgeForm({ form, open, submitting, initialClusterId, onSubmit, onClose }: Props) {
+  const { data: clusterData, isLoading: clustersLoading } = useClusterList(
+    1,
+    open, // 只在弹窗打开时请求
+  );
+
+  // 弹窗打开时预填 cluster_id
+  const handleOpen = () => {
+    if (initialClusterId) {
+      form.setFieldsValue({ cluster_id: initialClusterId });
+    }
+  };
+
+  const clusterOptions = (clusterData?.clusters ?? []).map((c) => ({
+    value: c.cluster_id,
+    label: `${c.name || c.cluster_id.slice(0, 8)} (${c.sample_count} samples, ${c.review_status || c.status})`,
+  }));
+
   return (
     <Modal
       title="Create Knowledge Entry"
@@ -21,6 +41,7 @@ export default function CreateKnowledgeForm({ form, open, submitting, onSubmit, 
       onOk={() => form.submit()}
       confirmLoading={submitting}
       width={600}
+      afterOpenChange={(visible) => { if (visible) handleOpen(); }}
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item name="title" label="Title" rules={[{ required: true }]}>
@@ -44,8 +65,17 @@ export default function CreateKnowledgeForm({ form, open, submitting, onSubmit, 
         <Form.Item name="description" label="Description">
           <TextArea rows={3} maxLength={2000} placeholder="Describe the defect pattern..." />
         </Form.Item>
-        <Form.Item name="cluster_id" label="Cluster ID">
-          <Input placeholder="Optional: link to a cluster" />
+        <Form.Item name="cluster_id" label="Cluster">
+          <Select
+            options={clusterOptions}
+            placeholder={clustersLoading ? "Loading clusters..." : "Select a cluster (optional)"}
+            allowClear
+            showSearch
+            filterOption={(input, option) =>
+              (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+            }
+            notFoundContent={clustersLoading ? <Spin size="small" /> : null}
+          />
         </Form.Item>
         <Form.Item name="camera_ids" label="Camera IDs (comma separated)">
           <Input placeholder="e.g. left_top, right_bottom" />

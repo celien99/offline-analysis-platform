@@ -204,6 +204,43 @@ def _vlm_value(payload: str | None, key: str) -> object | None:
     return data.get(key)
 
 
+@router.get("/{cluster_id}/anomalies")
+async def get_cluster_anomalies(
+    cluster_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> list[dict[str, object]]:
+    """获取某个 cluster 下所有 anomaly 的基本信息（含 presigned URL）。"""
+    from app.repositories.anomaly.repository import AnomalyRepository
+    from app.schemas.anomaly import AnomalyResponse
+
+    membership_repo = ClusterMembershipRepository(session)
+    anomaly_ids = await membership_repo.get_anomaly_ids_by_cluster(cluster_id)
+    if not anomaly_ids:
+        return []
+
+    anomaly_repo = AnomalyRepository(session)
+    anomalies = await anomaly_repo.get_by_ids(anomaly_ids)
+
+    results: list[dict[str, object]] = []
+    for a in anomalies:
+        crop_url = None
+        if a.crop_path:
+            try:
+                crop_url = await minio.get_presigned_url(a.crop_path, expires_seconds=3600)
+            except Exception:
+                pass
+        results.append({
+            "anomaly_id": a.id,
+            "camera_id": a.camera_id,
+            "anomaly_score": a.anomaly_score,
+            "status": a.status,
+            "crop_url": crop_url,
+            "detected_at": a.detected_at.isoformat() if a.detected_at else None,
+        })
+    return results
+
+
 @router.post("/trigger", response_model=StatusResponse)
 async def trigger_clustering(
     request: ClusterTriggerRequest,

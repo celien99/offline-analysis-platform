@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, Table, Button, Space, Input, Select, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { AnomalyRecord } from "../../types";
@@ -9,12 +10,23 @@ import { useAnomalyColumns } from "./components/AnomalyTable";
 import AnomalyDetailModal from "./components/AnomalyDetailModal";
 
 export default function AnomalyBrowser() {
+  const [searchParams] = useSearchParams();
+  const urlAnomalyId = searchParams.get("anomaly_id");
+
   const [page, setPage] = useState(1);
   const [cameraInput, setCameraInput] = useState("");
   const [cameraFilter, setCameraFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyRecord | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
+
+  // URL 携带 anomaly_id 时自动加载详情
+  useEffect(() => {
+    if (urlAnomalyId) {
+      anomalyApi.detail(urlAnomalyId).then(setSelectedAnomaly).catch(() => {});
+      setDetailVisible(true);
+    }
+  }, [urlAnomalyId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

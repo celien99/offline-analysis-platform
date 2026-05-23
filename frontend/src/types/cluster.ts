@@ -13,6 +13,9 @@ export interface ClusterSummary {
   representative_image_urls: string[];
   reviewed_by: string | null;
   reviewed_at: string | null;
+  vlm_anomaly_type: string | null;
+  vlm_is_false_alarm: boolean | null;
+  vlm_analyzed_at: string | null;
   created_at: string;
 }
 
@@ -33,8 +36,15 @@ export interface ClusterDetail {
   centroid: number[] | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  vlm_anomaly_type: string | null;
+  vlm_is_false_alarm: boolean | null;
+  vlm_reason: string | null;
+  vlm_confidence: number | null;
+  vlm_suggestion: string | null;
+  vlm_analyzed_at: string | null;
   clustering_run_at: string;
   created_at: string;
+  trace_id: string | null;
 }
 
 export interface ClusterListResponse {

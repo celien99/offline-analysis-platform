@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, Table, Button, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { ClusterSummary } from "../../types";
@@ -9,6 +10,9 @@ import ClusterDetailModal from "./components/ClusterDetailModal";
 import ReviewModal from "./components/ReviewModal";
 
 export default function ClusterReview() {
+  const [searchParams] = useSearchParams();
+  const urlClusterId = searchParams.get("cluster_id");
+
   const [page, setPage] = useState(1);
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -16,6 +20,14 @@ export default function ClusterReview() {
   const [reviewAction, setReviewAction] = useState<"confirm_defect" | "mark_false_alarm">("confirm_defect");
   const [defectType, setDefectType] = useState<string | undefined>();
   const [comment, setComment] = useState("");
+
+  // URL 携带 cluster_id 时自动打开详情
+  useEffect(() => {
+    if (urlClusterId) {
+      setSelectedClusterId(urlClusterId);
+      setDetailVisible(true);
+    }
+  }, [urlClusterId]);
 
   const { data: listData, isLoading, refetch } = useClusterList(page);
   const { data: selectedCluster } = useClusterDetail(selectedClusterId);

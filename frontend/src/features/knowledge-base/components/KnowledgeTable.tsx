@@ -1,5 +1,6 @@
 import { Space, Tag, Button, Typography, Popconfirm } from "antd";
-import { EyeOutlined, BookOutlined, DeleteOutlined } from "@ant-design/icons";
+import { EyeOutlined, BookOutlined, DeleteOutlined, ClusterOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import type { KnowledgeEntry } from "../../../types";
 import { CATEGORY_COLOR_MAP } from "../../../lib/constants";
@@ -13,6 +14,9 @@ interface Props {
 }
 
 export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: Props): ColumnsType<KnowledgeEntry> {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const navigate = useNavigate();
+
   return [
     {
       title: "Title",
@@ -56,7 +60,18 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
       key: "cluster_id",
       width: 120,
       render: (c: string | null) =>
-        c ? <Text code>{c.slice(0, 10)}...</Text> : <Text type="secondary">-</Text>,
+        c ? (
+          <Button
+            type="link"
+            size="small"
+            icon={<ClusterOutlined />}
+            onClick={() => navigate(`/clusters?cluster_id=${c}`)}
+          >
+            {c.slice(0, 10)}...
+          </Button>
+        ) : (
+          <Text type="secondary">-</Text>
+        ),
     },
     {
       title: "Cameras",

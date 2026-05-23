@@ -4,11 +4,12 @@ import type { ReviewSubmit, TrainingStartParams, DeployRequest } from "../types"
 
 // ── Cluster queries ──
 
-export function useClusterList(page: number) {
+export function useClusterList(page: number, enabled = true) {
   return useQuery({
     queryKey: ["clusters", "list", page],
     queryFn: ({ signal }) => clusterApi.list(page, 20, undefined, signal),
     placeholderData: (prev) => prev,
+    enabled,
   });
 }
 
@@ -16,6 +17,14 @@ export function useClusterDetail(clusterId: string | null) {
   return useQuery({
     queryKey: ["clusters", "detail", clusterId],
     queryFn: ({ signal }) => clusterApi.detail(clusterId!, signal),
+    enabled: !!clusterId,
+  });
+}
+
+export function useClusterAnomalies(clusterId: string | null) {
+  return useQuery({
+    queryKey: ["clusters", "anomalies", clusterId],
+    queryFn: ({ signal }) => clusterApi.anomalies(clusterId!, signal),
     enabled: !!clusterId,
   });
 }
