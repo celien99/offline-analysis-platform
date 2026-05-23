@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -40,9 +41,10 @@ def run_inspection_task(
         tmp_dir = tempfile.mkdtemp(prefix="inspection_")
         result_path = str(Path(tmp_dir) / "result.json")
 
-        python_bin = str(Path(settings.seat_defect_core_python).resolve())
-        # 仓库根目录：从 python_bin (<repo>/seat_defect_core/.venv/bin/python) 上溯 3 级
-        repo_root = str(Path(python_bin).resolve().parent.parent.parent)
+        # 仓库根目录：从当前文件位置推算（避免 venv symlink 干扰）
+        # tasks.py -> inspection_worker -> workers -> app -> backend -> repo_root
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+        python_bin = str(repo_root / "seat_defect_core" / ".venv" / "bin" / "python")
 
         cmd = [
             python_bin, "-m", "seat_defect_core", "inspect",
@@ -67,7 +69,7 @@ def run_inspection_task(
             capture_output=True,
             text=True,
             timeout=600,
-            cwd=repo_root,
+            cwd=str(repo_root),
         )
 
         if proc.returncode != 0:
@@ -106,8 +108,7 @@ def run_inspection_task(
         logger.error("inspection_failed", error=str(e))
         return {"status": "FAILURE", "error_message": str(e), "camera_results": []}
     finally:
-        # 清理临时文件（配置/结果目录 + 图像目录）
-        import shutil
+        # 清理临时文件（结果目录 + 图像目录）
         if tmp_dir is not None:
             try:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
