@@ -128,7 +128,7 @@ if docker compose -f backend/docker-compose.yml ps api --status running 2>/dev/n
 fi
 
 log_step "启动后端 API (port 8000)..."
-(cd backend && PYTHONPATH=.. .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
+(cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
 API_PID=$!
 sleep 2
 
@@ -143,7 +143,7 @@ fi
 
 # ---- 启动 Celery Worker ----
 log_step "启动 Celery Worker（本地开发模式）..."
-(cd backend && PYTHONPATH=.. .venv/bin/celery -A app.infrastructure.queue.celery_app worker -l info -c 2) &
+(cd backend && .venv/bin/celery -A app.infrastructure.queue.celery_app worker -l info -c 2) &
 WORKER_PID=$!
 sleep 2
 
