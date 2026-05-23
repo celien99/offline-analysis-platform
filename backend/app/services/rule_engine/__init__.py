@@ -162,6 +162,16 @@ class RuleEngineService:
                 knowledge_entry_id=knowledge_entry_id,
                 description=entry.description,
             ))
+        elif entry.action == "review_required":
+            rules.append(await self.create_rule(
+                name=f"Auto: Review {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
+                rule_type="flag",
+                condition=condition,
+                priority=7,
+                camera_ids=camera_ids or (json.loads(entry.camera_ids) if entry.camera_ids else None),
+                knowledge_entry_id=knowledge_entry_id,
+                description=entry.description,
+            ))
 
         return rules
 

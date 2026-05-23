@@ -162,11 +162,10 @@ class QwenVLMAnalyzer:
             or parsed.get("suspected_anomaly_type")
             or "unknown"
         )
-        is_false_alarm = bool(
-            parsed.get("is_false_alarm")
-            or parsed.get("whether_it_looks_more_like_a_false_alarm")
-            or False
-        )
+        raw_fa = parsed.get("is_false_alarm")
+        if raw_fa is None:
+            raw_fa = parsed.get("whether_it_looks_more_like_a_false_alarm")
+        is_false_alarm = bool(raw_fa) if raw_fa is not None else False
         reason = str(
             parsed.get("reason")
             or parsed.get("possible_reasons")

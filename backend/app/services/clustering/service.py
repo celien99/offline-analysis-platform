@@ -181,13 +181,21 @@ class ClusteringService:
         self,
         *,
         status: str | None = None,
+        review_status: str | None = None,
+        defect_type: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> tuple[list[Cluster], int]:
         clusters = await self._cluster_repo.list_all(
-            status=status, offset=offset, limit=limit
+            status=status,
+            review_status=review_status,
+            defect_type=defect_type,
+            offset=offset,
+            limit=limit,
         )
-        total = await self._cluster_repo.count(status=status)
+        total = await self._cluster_repo.count(
+            status=status, review_status=review_status, defect_type=defect_type
+        )
         return list(clusters), total
 
     async def get_cluster_anomaly_ids(self, cluster_id: str) -> list[str]:

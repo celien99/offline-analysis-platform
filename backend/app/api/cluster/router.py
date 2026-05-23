@@ -63,6 +63,8 @@ async def list_clusters(
     offset = (page - 1) * page_size
     clusters, total = await service.list_clusters(
         status=status,
+        review_status=review_status,
+        defect_type=defect_type,
         offset=offset,
         limit=page_size,
     )

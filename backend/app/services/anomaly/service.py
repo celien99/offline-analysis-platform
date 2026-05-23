@@ -78,6 +78,10 @@ class AnomalyService:
             has_original=original_path is not None,
             has_crop=crop_path is not None,
         )
+
+        # 自动触发 embedding → clustering 流水线（独立 session，不阻塞上传响应）
+        self._schedule_pipeline(anomaly.id)
+
         return anomaly
 
     async def list_anomalies(
@@ -127,6 +131,27 @@ class AnomalyService:
         logger.info("anomaly_reprocess_start", anomaly_id=anomaly_id)
         await self._run_pipeline_sync(record)
         return record
+
+    @staticmethod
+    def _schedule_pipeline(anomaly_id: str) -> None:
+        """在新 session 中后台运行 pipeline，避免阻塞上传响应。"""
+        import asyncio
+
+        from app.infrastructure.database.session import async_session_factory
+
+        async def _bg() -> None:
+            async with async_session_factory() as bg_session:
+                from app.repositories.anomaly.repository import AnomalyRepository
+                repo = AnomalyRepository(bg_session)
+                anomaly = await repo.get_by_id(anomaly_id)
+                if anomaly is None:
+                    return
+                # 用独立 MinIO client（避免共用连接池问题）
+                from app.infrastructure.storage.minio_client import minio_client
+                service = AnomalyService(bg_session, minio_client)
+                await service._run_pipeline_sync(anomaly)
+
+        asyncio.create_task(_bg())
 
     async def _run_pipeline_sync(self, anomaly: AnomalyRecord) -> None:
         """同步执行单条 anomaly 的 embedding → clustering 流水线。"""
@@ -184,6 +209,14 @@ class AnomalyService:
 
         # 2. Clustering（收集所有 embedded anomalies 进行聚类）
         try:
+            # 清理旧聚类数据后重新生成
+            cluster_repo = ClusterRepository(self._session)
+            membership_repo = ClusterMembershipRepository(self._session)
+            old_clusters = await cluster_repo.list_all(offset=0, limit=10000)
+            for old_c in old_clusters:
+                await cluster_repo.soft_delete(old_c.id)
+            logger.info("pipeline_cleaned_old_clusters", count=len(old_clusters))
+
             all_embeddings = await embedding_repo.get_all_embeddings_with_ids()
             if len(all_embeddings) < 3:
                 logger.info("pipeline_clustering_skip", count=len(all_embeddings))
@@ -225,9 +258,6 @@ class AnomalyService:
             probabilities = result["probabilities"]
             umap_coords = result["umap_coords"]
             representatives = pipeline_cls.get_representatives(labels, probabilities, n_per_cluster=5)
-
-            cluster_repo = ClusterRepository(self._session)
-            membership_repo = ClusterMembershipRepository(self._session)
 
             unique_labels = set(int(lb) for lb in labels)
             has_clusters = any(lb != -1 for lb in unique_labels)
@@ -279,7 +309,26 @@ class AnomalyService:
                     await self._repo.update_status(ids[i], "clustered")
 
             await self._session.commit()
-            logger.info("pipeline_clustering_done", num_clusters=len(set(lb for lb in labels if lb != -1)))
+            num_clusters = len([l for l in unique_labels if l != -1])
+            logger.info("pipeline_clustering_done", num_clusters=num_clusters)
+
+            # 自动触发 VLM 分析每个新聚类
+            if num_clusters > 0:
+                new_cluster_ids = [
+                    c.id for c in await cluster_repo.list_all(
+                        status="pending_review", offset=0, limit=100
+                    )
+                ]
+                if new_cluster_ids:
+                    logger.info("pipeline_auto_vlm", cluster_ids=new_cluster_ids)
+                    from app.api.deps import get_vlm_analyzer
+                    from app.services.multimodal.service import VLMService
+                    vlm = VLMService(self._session, get_vlm_analyzer(), self._minio)
+                    for cid in new_cluster_ids:
+                        try:
+                            await vlm.analyze_cluster(cid)
+                        except Exception as e:
+                            logger.warning("pipeline_auto_vlm_failed", cluster_id=cid, error=str(e))
 
         except Exception as e:
             logger.error("pipeline_clustering_failed", error=str(e))
