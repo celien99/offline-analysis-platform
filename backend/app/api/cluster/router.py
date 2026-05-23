@@ -9,6 +9,7 @@ from app.api.deps import get_minio, get_session
 from app.common.logging import get_logger
 from app.infrastructure.storage.minio_client import MinIOClient
 from app.repositories.anomaly.repository import AnomalyRepository
+from app.repositories.cluster.repository import ClusterMembershipRepository
 from app.services.clustering.service import ClusteringService
 from app.schemas.cluster import (
     ClusterDetailResponse,
@@ -211,9 +212,6 @@ async def get_cluster_anomalies(
     minio: MinIOClient = Depends(get_minio),
 ) -> list[dict[str, object]]:
     """获取某个 cluster 下所有 anomaly 的基本信息（含 presigned URL）。"""
-    from app.repositories.anomaly.repository import AnomalyRepository
-    from app.schemas.anomaly import AnomalyResponse
-
     membership_repo = ClusterMembershipRepository(session)
     anomaly_ids = await membership_repo.get_anomaly_ids_by_cluster(cluster_id)
     if not anomaly_ids:
