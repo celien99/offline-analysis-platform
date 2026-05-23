@@ -97,5 +97,17 @@ class MinIOClient:
         except S3Error:
             return False
 
+    async def list_objects(self, prefix: str) -> list:
+        """列出指定前缀下的所有对象。"""
+        try:
+            objects = await asyncio.to_thread(
+                self._client.list_objects,
+                bucket_name=self._bucket,
+                prefix=prefix,
+            )
+            return list(objects)
+        except S3Error as e:
+            raise StorageError(f"List objects failed: {e}") from e
+
 
 minio_client = MinIOClient()

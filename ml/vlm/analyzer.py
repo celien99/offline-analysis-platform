@@ -10,17 +10,26 @@ from PIL import Image
 
 from app.domain.multimodal import VLMRequest, VLMResult
 
-ANALYSIS_PROMPT = """你是一名工业视觉缺陷分析专家。请仔细观察以下裁剪图片，这些图片是从汽车座椅生产线上检测到的异常区域。
+ANALYSIS_PROMPT = """你是一名工业视觉缺陷分析专家。你将看到多张汽车座椅检测图片：
 
-请分析并返回 JSON 格式的结果：
+- 第一张为 **OK 参照图**（正常产品的标准样本，供对比参考）
+- 后续为 **NG 缺陷图**（生产线上检测到的异常区域裁剪）
+
+请通过对比 OK 参照图与 NG 缺陷图，分析缺陷并返回 JSON：
 {
-  "type": "缺陷类型 (wrinkle/scratch/reflection/stain/seam_shift/other)",
+  "type": "缺陷类型 (wrinkle/scratch/reflection/stain/seam_shift/other/none)",
   "is_false_alarm": true或false,
-  "reason": "判定原因的简要说明（中文）",
+  "reason": "与OK参照图对比后的判定原因（中文）",
   "confidence": 0.0到1.0之间的置信度,
   "suggestion": "manual_review 或 add_to_false_alarm_library"
 }
+
+判断标准：
+1. 与 OK 图对比，检查纹理、走线、颜色、表面是否有明显差异
+2. 若 NG 图与 OK 图无明显差异 → is_false_alarm=true
+3. 若 NG 图存在 OK 图中没有的缺陷特征 → is_false_alarm=false
 """
+
 
 
 class QwenVLMAnalyzer:

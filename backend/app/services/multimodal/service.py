@@ -52,11 +52,21 @@ class VLMService:
         anomaly_ids = representative_ids or await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
         anomalies = await self._anomaly_repo.get_by_ids(anomaly_ids)
 
-        # 下载缺陷裁剪图传给 VLM。
-        # 只用 crop_path 和 roi_path（缺陷区域），不用 heatmap（叠加图会遮挡纹理）。
-        # 从 cluster 中取最多 3 个 representative anomaly 的缺陷图。
+        # 收集 anomaly 的 camera_id，查找 OK 参照图
+        camera_ids = list({a.camera_id for a in anomalies if a.camera_id})
+
+        # 下载 OK 参照图（作为 VLM 的对比基准）
+        ok_image: np.ndarray | None = None
+        for cid in camera_ids:
+            ref_objects = await self._minio.list_objects(f"reference/{cid}/")
+            if ref_objects:
+                ok_image = await self._download_as_ndarray(ref_objects[0].object_name)
+                if ok_image is not None:
+                    break
+
+        # 下载缺陷裁剪图
         crop_images: list[np.ndarray] = []
-        for anomaly in anomalies[:3]:  # 最多 3 个 anomaly，减少 token 消耗
+        for anomaly in anomalies[:2]:  # 最多 2 个 NG 图 + 1 张 OK 图 = 3 张
             for path in [anomaly.crop_path, anomaly.roi_path]:
                 if path:
                     arr = await self._download_as_ndarray(path)
@@ -70,9 +80,9 @@ class VLMService:
             )
 
         request = VLMRequest(
-            crop_image=crop_images[0],                               # 主图：缺陷裁剪
-            original_image=crop_images[1] if len(crop_images) > 1 else None,  # 辅图
-            heatmap_image=crop_images[2] if len(crop_images) > 2 else None,   # VLMRequest 第三张图字段
+            crop_image=crop_images[0],                               # NG 缺陷图 1
+            original_image=ok_image,                                  # OK 参照图
+            heatmap_image=crop_images[1] if len(crop_images) > 1 else None,  # NG 缺陷图 2
             cluster_representative_paths=[],
             cluster_metadata={
                 "cluster_id": cluster_id,
