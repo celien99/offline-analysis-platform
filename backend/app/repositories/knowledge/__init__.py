@@ -70,6 +70,14 @@ class RuleRepository(BaseRepository):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
+    async def get_disabled_rules(self) -> Sequence[RuleEntry]:
+        stmt = select(RuleEntry).where(
+            RuleEntry.deleted_at.is_(None),
+            RuleEntry.enabled.is_(False),
+        ).order_by(RuleEntry.priority.desc())
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def get_by_type(self, rule_type: str) -> Sequence[RuleEntry]:
         return await self.list_all(rule_type=rule_type, enabled=True)
 

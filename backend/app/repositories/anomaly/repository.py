@@ -76,6 +76,8 @@ class AnomalyRepository(BaseRepository):
     async def get_by_ids(
         self, ids: list[str]
     ) -> Sequence[AnomalyRecord]:
+        if not ids:
+            return []
         stmt = select(AnomalyRecord).where(
             AnomalyRecord.deleted_at.is_(None),
             AnomalyRecord.id.in_(ids),

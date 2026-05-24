@@ -190,11 +190,7 @@ export default function InspectionPage() {
           <Card title="Inspection Result">
             {isRunning && (
               <div className="text-center py-8">
-                <Spin size="large" />
-                <Typography.Text type="secondary" className="block mt-3">
-                  检测运行中...
-                </Typography.Text>
-                <Progress percent={99} status="active" showInfo={false} className="mt-2" />
+                <Spin size="large" tip="检测运行中，请稍候..." />
               </div>
             )}
 

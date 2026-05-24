@@ -195,7 +195,10 @@ class RuleEngineService:
         limit: int = 20,
     ) -> tuple[list[RuleEntry], int]:
         if enabled is not None:
-            rules = await self._repo.get_enabled_rules() if enabled else []
+            if enabled:
+                rules = await self._repo.get_enabled_rules()
+            else:
+                rules = await self._repo.get_disabled_rules()
             total = len(rules)
             rules = rules[offset:offset + limit]
             return list(rules), total

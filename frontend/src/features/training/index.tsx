@@ -36,7 +36,7 @@ import dayjs from "dayjs";
 
 const FILTER_MODEL_TYPE_OPTIONS = [
   { value: "mobilenet_v3_small", label: "MobileNetV3-Small" },
-  { value: "efficientnet_lite", label: "EfficientNet-B0" },
+  { value: "efficientnet_b0", label: "EfficientNet-B0" },
   { value: "resnet18", label: "ResNet18" },
 ];
 

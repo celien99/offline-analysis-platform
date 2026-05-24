@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class TrainingStartRequest(BaseModel):
     model_type: str = Field(
         default="mobilenet_v3_small",
-        pattern=r"^(mobilenet_v3_small|efficientnet_lite|resnet18)$",
+        pattern=r"^(mobilenet_v3_small|efficientnet_b0|resnet18)$",
     )
     num_classes: int = Field(default=2, ge=2, le=10)
     batch_size: int = Field(default=32, ge=1, le=256)

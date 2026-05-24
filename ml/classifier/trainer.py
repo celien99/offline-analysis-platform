@@ -40,7 +40,7 @@ class FilterClassifierTrainer:
                 )
                 in_features = model.classifier[-1].in_features
                 model.classifier[-1] = nn.Linear(in_features, self._num_classes)
-            case "efficientnet_lite":
+            case "efficientnet_b0":
                 model = models.efficientnet_b0(
                     weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1
                 )
