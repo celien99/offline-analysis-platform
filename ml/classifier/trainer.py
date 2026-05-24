@@ -90,10 +90,10 @@ class FilterClassifierTrainer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
         )
         val_loader = DataLoader(
-            val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+            val_dataset, batch_size=batch_size, shuffle=False, num_workers=0
         )
 
         criterion = nn.CrossEntropyLoss()
