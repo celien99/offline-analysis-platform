@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "antd";
 import Plot from "react-plotly.js";
@@ -12,30 +12,13 @@ interface Props {
 export default function ClusterScatterPlot({ points }: Props) {
   const navigate = useNavigate();
 
-  // 按照绘图顺序构建 cluster_id 扁平数组，供点击事件反查
-  const clusterIdOrder = useMemo(() => {
-    const groups = new Map<string, ScatterPoint[]>();
-    points.forEach((p) => {
-      const key = p.review_status;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(p);
-    });
-    const order: string[] = [];
-    for (const group of groups.values()) {
-      for (const p of group) {
-        order.push(p.cluster_id);
-      }
-    }
-    return order;
-  }, [points]);
-
   const handleClick = useCallback(
     (event: Plotly.PlotMouseEvent) => {
-      const idx = event.points[0]?.pointIndex;
-      if (idx == null || idx >= clusterIdOrder.length) return;
-      navigate(`/clusters?cluster_id=${clusterIdOrder[idx]}`);
+      const clusterId = (event.points[0] as { customdata?: string })?.customdata;
+      if (!clusterId) return;
+      navigate(`/clusters?cluster_id=${clusterId}`);
     },
-    [navigate, clusterIdOrder],
+    [navigate],
   );
 
   if (points.length === 0) {
@@ -68,6 +51,7 @@ export default function ClusterScatterPlot({ points }: Props) {
         size: group.map((p) => Math.max(6, Math.min(30, Math.sqrt(p.sample_count) * 3))),
         line: { width: 0.5, color: "#fff" },
       },
+      customdata: group.map((p) => p.cluster_id),
       text: group.map(
         (p) =>
           `<b>${p.name}</b><br>Samples: ${p.sample_count}<br>Type: ${p.possible_type}<br>Defect: ${p.defect_type}<br><i>Click to view detail</i>`,
