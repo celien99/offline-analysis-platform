@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +78,7 @@ class TrainingService:
             model_type=model_type,
             framework="pytorch",
             artifact_path=artifact_path,
-            metrics_json=str(metrics) if metrics else None,
+            metrics_json=json.dumps(metrics) if metrics else None,
             mlflow_run_id=mlflow_run_id,
             trained_at=datetime.now(tz=timezone.utc),
             status="registered",
