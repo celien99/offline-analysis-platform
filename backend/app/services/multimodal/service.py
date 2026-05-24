@@ -68,7 +68,7 @@ class VLMService:
 
         request = VLMRequest(
             crop_image=crop_images[0],
-            heatmap_image=crop_images[1] if len(crop_images) > 1 else None,
+            heatmap_image=None,  # 集群分析不用热力图，避免 VLM 上下文混淆
             cluster_representative_paths=[],
             cluster_metadata={
                 "cluster_id": cluster_id,

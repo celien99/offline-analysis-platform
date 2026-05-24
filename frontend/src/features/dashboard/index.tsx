@@ -1,17 +1,28 @@
-import { Row, Col, Spin } from "antd";
+import { Row, Col, Spin, Result, Button } from "antd";
 import { useClusterVisualization } from "../../hooks/queries";
 import SummaryStats from "./components/SummaryStats";
 import ClusterScatterPlot from "./components/ClusterScatterPlot";
 import ReviewBarChart from "./components/ReviewBarChart";
 
 export default function Dashboard() {
-  const { data: vizData, isLoading } = useClusterVisualization();
+  const { data: vizData, isLoading, isError, refetch } = useClusterVisualization();
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spin size="large" />
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Result
+        status="error"
+        title="Failed to load dashboard"
+        subTitle="无法加载可视化数据，请确认聚类任务已完成"
+        extra={<Button onClick={() => refetch()}>重试</Button>}
+      />
     );
   }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from io import BytesIO
 
 import numpy as np
@@ -80,6 +81,8 @@ def _generate_gradcam(image: np.ndarray) -> np.ndarray:
 def generate_heatmap(
     anomaly_id: str,
     original_path: str,
+    date_folder: str | None = None,
+    camera_id: str | None = None,
 ) -> dict[str, object]:
     logger.info("heatmap_task_started", anomaly_id=anomaly_id)
 
@@ -95,8 +98,8 @@ def generate_heatmap(
             heatmap_img.save(buf, format="JPEG", quality=85)
             heatmap_bytes = buf.getvalue()
 
-            date_str = original_path.split("/")[1] if "/" in original_path else "unknown"
-            cam_str = original_path.split("/")[2] if len(original_path.split("/")) > 2 else "unknown"
+            date_str = date_folder or datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+            cam_str = camera_id or "unknown"
             heatmap_path = f"anomaly_data/{date_str}/{cam_str}/{anomaly_id}_heatmap.jpg"
             await minio_client.upload(heatmap_path, heatmap_bytes, "image/jpeg")
 

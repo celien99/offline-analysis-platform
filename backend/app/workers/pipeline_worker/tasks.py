@@ -101,9 +101,9 @@ def trigger_vlm_on_new_clusters(
 
 @celery_app.task(name="pipeline.full_cycle")
 def run_full_cycle(limit: int = 500) -> dict[str, object]:
-    """Run the complete offline analysis cycle.
+    """Run the offline analysis pipeline: Embed → Cluster → VLM.
 
-    Embed → Cluster → VLM → (engineer reviews via UI) → Train → Deploy
+    Engineer review, training and deployment are triggered separately via UI.
     """
     logger.info("full_cycle_started", limit=limit)
     return process_new_anomalies(limit=limit)
