@@ -28,6 +28,11 @@ class DINOv2EmbeddingExtractor:
     def dimension(self) -> int:
         return 384
 
+    async def extract(self, image: np.ndarray) -> np.ndarray:
+        """Async extract for FastAPI services (runs sync in thread)."""
+        import asyncio
+        return await asyncio.to_thread(self.extract_sync, image)
+
     def extract_sync(self, image: np.ndarray) -> np.ndarray:
         pil = Image.fromarray(image.astype(np.uint8)).convert("RGB")
         img_tensor = self._preprocess(pil).unsqueeze(0).to(self._device)
