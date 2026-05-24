@@ -23,8 +23,11 @@ export default function AnomalyBrowser() {
   // URL 携带 anomaly_id 时自动加载详情
   useEffect(() => {
     if (urlAnomalyId) {
-      anomalyApi.detail(urlAnomalyId).then(setSelectedAnomaly).catch(() => {});
       setDetailVisible(true);
+      anomalyApi
+        .detail(urlAnomalyId)
+        .then((data) => setSelectedAnomaly(data))
+        .catch(() => setDetailVisible(false));
     }
   }, [urlAnomalyId]);
 

@@ -42,7 +42,15 @@ export default function ClusterDetailModal({ cluster, open, onClose }: Props) {
   const vlmMutation = useVLMAnalyzeCluster();
   const knowledgeMutation = useKnowledgeCreate();
 
-  if (!cluster) return null;
+  if (!cluster) {
+    return (
+      <Modal title="Cluster Detail" open={open} onCancel={onClose} footer={null} width={840}>
+        <div className="flex items-center justify-center py-12">
+          <Spin size="large" />
+        </div>
+      </Modal>
+    );
+  }
 
   const handleVLMAnalyze = async () => {
     try {

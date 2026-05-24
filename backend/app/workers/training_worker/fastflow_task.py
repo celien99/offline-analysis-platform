@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from app.common.logging import get_logger
 from app.core.config import settings
 from app.core.security import generate_uuid
@@ -68,9 +66,12 @@ def train_fastflow(
         output_dir = settings.model_dir / f"fastflow_{generate_uuid()[:8]}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         trainer = FastFlowTrainer(
             config=config,
-            device="cpu",
+            device=device,
             learning_rate=learning_rate,
         )
 

@@ -126,9 +126,16 @@ def train_filter_classifier(
 
         from sklearn.model_selection import train_test_split
 
-        train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
-            images, labels, test_size=validation_split, stratify=labels, random_state=42,
-        )
+        # 当类别极端不平衡时 stratify 会失败，回退到非分层划分
+        try:
+            train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
+                images, labels, test_size=validation_split, stratify=labels, random_state=42,
+            )
+        except ValueError:
+            logger.warning("training_stratify_failed", count=len(images))
+            train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
+                images, labels, test_size=validation_split, random_state=42,
+            )
 
         from torchvision import transforms as T
 
@@ -146,10 +153,13 @@ def train_filter_classifier(
 
         from ml.classifier.trainer import FilterClassifierTrainer
 
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         trainer = FilterClassifierTrainer(
             model_type=model_type,
             num_classes=num_classes,
-            device="cpu",
+            device=device,
             learning_rate=learning_rate,
         )
 

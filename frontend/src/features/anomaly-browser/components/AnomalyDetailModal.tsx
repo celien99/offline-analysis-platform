@@ -20,7 +20,15 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
   const [similarResults, setSimilarResults] = useState<unknown[]>([]);
   const [searchingSimilar, setSearchingSimilar] = useState(false);
 
-  if (!anomaly) return null;
+  if (!anomaly) {
+    return (
+      <Modal title="Anomaly Detail" open={open} onCancel={onClose} footer={null} width={840}>
+        <div className="flex items-center justify-center py-12">
+          <Spin size="large" />
+        </div>
+      </Modal>
+    );
+  }
 
   const allCropUrls = [anomaly.crop_url, ...(anomaly.crop_urls ?? [])].filter(Boolean) as string[];
   const cropItems = allCropUrls.map((url, i) => ({

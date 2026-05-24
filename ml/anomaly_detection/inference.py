@@ -37,9 +37,10 @@ class FastFlowInference:
 
     @classmethod
     def load(cls, model_path: str | Path) -> "FastFlowInference":
-        """从 TorchScript 文件加载。"""
+        """从 TorchScript 文件加载，自适应 CPU/GPU 设备。"""
         path = str(model_path)
-        model = torch.jit.load(path)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = torch.jit.load(path, map_location=device)
         model.eval()
         return cls(model)
 
