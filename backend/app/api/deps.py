@@ -42,8 +42,5 @@ def get_embedding_extractor() -> EmbeddingExtractor:
         from app.core.config import settings
         from ml.embedding.extractor import ResNet18EmbeddingExtractor
 
-        _embedding_extractor = ResNet18EmbeddingExtractor(
-            model_name=settings.embedding_model,
-            device="cpu",
-        )
+        _embedding_extractor = ResNet18EmbeddingExtractor(device="cpu")
     return _embedding_extractor

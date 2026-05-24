@@ -4,12 +4,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas import CURRENT_SCHEMA_VERSION
+
 
 class ModelDeployRequest(BaseModel):
     model_name: str = Field(...)
     version: str = Field(...)
     target: str = Field(..., description="production_line / camera_group")
     deployed_by: str | None = Field(default=None, max_length=64)
+    schema_version: str = CURRENT_SCHEMA_VERSION
 
 
 class ModelListParams(BaseModel):
@@ -45,6 +48,7 @@ class DeploymentResponse(BaseModel):
     deployed_at: datetime
     previous_version: str | None
     deployment_status: str
+    schema_version: str = CURRENT_SCHEMA_VERSION
 
     model_config = {"from_attributes": True}
 
