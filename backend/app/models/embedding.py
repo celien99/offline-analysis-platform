@@ -14,10 +14,10 @@ class EmbeddingVector(BaseModel):
         String(32), nullable=False, index=True, unique=True
     )
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(512), nullable=False
+        Vector(384), nullable=False
     )
     model_name: Mapped[str] = mapped_column(
-        String(64), nullable=False, default="resnet18"
+        String(64), nullable=False, default="dinov2_vits14"
     )
     model_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    dimension: Mapped[int] = mapped_column(Integer, nullable=False, default=512)
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False, default=384)
