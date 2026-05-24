@@ -37,9 +37,9 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    # Embedding
-    embedding_dim: int = 512
-    embedding_model: str = "resnet18"
+    # Embedding (DINOv2-S: 384-dim, ResNet18: 512-dim)
+    embedding_dim: int = 384
+    embedding_model: str = "dinov2_vits14"
     embedding_batch_size: int = 32
 
     # Clustering

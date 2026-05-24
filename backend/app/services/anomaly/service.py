@@ -206,8 +206,8 @@ class AnomalyService:
             return
 
         try:
-            from ml.embedding.extractor import ResNet18EmbeddingExtractor
-            extractor = ResNet18EmbeddingExtractor(device="cpu")
+            from ml.embedding.dino_extractor import DINOv2EmbeddingExtractor
+            extractor = DINOv2EmbeddingExtractor(device="cpu")
             vector = extractor.extract_sync(image)
         except Exception as e:
             logger.error("pipeline_embedding_failed", anomaly_id=anomaly.id, error=str(e))
