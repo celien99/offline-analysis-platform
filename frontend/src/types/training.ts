@@ -1,5 +1,5 @@
 export interface TrainingStartParams {
-  model_type?: "mobilenet_v3_small" | "efficientnet_lite" | "resnet18";
+  model_type?: "mobilenet_v3_small" | "efficientnet_b0" | "resnet18";
   num_classes?: number;
   batch_size?: number;
   epochs?: number;

@@ -201,7 +201,13 @@ export function useTrainingStatus(taskId: string | null) {
     queryKey: ["training", "status", taskId],
     queryFn: ({ signal }) => trainingApi.status(taskId!, signal),
     enabled: !!taskId,
-    refetchInterval: 5_000,
+    refetchInterval: (query) => {
+      const status = (query.state.data as { status?: string } | undefined)?.status;
+      if (status === "success" || status === "failed" || status === "SUCCESS" || status === "FAILURE") {
+        return false;
+      }
+      return 5_000;
+    },
   });
 }
 
