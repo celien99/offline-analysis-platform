@@ -45,7 +45,7 @@ flowchart TB
 
     subgraph OFFLINE["🔵 离线分析平台（本仓库）"]
         direction TB
-        INGEST["📥 异常样本<br/>收集缓冲"] --> EMBED["🧬 Embedding<br/>ResNet18 · 512维"]
+        INGEST["📥 异常样本<br/>收集缓冲"] --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
         EMBED --> CLUSTER["🔬 聚类分析<br/>UMAP + HDBSCAN"]
         CLUSTER --> VLM["🤖 多模态解释<br/>Qwen2.5-VL"]
         VLM --> REVIEW["👨‍🔧 人工复核<br/>确认/误报/拆分/合并"]
@@ -69,8 +69,8 @@ flowchart TB
     <td width="50%">
       <h3>🧬 Embedding 提取与相似检索</h3>
       <ul>
-        <li>ResNet18 骨干网络，ImageNet 预训练</li>
-        <li>512 维特征向量，存入 <b>pgvector</b>（IVFFlat 索引）</li>
+        <li>DINOv2-S 自监督视觉大模型，像素级密集特征</li>
+        <li>384 维特征向量，存入 <b>pgvector</b>（IVFFlat 索引）</li>
         <li>支持按异常 ID 或原始向量进行余弦相似度检索</li>
         <li>Celery 异步批量提取，不阻塞 API</li>
         <li>Grad-CAM 热力图生成 + Pillow 缩略图生成</li>
@@ -223,7 +223,7 @@ offline-analysis-platform/
 │       ├── components/ui/            # PageHeader 等共享 UI 组件
 │       └── lib/                      # constants 等共享常量
 └── ml/                               # ML 模块（12 文件）
-    ├── embedding/                    # ResNet18 提取器（512 维）
+    ├── embedding/                    # DINOv2-S 提取器（384 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
     ├── classifier/                   # MobileNetV3 训练器 + ONNX 导出
     └── vlm/                          # Qwen2.5-VL 多模态分析器
@@ -418,7 +418,7 @@ mkdir -p sample_images
 1. 在线 NG → seat_defect_core 检测到 NG 后，daemon 线程异步上传
    ROI 图片 + 元数据到 POST /api/anomaly/upload-with-files
                     ↓
-2. Embedding   → Celery Worker 提取 ResNet18 512 维特征向量
+2. Embedding   → Celery Worker 提取 DINOv2-S 384 维特征向量
                     ↓
 3. 聚类分析    → UMAP + HDBSCAN 无监督发现缺陷模式
                     ↓
@@ -512,7 +512,7 @@ mkdir -p sample_images
 | `INDUSTRIAL_DEPLOY_TARGETS` | `{"production_line_a":"./deployed_models/line_a"}` | 部署目标映射 |
 | `INDUSTRIAL_DEPLOY_MODEL_SUBDIR` | `filter_classifier` | 模型子目录 |
 | `INDUSTRIAL_DEPLOY_ON_TRAIN_COMPLETE` | `false` | 训练后自动部署 |
-| `INDUSTRIAL_EMBEDDING_DIM` | `512` | Embedding 维度 |
+| `INDUSTRIAL_EMBEDDING_DIM` | `384` | Embedding 维度 |
 | `INDUSTRIAL_DEBUG` | `false` | 调试模式 |
 
 ---

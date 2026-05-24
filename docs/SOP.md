@@ -9,7 +9,7 @@
 ### 1.1 核心业务流程
 
 ```
-线上检测系统 → 异常样本上传 → 特征提取(ResNet18) → 无监督聚类(UMAP+HDBSCAN)
+线上检测系统 → 异常样本上传 → 特征提取(DINOv2-S) → 无监督聚类(UMAP+HDBSCAN)
                                                               ↓
 线上部署 ← 模型训练 ← 知识库构建 ← 人工审核(6种操作) ← VLM自动分析
 ```
@@ -24,7 +24,7 @@
 | 对象存储 | MinIO |
 | 模型注册 | MLflow |
 | 前端 | React + Ant Design + Plotly |
-| ML | PyTorch, ResNet18, UMAP, HDBSCAN, Qwen2.5-VL/InternVL |
+| ML | PyTorch, DINOv2-S, UMAP, HDBSCAN, Qwen2.5-VL/InternVL |
 
 ---
 
@@ -185,7 +185,7 @@ curl -X POST http://localhost:8000/api/anomaly/upload \
 
 | 步骤 | 输入 | 处理 | 输出 |
 |------|------|------|------|
-| 特征提取 | MinIO 中的 crop 图像 | ResNet18 → 512 维向量 | pgvector 存储的 EmbeddingVector |
+| 特征提取 | MinIO 中的 crop 图像 | DINOv2-S → 384 维向量 | pgvector 存储的 EmbeddingVector |
 | 降维 | 全部嵌入向量 | StandardScaler → UMAP (2D) | 2D 坐标 |
 | 聚类 | 降维后的向量 | HDBSCAN | 聚类分组 + 噪声标签 |
 | 持久化 | 聚类结果 | 写入 DB | Cluster + ClusterMembership |
@@ -355,7 +355,7 @@ curl -X POST "http://localhost:8000/api/rules/evaluate?camera_id=CAM-01" \
 |----------|------|
 | MobileNetV3-Small（默认） | 轻量级，适合边缘部署 |
 | EfficientNet-B0 | 精度与速度平衡 |
-| ResNet18 | 与嵌入提取使用相同架构 |
+| ResNet18 | 通用分类 backbone（与 DINOv2 嵌入独立） |
 
 或通过 API：
 
@@ -531,7 +531,7 @@ uv run alembic upgrade head                            # 重建表结构
 | `INDUSTRIAL_MINIO_SECRET_KEY` | `minioadmin` | MinIO 密钥 |
 | `INDUSTRIAL_MINIO_BUCKET` | `anomaly-data` | MinIO 存储桶名 |
 | `INDUSTRIAL_MLFLOW_TRACKING_URI` | `http://localhost:5001` | MLflow 地址 |
-| `INDUSTRIAL_EMBEDDING_MODEL` | `resnet18` | 嵌入模型 |
+| `INDUSTRIAL_EMBEDDING_MODEL` | `dinov2_vits14` | 嵌入模型 |
 | `INDUSTRIAL_CLUSTERING_MIN_CLUSTER_SIZE` | `10` | HDBSCAN 最小聚类大小 |
 | `INDUSTRIAL_CLUSTERING_MIN_SAMPLES` | `5` | HDBSCAN 最小样本数 |
 | `INDUSTRIAL_VLM_ENDPOINT` | `http://localhost:8001/v1` | VLM 服务端点 |

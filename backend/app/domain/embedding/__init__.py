@@ -25,6 +25,6 @@ class EmbeddingExtractor(Protocol):
 class EmbeddingVector:
     anomaly_id: AnomalyId
     vector: list[float]
-    model_name: str = "resnet18"
+    model_name: str = "dinov2_vits14"
     model_version: str | None = None
-    dimension: int = 512
+    dimension: int = 384

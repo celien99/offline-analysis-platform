@@ -40,7 +40,10 @@ def get_embedding_extractor() -> EmbeddingExtractor:
     global _embedding_extractor
     if _embedding_extractor is None:
         from app.core.config import settings
-        from ml.embedding.extractor import ResNet18EmbeddingExtractor
+        from ml.embedding.dino_extractor import DINOv2EmbeddingExtractor
 
-        _embedding_extractor = ResNet18EmbeddingExtractor(device="cpu")
+        _embedding_extractor = DINOv2EmbeddingExtractor(
+            model_name=settings.embedding_model,
+            device="cpu",
+        )
     return _embedding_extractor

@@ -24,9 +24,13 @@ _extractor: object = None
 def _get_extractor():
     global _extractor
     if _extractor is None:
-        from ml.embedding.extractor import ResNet18EmbeddingExtractor
+        from ml.embedding.dino_extractor import DINOv2EmbeddingExtractor
+        from app.core.config import settings
 
-        _extractor = ResNet18EmbeddingExtractor(device="cpu")
+        _extractor = DINOv2EmbeddingExtractor(
+            model_name=settings.embedding_model,
+            device="cpu",
+        )
     return _extractor
 
 
