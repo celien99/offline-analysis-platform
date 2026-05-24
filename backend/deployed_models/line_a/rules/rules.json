@@ -1,21 +1,6 @@
 [
   {
-    "name": "Auto: Escalate wrinkle from KB 9991f89e",
-    "enabled": true,
-    "camera_id": "cam_front",
-    "defect_type": "wrinkle",
-    "min_classifier_confidence": null,
-    "max_classifier_confidence": null,
-    "max_anomaly_score": null,
-    "require_filter_false_alarm": false,
-    "require_filter_real_defect": true,
-    "action": "escalate",
-    "source": "offline_platform",
-    "knowledge_entry_id": "9991f89e3c544ae6b99b5541ca14847d",
-    "priority": 10
-  },
-  {
-    "name": "Auto: Escalate stain from KB 2f52aa25",
+    "name": "Auto: Escalate stain from KB fdbcde87",
     "enabled": true,
     "camera_id": "cam_front",
     "defect_type": "stain",
@@ -26,11 +11,11 @@
     "require_filter_real_defect": true,
     "action": "escalate",
     "source": "offline_platform",
-    "knowledge_entry_id": "2f52aa254bfc4de99425d0df7b0fce4c",
+    "knowledge_entry_id": "fdbcde87a9bd4dfdbeb1e48b0791e7af",
     "priority": 10
   },
   {
-    "name": "Auto: Ignore pattern from KB 738751cd",
+    "name": "Auto: Ignore pattern from KB 62b82cc4",
     "enabled": true,
     "camera_id": "cam_front",
     "defect_type": null,
@@ -41,7 +26,7 @@
     "require_filter_real_defect": false,
     "action": "ignore",
     "source": "offline_platform",
-    "knowledge_entry_id": "738751cd9e6146c3b524f5f8b2131fc4",
+    "knowledge_entry_id": "62b82cc4d64a4cf2bd33f303eadcb3d4",
     "priority": 5
   }
 ]
