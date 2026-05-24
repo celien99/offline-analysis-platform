@@ -130,10 +130,7 @@ class VLMService:
         return results
 
     async def analyze_anomaly_by_id(self, anomaly_id: str) -> VLMResult:
-        from app.repositories.anomaly.repository import AnomalyRepository
-
-        repo = AnomalyRepository(self._session)
-        anomaly = await repo.get_by_id(anomaly_id)
+        anomaly = await self._anomaly_repo.get_by_id(anomaly_id)
         if anomaly is None:
             raise NotFoundError("Anomaly", anomaly_id)
 
@@ -149,7 +146,15 @@ class VLMService:
         heatmap_path: str | None = None,
         crop_path: str | None = None,
     ) -> VLMResult:
+        """对单张异常图像做 VLM 分析，优先使用裁剪图。"""
+        crop_image = await self._download_as_ndarray(crop_path) if crop_path else None
+        original_image = await self._download_as_ndarray(original_image_path) if original_image_path else None
+        heatmap_image = await self._download_as_ndarray(heatmap_path) if heatmap_path else None
+
         request = VLMRequest(
+            crop_image=crop_image,
+            original_image=original_image,
+            heatmap_image=heatmap_image,
             cluster_representative_paths=[
                 p for p in [crop_path, original_image_path, heatmap_path] if p is not None
             ],

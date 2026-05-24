@@ -58,8 +58,10 @@ def cleanup_expired_data(
 
 async def _reindex_embeddings() -> None:
     async with async_session_factory() as session:
-        await session.execute(text("REINDEX INDEX CONCURRENTLY idx_embedding_ivfflat"))
-        await session.commit()
+        await session.execute(
+            text("REINDEX INDEX CONCURRENTLY idx_embedding_ivfflat")
+            .execution_options(isolation_level="AUTOCOMMIT")
+        )
 
 
 @celery_app.task(name="maintenance.reindex_embeddings")

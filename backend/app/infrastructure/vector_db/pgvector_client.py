@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+_VALID_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_identifier(name: str, label: str) -> None:
+    if not _VALID_IDENTIFIER.match(name):
+        raise ValueError(f"Invalid {label}: {name!r}")
 
 
 async def find_similar_embeddings(
@@ -14,6 +23,8 @@ async def find_similar_embeddings(
     threshold: float = 0.7,
 ) -> list[dict[str, object]]:
     """Find similar embeddings using pgvector cosine distance."""
+    _validate_identifier(table_name, "table_name")
+    _validate_identifier(embedding_column, "embedding_column")
     stmt = text(f"""
         SELECT id,
                1 - ({embedding_column} <=> :query_vector) AS similarity
@@ -42,7 +53,10 @@ async def vector_bulk_insert(
     """Bulk insert records containing pgvector embeddings."""
     if not records:
         return
+    _validate_identifier(table_name, "table_name")
     columns = list(records[0].keys())
+    for col in columns:
+        _validate_identifier(col, "column_name")
     placeholders = ", ".join(
         f"({', '.join(f':{col}_{i}' for col in columns)})"
         for i in range(len(records))
