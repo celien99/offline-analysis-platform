@@ -116,7 +116,6 @@ class ColorBranchConfig:
 
 
 @dataclass
-@dataclass
 class FastFlowConfig:
     """FastFlow 端到端异常检测模型配置（从 PatchCore 蒸馏的学生模型）。"""
 
@@ -127,6 +126,7 @@ class FastFlowConfig:
     """异常判定阈值。None 表示使用训练时计算的阈值（默认 1.5）。"""
 
 
+@dataclass
 class FilterClassifierConfig:
     """过滤器分类器配置，用于抑制 PatchCore 误报。"""
 
