@@ -94,7 +94,9 @@ def _run_inspect(args) -> int:
             print(f"上传 NG 结果到 {args.upload}...")
             results = upload_inspection_response(response, args.upload)
             for r in results:
-                print(f"  上传成功: anomaly_id={r.get('anomaly_id', '?')}")
+                ids = r.get("anomaly_ids", [r.get("anomaly_id", "?")])
+                count = r.get("count", len(ids) if isinstance(ids, list) else 1)
+                print(f"  上传成功: anomaly_ids={ids} count={count}")
             if not results:
                 print("  上传失败（网络不通或后端未运行）")
 

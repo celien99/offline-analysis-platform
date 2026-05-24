@@ -17,14 +17,15 @@ const { Sider, Content, Header } = Layout;
 
 const menuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "Dashboard" },
-  { key: "/clusters", icon: <ClusterOutlined />, label: "Cluster Review" },
+  { key: "/inspection", icon: <ScanOutlined />, label: "Inspection" },
   { key: "/anomalies", icon: <BugOutlined />, label: "Anomaly Browser" },
+
+  { key: "/clusters", icon: <ClusterOutlined />, label: "Cluster Review" },
 
   { key: "/knowledge", icon: <BookOutlined />, label: "Knowledge Base" },
   { key: "/rules", icon: <ThunderboltOutlined />, label: "Rules Engine" },
   { key: "/training", icon: <ExperimentOutlined />, label: "Training" },
   { key: "/deploy", icon: <RocketOutlined />, label: "Deploy" },
-  { key: "/inspection", icon: <ScanOutlined />, label: "Inspection" },
 ];
 
 interface Props {
