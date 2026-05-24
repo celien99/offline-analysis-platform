@@ -15,6 +15,21 @@
     "priority": 10
   },
   {
+    "name": "Auto: Escalate stain from KB 2f52aa25",
+    "enabled": true,
+    "camera_id": "cam_front",
+    "defect_type": "stain",
+    "min_classifier_confidence": null,
+    "max_classifier_confidence": null,
+    "max_anomaly_score": null,
+    "require_filter_false_alarm": false,
+    "require_filter_real_defect": true,
+    "action": "escalate",
+    "source": "offline_platform",
+    "knowledge_entry_id": "2f52aa254bfc4de99425d0df7b0fce4c",
+    "priority": 10
+  },
+  {
     "name": "Auto: Ignore pattern from KB 738751cd",
     "enabled": true,
     "camera_id": "cam_front",

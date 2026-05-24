@@ -120,7 +120,7 @@ def train_filter_classifier(
     try:
         images, labels = run_async(_load_training_data(anomaly_ids or []))
 
-        if len(images) < 10:
+        if len(images) < 4:
             logger.warning("training_insufficient_data", count=len(images))
             return {"status": "failed", "error": f"Insufficient training data: {len(images)} images"}
 
@@ -185,11 +185,15 @@ def train_filter_classifier(
             trainer.export_torchscript(torchscript_path)
 
             mlflow.log_artifact(str(torchscript_path), artifact_path="model")
-            mlflow.pytorch.log_model(
-                trainer._model,
-                artifact_path="pytorch_model",
-                registered_model_name=f"filter_classifier_{model_type}",
-            )
+            # 模型注册 API 在旧版 MLflow 中可能不可用，失败不阻塞训练
+            try:
+                mlflow.pytorch.log_model(
+                    trainer._model,
+                    artifact_path="pytorch_model",
+                    registered_model_name=f"filter_classifier_{model_type}",
+                )
+            except Exception as mlflow_err:
+                logger.warning("mlflow_log_model_failed", error=str(mlflow_err))
 
         model_version = run_async(_create_model_version(
             model_name=f"filter_classifier_{model_type}",
