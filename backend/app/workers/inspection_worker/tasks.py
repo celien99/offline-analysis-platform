@@ -105,14 +105,8 @@ def run_inspection_task(
 
         logger.info("inspection_complete", overall_status=overall_status)
 
-        # NG 结果上传成功后，触发离线分析 pipeline（embedding → clustering → VLM）
-        if overall_status == "NG":
-            from app.workers.pipeline_worker.tasks import process_new_anomalies
-            pipeline_result = process_new_anomalies.delay(limit=500)
-            logger.info(
-                "pipeline_triggered_after_inspection",
-                pipeline_task_id=pipeline_result.id,
-            )
+        # pipeline 已由 AnomalyService.create_anomaly_with_files 在上传时自动触发，
+        # 此处不再重复调度
 
         return {
             "status": "SUCCESS",

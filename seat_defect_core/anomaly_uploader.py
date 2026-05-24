@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,11 @@ import numpy as np
 import requests
 
 from .core_types import CameraInspectionResult, InspectionResponse
+
+logger = logging.getLogger(__name__)
+
+# 在线端期望的 schema 版本，与后端 app/schemas/__init__.py 中的 CURRENT_SCHEMA_VERSION 对齐
+EXPECTED_SCHEMA_VERSION = "1.0"
 
 
 def upload_camera_result(
@@ -117,7 +123,16 @@ def upload_camera_result(
             timeout=timeout,
         )
         response.raise_for_status()
-        return response.json()
+        resp_json = response.json()
+        # 校验后端 schema 版本兼容性
+        backend_version = resp_json.get("schema_version")
+        if backend_version and backend_version != EXPECTED_SCHEMA_VERSION:
+            logger.warning(
+                "Schema version mismatch: seat_defect_core expects %s, backend returns %s",
+                EXPECTED_SCHEMA_VERSION,
+                backend_version,
+            )
+        return resp_json
     except requests.RequestException:
         return None
 

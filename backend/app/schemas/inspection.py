@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.schemas import CURRENT_SCHEMA_VERSION
+
 
 class CameraInspectionResultSchema(BaseModel):
     """单相机检测结果。"""
@@ -26,3 +28,4 @@ class InspectionResultResponse(BaseModel):
     camera_results: list[CameraInspectionResultSchema] = []
     error_message: str | None = None
     created_at: str | None = None
+    schema_version: str = CURRENT_SCHEMA_VERSION

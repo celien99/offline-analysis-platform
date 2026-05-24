@@ -4,12 +4,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas import CURRENT_SCHEMA_VERSION
+
 
 class AnomalyUploadResponse(BaseModel):
     anomaly_ids: list[str]
     count: int
     status: str = "received"
     message: str = "Anomaly queued for processing"
+    schema_version: str = CURRENT_SCHEMA_VERSION
 
 
 class AnomalyQueryParams(BaseModel):
