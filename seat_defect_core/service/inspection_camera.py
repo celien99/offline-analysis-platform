@@ -156,6 +156,9 @@ def inspect_prepared_camera(
     filter_result = _predict_filter_classifier(service, camera, prepared, seat_model_id)
     camera_timer.mark("filter_classifier")
 
+    fastflow_result = _predict_fastflow(service, camera, prepared, seat_model_id)
+    camera_timer.mark("fastflow")
+
     if texture_result.is_anomaly and filter_result is not None and not filter_result.is_real_defect:
         # 分类器抑制 PatchCore 误报
         status = "OK"
@@ -190,9 +193,18 @@ def inspect_prepared_camera(
         texture_result=texture_result,
         color_result=color_result,
         filter_result=filter_result,
+        fastflow_result=fastflow_result,
         crop_box=prepared.roi.crop_box,
         **shared_result_fields,
     )
+    # FastFlow 学生模型判定为 OK 时抑制 PatchCore NG（端到端替代 KNN 检索）
+    if (
+        fastflow_result is not None
+        and not fastflow_result.is_anomaly
+        and result.status == "NG"
+    ):
+        result.status = "OK"
+        result.reason = "fastflow_suppressed"
     # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
     if camera.rule_engine.enabled:
         all_rules = merge_rules(camera.rule_engine.rules, camera.rule_engine.deployed_rules_path)
@@ -341,6 +353,9 @@ def finish_region_patchcore_plan(
     filter_result = _predict_filter_classifier(service, plan.camera, plan.prepared, plan.seat_model_id)
     plan.camera_timer.mark("filter_classifier")
 
+    fastflow_result = _predict_fastflow(service, plan.camera, plan.prepared, plan.seat_model_id)
+    plan.camera_timer.mark("fastflow")
+
     status, reason = _merge_region_status(
         region_results,
         color_result,
@@ -354,9 +369,18 @@ def finish_region_patchcore_plan(
         region_results=region_results,
         color_result=color_result,
         filter_result=filter_result,
+        fastflow_result=fastflow_result,
         crop_box=plan.prepared.roi.crop_box,
         **plan.shared_result_fields,
     )
+    # FastFlow 学生模型判定为 OK 时抑制 PatchCore NG
+    if (
+        fastflow_result is not None
+        and not fastflow_result.is_anomaly
+        and result.status == "NG"
+    ):
+        result.status = "OK"
+        result.reason = "fastflow_suppressed"
     if status == "REJECT":
         result.error = _error_from_reason(reason, stage="region_merge")
     # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
@@ -498,6 +522,36 @@ def _predict_filter_classifier(
             real_defect_score=0.0,
             false_alarm_score=0.0,
             class_id=1,
+            diagnostics={"prediction_failed": 1.0},
+        )
+
+
+def _predict_fastflow(
+    service: "InspectionService",
+    camera: CameraConfig,
+    prepared,
+    seat_model_id: Optional[str],
+):
+    """运行 FastFlow 端到端异常检测推理（从 PatchCore 蒸馏的学生模型）。
+
+    单次前向传播代替 KNN 检索，延迟约 5-10ms。
+    """
+    if not camera.fastflow.enabled:
+        return None
+    svc = service.load_fastflow(camera, seat_model_id)
+    if svc is None:
+        return None
+    try:
+        return svc.predict(prepared.roi.aligned_roi_image)
+    except Exception:
+        # 故障安全：推理失败时 is_anomaly=True，不抑制 PatchCore 结果
+        from ..core_types import FastFlowResult
+
+        return FastFlowResult(
+            anomaly_score=float("inf"),
+            heatmap=None,
+            is_anomaly=True,
+            threshold=camera.fastflow.threshold or 1.5,
             diagnostics={"prediction_failed": 1.0},
         )
 

@@ -123,6 +123,26 @@ class FilterClassifierResult:
 
 
 @dataclass
+class FastFlowResult:
+    """FastFlow 端到端异常检测分支输出。"""
+
+    anomaly_score: float
+    """图像级异常分数（multi-scale NLL 均值）。"""
+
+    heatmap: Any
+    """异常热力图 (H, W) float32，分辨率与输入 ROI 一致。"""
+
+    is_anomaly: bool
+    """是否判定为异常。"""
+
+    threshold: float
+    """判定阈值。"""
+
+    diagnostics: Dict[str, float] = field(default_factory=dict)
+    """推理诊断指标。"""
+
+
+@dataclass
 class RegionPatchCoreResult:
     """单个局部区域的 PatchCore 输出。"""
 
@@ -199,6 +219,9 @@ class CameraInspectionResult:
 
     filter_result: Optional[FilterClassifierResult] = None
     """过滤器分类器分支结果。"""
+
+    fastflow_result: Optional[FastFlowResult] = None
+    """FastFlow 端到端异常检测分支结果。"""
 
     crop_box: Optional[BoundingBox] = None
     """原图坐标系下最终使用的 ROI 裁剪框。"""
@@ -304,6 +327,7 @@ class InspectionResponse:
 __all__ = [
     "CameraInspectionResult",
     "ColorAnomalyResult",
+    "FastFlowResult",
     "FilterClassifierResult",
     "InspectionError",
     "InspectionResponse",
