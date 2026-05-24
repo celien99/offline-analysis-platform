@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Card, Table, Button, Space, Select, message, Form } from "antd";
-import { PlusOutlined, ReloadOutlined, PlayCircleOutlined, BookOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, PlayCircleOutlined, BookOutlined, CloudUploadOutlined } from "@ant-design/icons";
 import { Modal, Input } from "antd";
 import type { EvalResult } from "../../types";
-import { useRulesList, useRuleCreate, useRuleToggle, useRuleDelete, useRuleEvaluate, useRuleGenerateFromKb } from "../../hooks/queries";
+import { useRulesList, useRuleCreate, useRuleToggle, useRuleDelete, useRuleEvaluate, useRuleGenerateFromKb, useRuleDeploy } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useRulesColumns } from "./components/RulesTable";
 import CreateRuleForm from "./components/CreateRuleForm";
@@ -27,6 +27,16 @@ export default function RulesManagement() {
   const deleteMutation = useRuleDelete();
   const evaluateMutation = useRuleEvaluate();
   const generateMutation = useRuleGenerateFromKb();
+  const deployMutation = useRuleDeploy();
+
+  const handleDeploy = async () => {
+    try {
+      const data = await deployMutation.mutateAsync("production_line_a");
+      message.success(`Deployed ${data.rule_count} rules to ${data.target}`);
+    } catch {
+      message.error("Rules deployment failed");
+    }
+  };
 
   const handleCreate = async (values: Record<string, unknown>) => {
     try {
@@ -116,6 +126,7 @@ export default function RulesManagement() {
               options={RULE_TYPE_OPTIONS as { value: string; label: string }[]}
             />
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>
+            <Button icon={<CloudUploadOutlined />} loading={deployMutation.isPending} onClick={handleDeploy}>Deploy Rules</Button>
             <Button icon={<BookOutlined />} onClick={() => setGenFromKbVisible(true)}>From KB</Button>
             <Button
               icon={<PlayCircleOutlined />}

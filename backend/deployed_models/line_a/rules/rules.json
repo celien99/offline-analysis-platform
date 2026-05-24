@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Auto: Escalate wrinkle from KB 9991f89e",
+    "enabled": true,
+    "camera_id": "cam_front",
+    "defect_type": "wrinkle",
+    "min_classifier_confidence": null,
+    "max_classifier_confidence": null,
+    "max_anomaly_score": null,
+    "require_filter_false_alarm": false,
+    "require_filter_real_defect": true,
+    "action": "escalate",
+    "source": "offline_platform",
+    "knowledge_entry_id": "9991f89e3c544ae6b99b5541ca14847d",
+    "priority": 10
+  }
+]

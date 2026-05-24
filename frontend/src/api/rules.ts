@@ -23,4 +23,10 @@ export const rulesApi = {
 
   generateFromKnowledge: (knowledgeEntryId: string, signal?: AbortSignal) =>
     post(`/rules/generate-from-knowledge?knowledge_entry_id=${knowledgeEntryId}`, undefined, { signal }),
+
+  deploy: (target: string = "production_line_a", signal?: AbortSignal) =>
+    post(`/rules/deploy?target=${target}`, undefined, { signal }),
+
+  preview: (signal?: AbortSignal) =>
+    get<Record<string, unknown>[]>("/rules/preview", { signal }),
 };

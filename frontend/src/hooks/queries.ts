@@ -181,6 +181,13 @@ export function useRuleGenerateFromKb() {
   });
 }
 
+export function useRuleDeploy() {
+  return useMutation({
+    mutationFn: (target: string = "production_line_a") =>
+      rulesApi.deploy(target),
+  });
+}
+
 // ── Training queries ──
 
 export function useTrainingStart() {

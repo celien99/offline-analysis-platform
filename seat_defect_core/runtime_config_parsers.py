@@ -467,6 +467,7 @@ def _parse_rule_engine_config(payload: Any, *, scope: str) -> RuleEngineConfig:
     rules_payload = payload.get("rules") or []
     return RuleEngineConfig(
         enabled=_bool_or_default(payload.get("enabled"), defaults.enabled),
+        deployed_rules_path=_optional_string(payload.get("deployed_rules_path")),
         rules=[
             _parse_rule_config(item, scope=f"{scope}.rules[{index}]")
             for index, item in enumerate(_ensure_list(rules_payload, f"{scope}.rules"))
@@ -480,13 +481,26 @@ def _parse_rule_config(payload: Any, *, scope: str) -> RuleConfig:
     return RuleConfig(
         name=_require_string(payload, "name", scope),
         enabled=_bool_or_default(payload.get("enabled"), True),
+        # 阈值条件
         max_anomaly_score=_optional_float(payload.get("max_anomaly_score")),
         min_strong_patch_count=_optional_int(payload.get("min_strong_patch_count")),
         max_strong_patch_ratio=_optional_float(payload.get("max_strong_patch_ratio")),
         require_filter_false_alarm=_bool_or_default(
             payload.get("require_filter_false_alarm"), False
         ),
+        require_filter_real_defect=_bool_or_default(
+            payload.get("require_filter_real_defect"), False
+        ),
+        # 知识条件
+        camera_id=_optional_string(payload.get("camera_id")),
+        defect_type=_optional_string(payload.get("defect_type")),
+        min_classifier_confidence=_optional_float(payload.get("min_classifier_confidence")),
+        max_classifier_confidence=_optional_float(payload.get("max_classifier_confidence")),
+        # 动作和元数据
         action=_string_or_default(payload.get("action"), "suppress_to_ok"),
+        source=_string_or_default(payload.get("source"), "manual"),
+        knowledge_entry_id=_optional_string(payload.get("knowledge_entry_id")),
+        priority=_int_or_default(payload.get("priority"), 0),
     )
 
 
