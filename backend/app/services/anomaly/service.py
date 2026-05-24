@@ -232,6 +232,7 @@ class AnomalyService:
             )
             await embedding_repo.create(embedding)
             await self._repo.update_status(anomaly.id, "embedded")
+            await self._session.commit()
             logger.info("pipeline_embedding_done", anomaly_id=anomaly.id)
 
     async def _run_clustering(self) -> None:
@@ -277,7 +278,9 @@ class AnomalyService:
         ids = list(embeddings_map.keys())
 
         # ---- 样本不足：单例 cluster ----
-        if n_samples < min_cluster_size:
+        # UMAP 要求 n_neighbors < n_samples，最小可用 n_neighbors=2，
+        # 因此 n_samples < 3 时 UMAP 无法工作，退化为单例 cluster
+        if n_samples < max(min_cluster_size, 3):
             logger.info("pipeline_singleton_clustering", count=n_samples)
             for aid in ids:
                 await self._create_singleton_cluster(
