@@ -8,6 +8,7 @@ from app.common.logging import get_logger
 from app.schemas.common import StatusResponse
 from app.schemas.training import TrainingStartRequest, TrainingStatusResponse
 from app.services.training.service import TrainingService
+from app.workers.training_worker.fastflow_task import train_fastflow as train_fastflow_task
 from app.workers.training_worker.tasks import train_filter_classifier
 
 router = APIRouter(prefix="/api/training", tags=["training"])
@@ -37,6 +38,63 @@ async def start_training(
     return StatusResponse(
         status="queued",
         message=f"Training task {task.id} dispatched",
+    )
+
+
+@router.post("/fastflow/start", response_model=StatusResponse)
+async def start_fastflow_training(
+    good_images_dir: str = Query(..., description="正常图像目录路径"),
+    backbone: str = Query(default="resnet18", pattern=r"^(resnet18|wide_resnet50_2)$"),
+    flow_steps: int = Query(default=8, ge=2, le=16),
+    batch_size: int = Query(default=8, ge=1, le=32),
+    epochs: int = Query(default=50, ge=5, le=200),
+    learning_rate: float = Query(default=1e-3, ge=1e-5, le=1e-1),
+    freeze_backbone: bool = Query(default=True),
+) -> StatusResponse:
+    """启动 FastFlow 端到端异常检测模型训练。
+
+    FastFlow 学习正常图像的 2D Normalizing Flow 分布，
+    推理时偏离训练分布的图像被判定为异常。
+    输入参数 good_images_dir 为正常（无缺陷）图像所在目录。
+    """
+    from pathlib import Path
+
+    img_dir = Path(good_images_dir)
+    if not img_dir.is_dir():
+        return StatusResponse(
+            status="failed",
+            message=f"目录不存在: {good_images_dir}",
+        )
+
+    exts = ("*.jpg", "*.jpeg", "*.png", "*.bmp")
+    image_paths = []
+    for ext in exts:
+        image_paths.extend(str(p) for p in img_dir.glob(ext))
+
+    if len(image_paths) < 4:
+        return StatusResponse(
+            status="failed",
+            message=f"需要至少 4 张图像，目录中有 {len(image_paths)} 张",
+        )
+
+    task = train_fastflow_task.delay(
+        good_image_paths=image_paths,
+        backbone=backbone,
+        flow_steps=flow_steps,
+        batch_size=batch_size,
+        epochs=epochs,
+        learning_rate=learning_rate,
+        freeze_backbone=freeze_backbone,
+    )
+    logger.info(
+        "fastflow_training_dispatched",
+        task_id=task.id,
+        backbone=backbone,
+        image_count=len(image_paths),
+    )
+    return StatusResponse(
+        status="queued",
+        message=f"FastFlow training task {task.id} dispatched with {len(image_paths)} images",
     )
 
 

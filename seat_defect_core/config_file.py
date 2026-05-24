@@ -168,7 +168,7 @@ def _apply_camera_rest(
             )
         )
         return
-    if rest[0] in {"quality", "detection", "patchcore", "color_branch", "filter_classifier", "rule_engine"} and len(rest) == 1:
+    if rest[0] in {"quality", "detection", "patchcore", "color_branch", "filter_classifier", "fastflow", "rule_engine"} and len(rest) == 1:
         camera.setdefault(rest[0], {}).update(items)
         return
     if rest[0] == "roi":

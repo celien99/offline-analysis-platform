@@ -9,8 +9,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from ..anomaly_detection.engine import FastFlowService
 from ..classifier.engine import FilterClassifierService
-from ..config import CameraConfig, FilterClassifierConfig, InspectionConfig, PatchCoreConfig, RegionConfig
+from ..config import CameraConfig, FastFlowConfig, FilterClassifierConfig, InspectionConfig, PatchCoreConfig, RegionConfig
 from ..cvops import ImageQualityGuard, RoiRefineEngine
 from ..patchcore.features import _TorchPatchFeatureExtractor
 from ..patchcore import LoadedModelBundle, PatchCoreService
@@ -230,6 +231,8 @@ class InspectionService:
         for camera in context.cameras:
             if camera.filter_classifier.enabled and camera.filter_classifier.model_path:
                 self.load_filter_classifier(camera, context.seat_model_id)
+            if camera.fastflow.enabled and camera.fastflow.model_path:
+                self.load_fastflow(camera, context.seat_model_id)
 
 
 class ModelBundleCache:
@@ -239,6 +242,7 @@ class ModelBundleCache:
         self._service = service
         self._cache: Dict[Tuple[str, str, str, int], LoadedModelBundle] = {}
         self._filter_cache: Dict[Tuple[str, str, str, int], FilterClassifierService] = {}
+        self._fastflow_cache: Dict[Tuple[str, str, str, int], FastFlowService] = {}
 
     def load_camera_bundle(
         self,
@@ -333,6 +337,40 @@ class ModelBundleCache:
             ),
         )
         self._filter_cache[cache_key] = svc
+        return svc
+
+    def load_fastflow(
+        self,
+        camera: CameraConfig,
+        seat_model_id: Optional[str],
+    ) -> Optional[FastFlowService]:
+        """加载 FastFlow 端到端异常检测模型（从 PatchCore 蒸馏的学生模型）。"""
+        if not camera.fastflow.enabled:
+            return None
+        model_path = camera.fastflow.model_path
+        if not model_path:
+            return None
+        resolved = _resolve_model_file(model_path)
+        if resolved is None:
+            return None
+        cache_key = self._cache_key(
+            seat_model_id=seat_model_id,
+            camera_id=camera.camera_id,
+            model_id="fastflow",
+            model_path=resolved,
+        )
+        cached = self._fastflow_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        svc = FastFlowService(
+            config=camera.fastflow,
+            model=torch.jit.load(
+                resolved,
+                map_location=camera.fastflow.device,
+            ),
+        )
+        self._fastflow_cache[cache_key] = svc
         return svc
 
     @staticmethod

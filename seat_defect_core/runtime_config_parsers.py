@@ -12,6 +12,7 @@ from .config import (
     CameraConfig,
     ColorBranchConfig,
     DetectionConfig,
+    FastFlowConfig,
     FilterClassifierConfig,
     FusionConfig,
     InspectionConfig,
@@ -172,6 +173,10 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
         filter_classifier=_parse_filter_classifier_config(
             payload.get("filter_classifier"),
             scope=f"{scope}.filter_classifier",
+        ),
+        fastflow=_parse_fastflow_config(
+            payload.get("fastflow"),
+            scope=f"{scope}.fastflow",
         ),
         rule_engine=_parse_rule_engine_config(
             payload.get("rule_engine"),
@@ -438,6 +443,20 @@ def _parse_color_branch_config(payload: Any, *, scope: str) -> ColorBranchConfig
             payload.get("training_threshold_upper_quantile"),
             defaults.training_threshold_upper_quantile,
         ),
+    )
+
+
+def _parse_fastflow_config(payload: Any, *, scope: str) -> FastFlowConfig:
+    defaults = FastFlowConfig()
+    if payload is None:
+        return defaults
+    payload = _expect_dict(payload, scope)
+    _reject_unknown_keys(payload, _field_names(FastFlowConfig), scope)
+    return FastFlowConfig(
+        enabled=_bool_or_default(payload.get("enabled"), defaults.enabled),
+        model_path=_optional_string(payload.get("model_path")),
+        device=_string_or_default(payload.get("device"), defaults.device),
+        threshold=_optional_float(payload.get("threshold")),
     )
 
 
