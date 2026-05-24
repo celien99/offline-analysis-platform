@@ -130,7 +130,12 @@ class RuleEngineService:
         knowledge_entry_id: str,
         camera_ids: list[str] | None = None,
     ) -> list[RuleEntry]:
-        """Generate rules from a knowledge base entry."""
+        """从 knowledge base entry 自动生成规则。
+
+        生成的条件同时包含：
+        - defect_type（为未来多分类 Filter Classifier 预留，当前在线端不会匹配）
+        - require_filter_real_defect / require_filter_false_alarm（当前在线端可用）
+        """
         from app.repositories.knowledge import KnowledgeRepository
         knowledge_repo = KnowledgeRepository(self._session)
         entry = await knowledge_repo.get_by_id(knowledge_entry_id)
@@ -138,11 +143,14 @@ class RuleEngineService:
             return []
 
         rules: list[RuleEntry] = []
+        # 基础条件：defect_type 为未来多分类 FC 预留
         condition: dict[str, object] = {}
         if entry.defect_type:
             condition["defect_type"] = entry.defect_type
 
         if entry.action == "ignore":
+            # 误报忽略：要求 FC 也判定为误报时才抑制
+            condition["require_filter_false_alarm"] = True
             rules.append(await self.create_rule(
                 name=f"Auto: Ignore {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
                 rule_type="ignore",
@@ -153,8 +161,10 @@ class RuleEngineService:
                 description=entry.description,
             ))
         elif entry.action == "NG":
+            # 真实缺陷升级：要求 FC 也判定为真实缺陷时才升级
+            condition["require_filter_real_defect"] = True
             rules.append(await self.create_rule(
-                name=f"Auto: Flag {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
+                name=f"Auto: Escalate {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
                 rule_type="escalate",
                 condition=condition,
                 priority=10,
@@ -163,8 +173,9 @@ class RuleEngineService:
                 description=entry.description,
             ))
         elif entry.action == "review_required":
+            condition["require_filter_real_defect"] = True
             rules.append(await self.create_rule(
-                name=f"Auto: Review {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
+                name=f"Auto: Flag {entry.defect_type or 'pattern'} from KB {knowledge_entry_id[:8]}",
                 rule_type="flag",
                 condition=condition,
                 priority=7,

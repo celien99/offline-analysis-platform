@@ -11,7 +11,7 @@ from ..config import CameraConfig
 from ..cvops import split_roi_regions
 from ..cvops.regions import RegionRoiSample
 from ..patchcore import ColorConsistencyService
-from ..rule_engine import apply_rules
+from ..rule_engine import apply_rules, merge_rules
 from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionPatchCoreResult
 from ..util import select_patchcore_input
 
@@ -193,9 +193,11 @@ def inspect_prepared_camera(
         crop_box=prepared.roi.crop_box,
         **shared_result_fields,
     )
-    # 应用规则引擎后处理
-    if camera.rule_engine.enabled and camera.rule_engine.rules:
-        result = apply_rules(result, camera.rule_engine.rules)
+    # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
+    if camera.rule_engine.enabled:
+        all_rules = merge_rules(camera.rule_engine.rules, camera.rule_engine.deployed_rules_path)
+        if all_rules:
+            result = apply_rules(result, all_rules)
     return _finish_camera_result(
         service,
         frame_packet,
@@ -357,9 +359,11 @@ def finish_region_patchcore_plan(
     )
     if status == "REJECT":
         result.error = _error_from_reason(reason, stage="region_merge")
-    # 应用规则引擎后处理
-    if plan.camera.rule_engine.enabled and plan.camera.rule_engine.rules:
-        result = apply_rules(result, plan.camera.rule_engine.rules)
+    # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
+    if plan.camera.rule_engine.enabled:
+        all_rules = merge_rules(plan.camera.rule_engine.rules, plan.camera.rule_engine.deployed_rules_path)
+        if all_rules:
+            result = apply_rules(result, all_rules)
     result = _finish_camera_result(
         service,
         plan.frame_packet,

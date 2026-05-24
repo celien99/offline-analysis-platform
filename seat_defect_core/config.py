@@ -128,7 +128,13 @@ class FilterClassifierConfig:
 
 @dataclass
 class RuleConfig:
-    """单条后处理规则配置。"""
+    """单条后处理规则配置。
+
+    支持两类条件：
+    1. 阈值条件（max_anomaly_score, min_strong_patch_count, ...）
+    2. 知识条件（camera_id, defect_type, classifier_confidence）
+    两类条件可组合使用，全部满足时规则命中。
+    """
 
     name: str
     """规则名称，用于调试和日志。"""
@@ -136,6 +142,7 @@ class RuleConfig:
     enabled: bool = True
     """是否启用。"""
 
+    # ── 阈值条件（离线统计规则）──
     max_anomaly_score: Optional[float] = None
     """异常分数低于此值触发。"""
 
@@ -148,8 +155,35 @@ class RuleConfig:
     require_filter_false_alarm: bool = False
     """要求 Filter Classifier 也将此判定为误报。"""
 
+    require_filter_real_defect: bool = False
+    """要求 Filter Classifier 判定为真实缺陷。"""
+
+    # ── 知识条件（离线平台 Knowledge → Rules 部署）──
+    camera_id: Optional[str] = None
+    """限定规则的机位 ID，None 表示所有机位。"""
+
+    defect_type: Optional[str] = None
+    """限定规则匹配的缺陷类型。需 Filter Classifier 支持多分类输出。"""
+
+    min_classifier_confidence: Optional[float] = None
+    """Filter Classifier 预测置信度下限。"""
+
+    max_classifier_confidence: Optional[float] = None
+    """Filter Classifier 预测置信度上限。"""
+
+    # ── 动作 ──
     action: str = "suppress_to_ok"
-    """命中规则后的动作。"""
+    """命中规则后的动作：suppress_to_ok / flag_for_review / escalate。"""
+
+    # ── 元数据 ──
+    source: str = "manual"
+    """规则来源：manual / offline_platform。"""
+
+    knowledge_entry_id: Optional[str] = None
+    """离线平台 Knowledge Entry ID（溯源用）。"""
+
+    priority: int = 0
+    """规则优先级，数值越大越优先。多规则命中时取最高优先级的 action。"""
 
 
 @dataclass
@@ -158,6 +192,8 @@ class RuleEngineConfig:
 
     enabled: bool = False
     rules: List[RuleConfig] = field(default_factory=list)
+    deployed_rules_path: Optional[str] = None
+    """离线平台部署的规则 JSON 文件路径。加载时与本地 rules 合并。"""
 
 
 @dataclass

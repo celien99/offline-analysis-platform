@@ -102,6 +102,54 @@ async def list_rules(
     }
 
 
+@router.post("/deploy")
+async def deploy_rules(
+    target: str = Query(default="production_line_a"),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, object]:
+    """将启用的规则部署到目标目录，供在线系统加载。"""
+    from app.services.deployment.rule_deployment import RuleDeploymentService
+    svc = RuleDeploymentService(session)
+    dest = await svc.deploy_to_target(target)
+    rules_json = await svc.export_rules_json()
+    return {
+        "status": "deployed",
+        "target": target,
+        "destination": dest,
+        "rule_count": len(rules_json),
+    }
+
+
+@router.get("/preview")
+async def preview_rules(
+    session: AsyncSession = Depends(get_session),
+) -> list[dict[str, object]]:
+    """预览将要部署的规则 JSON（不实际写入文件）。"""
+    from app.services.deployment.rule_deployment import RuleDeploymentService
+    svc = RuleDeploymentService(session)
+    return await svc.export_rules_json()
+
+
+@router.post("/generate-from-knowledge")
+async def generate_rules_from_knowledge(
+    knowledge_entry_id: str = Query(...),
+    camera_ids: str | None = Query(default=None, description="Comma-separated"),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    service = RuleEngineService(session)
+    cam_ids = camera_ids.split(",") if camera_ids else None
+    rules = await service.auto_generate_rules_from_knowledge(
+        knowledge_entry_id=knowledge_entry_id,
+        camera_ids=cam_ids,
+    )
+    return [
+        {"rule_id": r.id, "name": r.name, "rule_type": r.rule_type}
+        for r in rules
+    ]
+
+
+# ── 以下路由包含路径参数，必须放在固定路径之后 ──
+
 @router.get("/{rule_id}", response_model=dict)
 async def get_rule(
     rule_id: str,
@@ -138,24 +186,6 @@ async def toggle_rule(
         status="updated",
         message=f"Rule {rule_id} {'enabled' if enabled else 'disabled'}",
     )
-
-
-@router.post("/generate-from-knowledge")
-async def generate_rules_from_knowledge(
-    knowledge_entry_id: str = Query(...),
-    camera_ids: str | None = Query(default=None, description="Comma-separated"),
-    session: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    service = RuleEngineService(session)
-    cam_ids = camera_ids.split(",") if camera_ids else None
-    rules = await service.auto_generate_rules_from_knowledge(
-        knowledge_entry_id=knowledge_entry_id,
-        camera_ids=cam_ids,
-    )
-    return [
-        {"rule_id": r.id, "name": r.name, "rule_type": r.rule_type}
-        for r in rules
-    ]
 
 
 @router.delete("/{rule_id}", status_code=204)
