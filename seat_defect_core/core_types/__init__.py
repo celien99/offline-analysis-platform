@@ -14,6 +14,7 @@ from .pipeline import (
 from .results import (
     CameraInspectionResult,
     ColorAnomalyResult,
+    FastFlowResult,
     FilterClassifierResult,
     InspectionError,
     InspectionResponse,
@@ -28,6 +29,7 @@ __all__ = [
     "ColorAnomalyResult",
     "DetectionObject",
     "DetectionResult",
+    "FastFlowResult",
     "FilterClassifierResult",
     "FramePacket",
     "ImageQualityDecision",
