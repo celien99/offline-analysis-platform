@@ -22,6 +22,20 @@ class TrainingStartRequest(BaseModel):
     anomaly_ids: list[str] | None = None
 
 
+class MetricTrainingStartRequest(BaseModel):
+    backbone_type: str = Field(
+        default="mobilenet_v3_small",
+        pattern=r"^(mobilenet_v3_small|efficientnet_b0|resnet18)$",
+    )
+    embedding_size: int = Field(default=256, ge=64, le=1024)
+    loss_type: str = Field(default="arcface", pattern=r"^(arcface|triplet)$")
+    batch_size: int = Field(default=32, ge=1, le=256)
+    epochs: int = Field(default=50, ge=1, le=500)
+    learning_rate: float = Field(default=0.001, gt=0.0, le=0.1)
+    validation_split: float = Field(default=0.2, gt=0.0, lt=1.0)
+    anomaly_ids: list[str] | None = None
+
+
 class TrainingStatusResponse(BaseModel):
     task_id: str
     status: str

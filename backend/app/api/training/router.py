@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.common.logging import get_logger
 from app.schemas.common import StatusResponse
-from app.schemas.training import TrainingStartRequest, TrainingStatusResponse
+from app.schemas.training import MetricTrainingStartRequest, TrainingStartRequest, TrainingStatusResponse
 from app.services.training.service import TrainingService
-from app.workers.training_worker.tasks import train_filter_classifier
+from app.workers.training_worker.tasks import train_filter_classifier, train_metric_embedding
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 logger = get_logger(__name__)
@@ -37,6 +37,32 @@ async def start_training(
     return StatusResponse(
         status="queued",
         message=f"Training task {task.id} dispatched",
+    )
+
+
+@router.post("/metric-learning/start", response_model=StatusResponse)
+async def start_metric_training(
+    request: MetricTrainingStartRequest,
+) -> StatusResponse:
+    task = train_metric_embedding.delay(
+        backbone_type=request.backbone_type,
+        embedding_size=request.embedding_size,
+        loss_type=request.loss_type,
+        batch_size=request.batch_size,
+        epochs=request.epochs,
+        learning_rate=request.learning_rate,
+        validation_split=request.validation_split,
+        anomaly_ids=request.anomaly_ids,
+    )
+    logger.info(
+        "metric_training_dispatched",
+        task_id=task.id,
+        backbone_type=request.backbone_type,
+        loss_type=request.loss_type,
+    )
+    return StatusResponse(
+        status="queued",
+        message=f"Metric learning task {task.id} dispatched",
     )
 
 
