@@ -15,7 +15,6 @@ celery_app = Celery(
         "app.workers.deployment_worker.tasks",
         "app.workers.vlm_worker.tasks",
         "app.workers.training_worker.tasks",
-        "app.workers.training_worker.fastflow_task",
         "app.workers.heatmap_worker.tasks",
         "app.workers.thumbnail_worker.tasks",
         "app.workers.maintenance_worker.tasks",
