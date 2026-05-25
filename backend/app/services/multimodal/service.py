@@ -67,7 +67,7 @@ class VLMService:
             )
 
         request = VLMRequest(
-            crop_image=crop_images[0],
+            crop_images=crop_images,  # 集群分析传递所有 representative crop，VLM 可对比判断
             heatmap_image=None,  # 集群分析不用热力图，避免 VLM 上下文混淆
             cluster_representative_paths=[],
             cluster_metadata={
