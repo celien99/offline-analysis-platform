@@ -92,6 +92,14 @@ class RuleEngineService:
                 return False
         if condition.get("classifier_prediction") and classifier_prediction != condition["classifier_prediction"]:
             return False
+        # require_filter_false_alarm: 要求 FC 判定为 false_alarm 时规则才生效
+        if condition.get("require_filter_false_alarm"):
+            if classifier_prediction != "false_alarm":
+                return False
+        # require_filter_real_defect: 要求 FC 判定为 real_defect 时规则才生效
+        if condition.get("require_filter_real_defect"):
+            if classifier_prediction != "real_defect":
+                return False
         return True
 
     @staticmethod
