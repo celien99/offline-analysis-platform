@@ -38,8 +38,48 @@ done
 
 # ---- 停止服务 ----
 if [ "$ACTION" = "stop" ]; then
+    # 1. 关闭端口 8000 上的 uvicorn 进程
+    PIDS_8000=$(lsof -ti :8000 -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$PIDS_8000" ]; then
+        log_info "关闭端口 8000 占用进程: $PIDS_8000"
+        kill $PIDS_8000 2>/dev/null || true
+        sleep 1
+        # 顽固进程强制 kill
+        STILL_ALIVE=$(lsof -ti :8000 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$STILL_ALIVE" ]; then
+            kill -9 $STILL_ALIVE 2>/dev/null || true
+        fi
+    fi
+
+    # 2. 关闭端口 3000 上的 vite 进程
+    PIDS_3000=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$PIDS_3000" ]; then
+        log_info "关闭端口 3000 占用进程: $PIDS_3000"
+        kill $PIDS_3000 2>/dev/null || true
+        sleep 1
+        STILL_ALIVE=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$STILL_ALIVE" ]; then
+            kill -9 $STILL_ALIVE 2>/dev/null || true
+        fi
+    fi
+
+    # 3. 关闭 Celery worker 进程
+    CELERY_PIDS=$(pgrep -f "celery.*worker" 2>/dev/null || true)
+    if [ -n "$CELERY_PIDS" ]; then
+        log_info "关闭 Celery Worker: $CELERY_PIDS"
+        kill $CELERY_PIDS 2>/dev/null || true
+    fi
+
+    # 4. 停止所有 Docker 服务
     log_info "停止所有 Docker 服务..."
     docker compose -f backend/docker-compose.yml down
+
+    # 5. 最终确认
+    REMAINING_8000=$(lsof -ti :8000 -sTCP:LISTEN 2>/dev/null || true)
+    REMAINING_3000=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+    if [ -z "$REMAINING_8000" ] && [ -z "$REMAINING_3000" ]; then
+        log_info "端口 8000/3000 已释放"
+    fi
     log_info "已停止全部服务"
     exit 0
 fi
@@ -193,6 +233,31 @@ echo ""
 echo "  停止服务: ./start.sh --stop"
 echo ""
 
-# 等待后台进程（Ctrl+C 时优雅退出）
-trap "log_info '正在关闭...'; kill $API_PID $WORKER_PID ${FRONTEND_PID:-} 2>/dev/null; docker compose -f backend/docker-compose.yml stop; exit 0" INT TERM
+# Ctrl+C / 进程终止时的清理函数
+cleanup() {
+    echo ""
+    log_info "正在关闭所有服务..."
+
+    # 关闭后台子进程
+    kill $API_PID 2>/dev/null || true
+    kill $WORKER_PID 2>/dev/null || true
+    if [ -n "${FRONTEND_PID:-}" ]; then
+        kill $FRONTEND_PID 2>/dev/null || true
+    fi
+
+    # 清理端口 8000 / 3000 上的残留进程
+    PIDS_8000=$(lsof -ti :8000 -sTCP:LISTEN 2>/dev/null || true)
+    [ -n "$PIDS_8000" ] && kill -9 $PIDS_8000 2>/dev/null || true
+    PIDS_3000=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+    [ -n "$PIDS_3000" ] && kill -9 $PIDS_3000 2>/dev/null || true
+
+    # 清理 Celery 残留
+    CELERY_PIDS=$(pgrep -f "celery.*worker" 2>/dev/null || true)
+    [ -n "$CELERY_PIDS" ] && kill $CELERY_PIDS 2>/dev/null || true
+
+    docker compose -f backend/docker-compose.yml stop 2>/dev/null || true
+    log_info "已关闭"
+    exit 0
+}
+trap cleanup INT TERM
 wait
