@@ -10,6 +10,7 @@ from app.models.registry import ModelVersion, DeploymentRecord
 from app.models.training import TrainingRun
 from app.models.knowledge import KnowledgeEntry, RuleEntry
 from app.models.taxonomy import DefectTreeNode
+from app.models.graph import SimilarityEdge, GraphBuildRecord
 
 __all__ = [
     "BaseModel",
@@ -25,4 +26,6 @@ __all__ = [
     "KnowledgeEntry",
     "RuleEntry",
     "DefectTreeNode",
+    "SimilarityEdge",
+    "GraphBuildRecord",
 ]
