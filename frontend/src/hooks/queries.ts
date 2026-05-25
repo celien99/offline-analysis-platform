@@ -122,7 +122,7 @@ export function useRulesList(typeFilter?: string) {
   return useQuery({
     queryKey: ["rules", "list", typeFilter],
     queryFn: ({ signal }) =>
-      rulesApi.list({ rule_type: typeFilter, page_size: 200 }, signal),
+      rulesApi.list({ rule_type: typeFilter, page_size: 100 }, signal),
     placeholderData: (prev) => prev,
     select: (data) => data.items,
   });
