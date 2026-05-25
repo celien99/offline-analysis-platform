@@ -202,21 +202,20 @@ class RuleEngineService:
         offset: int = 0,
         limit: int = 20,
     ) -> tuple[list[RuleEntry], int]:
-        if enabled is not None:
-            if enabled:
-                rules = await self._repo.get_enabled_rules()
-            else:
-                rules = await self._repo.get_disabled_rules()
-            total = len(rules)
-            rules = rules[offset:offset + limit]
-            return list(rules), total
+        """列出规则，支持 rule_type 和 enabled 组合过滤。"""
+        # 构建基础查询 filters
+        filters: dict[str, object] = {}
         if rule_type:
-            rules = await self._repo.get_by_type(rule_type)
-            total = len(rules)
-            rules = rules[offset:offset + limit]
-            return list(rules), total
-        rules = await self._repo.list_all(offset=offset, limit=limit)
-        total = await self._repo.count()
+            filters["rule_type"] = rule_type
+        if enabled is not None:
+            filters["enabled"] = enabled
+
+        if filters:
+            rules = await self._repo.list_all(offset=offset, limit=limit, **filters)
+            total = await self._repo.count(**filters)
+        else:
+            rules = await self._repo.list_all(offset=offset, limit=limit)
+            total = await self._repo.count()
         return list(rules), total
 
     async def get_rule(self, rule_id: str) -> RuleEntry | None:

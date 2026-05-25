@@ -79,7 +79,7 @@ class RuleRepository(BaseRepository):
         return result.scalars().all()
 
     async def get_by_type(self, rule_type: str) -> Sequence[RuleEntry]:
-        return await self.list_all(rule_type=rule_type, enabled=True)
+        return await self.list_all(rule_type=rule_type)
 
     async def get_by_camera(self, camera_id: str) -> Sequence[RuleEntry]:
         stmt = select(RuleEntry).where(
