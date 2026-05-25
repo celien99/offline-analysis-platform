@@ -22,10 +22,12 @@ export const rulesApi = {
     del(`/rules/${ruleId}`, { signal }),
 
   generateFromKnowledge: (knowledgeEntryId: string, signal?: AbortSignal) =>
-    post(`/rules/generate-from-knowledge?knowledge_entry_id=${knowledgeEntryId}`, undefined, { signal }),
+    post<{ rule_id: string; name: string; rule_type: string }[]>(
+      `/rules/generate-from-knowledge?knowledge_entry_id=${knowledgeEntryId}`, undefined, { signal }),
 
   deploy: (target: string = "production_line_a", signal?: AbortSignal) =>
-    post(`/rules/deploy?target=${target}`, undefined, { signal }),
+    post<{ status: string; target: string; destination: string; rule_count: number }>(
+      `/rules/deploy?target=${target}`, undefined, { signal }),
 
   preview: (signal?: AbortSignal) =>
     get<Record<string, unknown>[]>("/rules/preview", { signal }),

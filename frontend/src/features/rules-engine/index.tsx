@@ -101,7 +101,7 @@ export default function RulesManagement() {
   const handleGenerateFromKb = async (values: Record<string, unknown>) => {
     try {
       const data = await generateMutation.mutateAsync(values.knowledge_entry_id as string);
-      message.success(`Generated ${(data as unknown[]).length} rule(s)`);
+      message.success(`Generated ${data.length} rule(s)`);
       setGenFromKbVisible(false);
       kbForm.resetFields();
     } catch {
