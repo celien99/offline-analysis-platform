@@ -11,6 +11,7 @@ const RulesManagement = lazy(() => import("../features/rules-engine"));
 const Training = lazy(() => import("../features/training"));
 const ModelDeploy = lazy(() => import("../features/model-deploy"));
 const Inspection = lazy(() => import("../features/inspection"));
+const CameraConfig = lazy(() => import("../features/camera-config"));
 
 function LazyFallback() {
   return (
@@ -33,6 +34,7 @@ export default function AppRouter() {
         <Route path="/rules" element={<RulesManagement />} />
         <Route path="/training" element={<Training />} />
         <Route path="/deploy" element={<ModelDeploy />} />
+        <Route path="/cameras" element={<CameraConfig />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
