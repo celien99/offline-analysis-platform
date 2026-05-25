@@ -55,7 +55,7 @@ frontend/dist/
 CLAUDE.md
 prompt.md
 
-models/
+/models/
 
 outputs/
 sample_images/

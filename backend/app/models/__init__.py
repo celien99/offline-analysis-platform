@@ -9,6 +9,7 @@ from app.models.review import ReviewRecord
 from app.models.registry import ModelVersion, DeploymentRecord
 from app.models.training import TrainingRun
 from app.models.knowledge import KnowledgeEntry, RuleEntry
+from app.models.taxonomy import DefectTreeNode
 
 __all__ = [
     "BaseModel",
@@ -23,4 +24,5 @@ __all__ = [
     "TrainingRun",
     "KnowledgeEntry",
     "RuleEntry",
+    "DefectTreeNode",
 ]
