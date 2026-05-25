@@ -40,12 +40,15 @@ class NoiseReviewService:
         self._membership_repo = ClusterMembershipRepository(session)
 
     async def list_noise_anomalies(
-        self, *, offset: int = 0, limit: int = 100
+        self, *, offset: int = 0, limit: int = 100,
+        seat_model_id: str | None = None,
     ) -> tuple[list[AnomalyRecord], int]:
         records = await self._anomaly_repo.get_noise_anomalies(
-            offset=offset, limit=limit
+            offset=offset, limit=limit, seat_model_id=seat_model_id,
         )
-        total = await self._anomaly_repo.count_noise_anomalies()
+        total = await self._anomaly_repo.count_noise_anomalies(
+            seat_model_id=seat_model_id,
+        )
         return list(records), total
 
     async def review_noise_anomaly(
@@ -73,6 +76,7 @@ class NoiseReviewService:
         cluster_id = generate_uuid()
         cluster = Cluster(
             id=cluster_id,
+            seat_model_id=anomaly.seat_model_id,
             name=f"noise_{anomaly_id[:8]}",
             sample_count=1,
             status="reviewed",

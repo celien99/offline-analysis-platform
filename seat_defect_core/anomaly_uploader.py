@@ -66,6 +66,8 @@ def upload_camera_result(
         "detected_at": datetime.now(tz=timezone.utc).isoformat(),
         "decision_reason": result.reason,
     }
+    if result.seat_model_id:
+        data["seat_model_id"] = result.seat_model_id
 
     # 传递过滤器分类器决策元数据
     if result.filter_result is not None:

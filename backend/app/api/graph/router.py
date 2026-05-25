@@ -30,7 +30,9 @@ async def build_similarity_graph(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     service = GraphService(session)
-    record = await service.build_graph(k=request.k)
+    record = await service.build_graph(
+        k=request.k, seat_model_id=request.seat_model_id,
+    )
     return {
         "message": "图谱构建完成",
         "build_id": record.id,

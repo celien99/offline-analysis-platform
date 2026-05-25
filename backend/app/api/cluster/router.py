@@ -54,6 +54,7 @@ async def list_clusters(
     status: str | None = Query(default=None),
     review_status: str | None = Query(default=None),
     defect_type: str | None = Query(default=None),
+    seat_model_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -65,6 +66,7 @@ async def list_clusters(
         status=status,
         review_status=review_status,
         defect_type=defect_type,
+        seat_model_id=seat_model_id,
         offset=offset,
         limit=page_size,
     )
@@ -75,6 +77,7 @@ async def list_clusters(
         urls = await _resolve_image_urls(rep_ids, session, minio)
         summaries.append(ClusterSummary(
             cluster_id=c.id,
+            seat_model_id=c.seat_model_id,
             name=c.name,
             sample_count=c.sample_count,
             possible_type=c.possible_type,
@@ -106,11 +109,14 @@ async def list_clusters(
 
 @router.get("/visualization")
 async def get_cluster_visualization(
+    seat_model_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, object]:
     """Return cluster data formatted for Plotly scatter plot visualization."""
     service = ClusteringService(session)
-    clusters, _ = await service.list_clusters(offset=0, limit=10000)
+    clusters, _ = await service.list_clusters(
+        seat_model_id=seat_model_id, offset=0, limit=10000
+    )
 
     scatter_data: list[dict[str, object]] = []
     summary: dict[str, int] = {

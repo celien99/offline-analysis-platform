@@ -176,9 +176,15 @@ class ConfigBuilder:
         patchcore["threshold_quantile"] = cam.patchcore_threshold
 
         filter_classifier: dict[str, object] = dict(self.DEFAULT_FILTER_CLASSIFIER)
-        filter_classifier["model_path"] = self._resolve_path(
-            str(filter_classifier["model_path"])
+        filter_clf_path = self._resolve_model_path(
+            cam.filter_classifier_model_version_id, model_paths
         )
+        if filter_clf_path:
+            filter_classifier["model_path"] = filter_clf_path
+        else:
+            filter_classifier["model_path"] = self._resolve_path(
+                str(filter_classifier["model_path"])
+            )
 
         rule_engine: dict[str, object] = dict(self.DEFAULT_RULE_ENGINE)
         deployed_rules = rule_engine.get("deployed_rules_path")

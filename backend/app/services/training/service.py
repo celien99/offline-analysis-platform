@@ -23,7 +23,9 @@ class TrainingService:
         self._cluster_repo = ClusterRepository(session)
         self._model_version_repo = ModelVersionRepository(session)
 
-    async def get_training_readiness(self) -> dict[str, object]:
+    async def get_training_readiness(
+        self, seat_model_id: str | None = None,
+    ) -> dict[str, object]:
         """检查是否有足够的新审核标签触发自动训练。"""
         from app.core.config import settings
         from app.repositories.training.repository import TrainingRunRepository
@@ -37,8 +39,12 @@ class TrainingService:
             else datetime(2000, 1, 1, tzinfo=timezone.utc)
         )
 
-        total_reviewed = await self._cluster_repo.count_reviewed()
-        new_reviewed = await self._cluster_repo.count_reviewed_since(since)
+        total_reviewed = await self._cluster_repo.count_reviewed(
+            seat_model_id=seat_model_id,
+        )
+        new_reviewed = await self._cluster_repo.count_reviewed_since(
+            since, seat_model_id=seat_model_id,
+        )
 
         ready = (
             total_reviewed >= settings.auto_train_min_total_samples
@@ -63,6 +69,7 @@ class TrainingService:
         self,
         *,
         anomaly_ids: list[str] | None = None,
+        seat_model_id: str | None = None,
     ) -> dict[str, list[str]]:
         training_data: dict[str, list[str]] = {
             "real_defect": [],
@@ -70,7 +77,7 @@ class TrainingService:
         }
 
         reviewed_clusters = await self._cluster_repo.get_by_status(
-            "reviewed", offset=0, limit=10000
+            "reviewed", offset=0, limit=10000, seat_model_id=seat_model_id,
         )
 
         membership_repo = ClusterMembershipRepository(self._session)

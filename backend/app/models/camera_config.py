@@ -55,6 +55,12 @@ class CameraConfig(BaseModel):
         Boolean, nullable=False, default=False, comment="是否启用三分区模式",
     )
 
+    # Filter Classifier 模型引用
+    filter_classifier_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="Filter Classifier 模型版本 ID",
+    )
+
     # 三分区模型引用
     region_upper_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),

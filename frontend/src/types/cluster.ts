@@ -1,5 +1,6 @@
 export interface ClusterSummary {
   cluster_id: string;
+  seat_model_id: string | null;
   name: string | null;
   sample_count: number;
   possible_type: string | null;

@@ -76,8 +76,13 @@ export default function CameraConfigPage() {
   // 按类型分别获取模型下拉选项
   const { data: yoloModels } = useModelOptions("yolo");
   const { data: patchcoreModels } = useModelOptions("patchcore");
+  const { data: filterClassifierModels } = useModelOptions("filter_classifier");
   // 合并所有模型用于表格展示
-  const allModels = [...(yoloModels ?? []), ...(patchcoreModels ?? [])];
+  const allModels = [
+    ...(yoloModels ?? []),
+    ...(patchcoreModels ?? []),
+    ...(filterClassifierModels ?? []),
+  ];
 
   const createSeatMut = useCreateSeatModel();
   const updateSeatMut = useUpdateSeatModel();
@@ -137,6 +142,7 @@ export default function CameraConfigPage() {
       region_mode_enabled: false,
       patchcore_model_version_id: null,
       yolo_model_version_id: null,
+      filter_classifier_model_version_id: null,
       region_upper_model_version_id: null,
       region_middle_model_version_id: null,
       region_lower_model_version_id: null,
@@ -150,6 +156,7 @@ export default function CameraConfigPage() {
       camera_id: record.camera_id,
       patchcore_model_version_id: record.patchcore_model_version_id,
       yolo_model_version_id: record.yolo_model_version_id,
+      filter_classifier_model_version_id: record.filter_classifier_model_version_id,
       detection_confidence: record.detection_confidence,
       patchcore_image_size: record.patchcore_image_size,
       patchcore_threshold: record.patchcore_threshold,
@@ -221,6 +228,18 @@ export default function CameraConfigPage() {
     allowClear: true,
     loading: !patchcoreModels,
     options: (patchcoreModels ?? []).map((m) => ({
+      label: `${m.model_name} (${m.version})`,
+      value: m.model_id,
+    })),
+  };
+
+  const filterClassifierSelectProps = {
+    showSearch: true,
+    optionFilterProp: "label" as const,
+    placeholder: "选择 Filter Classifier 模型（可选）",
+    allowClear: true,
+    loading: !filterClassifierModels,
+    options: (filterClassifierModels ?? []).map((m) => ({
       label: `${m.model_name} (${m.version})`,
       value: m.model_id,
     })),
@@ -341,6 +360,13 @@ export default function CameraConfigPage() {
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
+                    title: "Filter Classifier",
+                    dataIndex: "filter_classifier_model_version_id",
+                    width: 180,
+                    ellipsis: true,
+                    render: (v: string | null) => modelLabel(v, allModels),
+                  },
+                  {
                     title: "Region 模式",
                     dataIndex: "region_mode_enabled",
                     width: 100,
@@ -439,6 +465,12 @@ export default function CameraConfigPage() {
             rules={[{ required: true, message: "请选择 PatchCore 模型" }]}
           >
             <Select {...patchcoreSelectProps} />
+          </Form.Item>
+          <Form.Item
+            name="filter_classifier_model_version_id"
+            label="Filter Classifier 模型"
+          >
+            <Select {...filterClassifierSelectProps} />
           </Form.Item>
 
           <Typography.Title level={5}>高级参数</Typography.Title>

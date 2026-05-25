@@ -30,6 +30,7 @@ class AnomalyQueryParams(BaseModel):
 class AnomalyResponse(BaseModel):
     anomaly_id: str
     camera_id: str
+    seat_model_id: str | None = None
     source: str
     anomaly_score: float | None
     date_folder: str

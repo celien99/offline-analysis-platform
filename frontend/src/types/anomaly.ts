@@ -1,6 +1,7 @@
 export interface AnomalyRecord {
   anomaly_id: string;
   camera_id: string;
+  seat_model_id: string | null;
   source: string;
   anomaly_score: number | null;
   date_folder: string;

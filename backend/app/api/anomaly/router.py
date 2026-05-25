@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 )
 async def upload_anomaly_with_files(
     camera_id: str = Form(..., max_length=64),
+    seat_model_id: str | None = Form(default=None, max_length=128),
     source: str = Form(
         default="patchcore", pattern=r"^(patchcore|filter_classifier|rule_engine)$"
     ),
@@ -60,6 +61,7 @@ async def upload_anomaly_with_files(
     service = AnomalyService(session, minio)
     anomalies = await service.create_anomaly_with_files(
         camera_id=camera_id,
+        seat_model_id=seat_model_id,
         source=source,
         anomaly_score=anomaly_score,
         date_folder=date_folder,
@@ -89,6 +91,7 @@ async def upload_anomaly_with_files(
 )
 async def list_anomalies(
     camera_id: str | None = Query(default=None),
+    seat_model_id: str | None = Query(default=None),
     source: str | None = Query(default=None),
     status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -100,6 +103,7 @@ async def list_anomalies(
     offset = (page - 1) * page_size
     records, total = await service.list_anomalies(
         camera_id=camera_id,
+        seat_model_id=seat_model_id,
         source=source,
         status=status,
         offset=offset,
@@ -151,6 +155,7 @@ async def reprocess_anomaly(
     response_model=dict,
 )
 async def list_noise_anomalies(
+    seat_model_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -162,7 +167,7 @@ async def list_noise_anomalies(
     service = NoiseReviewService(session)
     offset = (page - 1) * page_size
     records, total = await service.list_noise_anomalies(
-        offset=offset, limit=page_size
+        offset=offset, limit=page_size, seat_model_id=seat_model_id,
     )
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     return {
@@ -180,6 +185,7 @@ async def list_noise_anomalies(
 )
 async def get_filter_classifier_stats(
     camera_id: str | None = Query(default=None),
+    seat_model_id: str | None = Query(default=None),
     days: int = Query(default=7, ge=1, le=90),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
@@ -196,6 +202,8 @@ async def get_filter_classifier_stats(
     base_filters = []
     if camera_id:
         base_filters.append(AnomalyRecord.camera_id == camera_id)
+    if seat_model_id:
+        base_filters.append(AnomalyRecord.seat_model_id == seat_model_id)
 
     action_stmt = (
         select(
@@ -323,6 +331,7 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
     return AnomalyResponse(
         anomaly_id=record.id,
         camera_id=record.camera_id,
+        seat_model_id=record.seat_model_id,
         source=record.source,
         anomaly_score=record.anomaly_score,
         date_folder=record.date_folder,

@@ -42,6 +42,7 @@ class CameraConfigCreate(BaseModel):
     patchcore_image_size: int = Field(default=256, ge=64, le=1024)
     patchcore_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
     region_mode_enabled: bool = False
+    filter_classifier_model_version_id: str | None = Field(default=None, description="Filter Classifier 模型版本 ID")
     region_upper_model_version_id: str | None = Field(default=None, description="upper 区域模型版本 ID")
     region_middle_model_version_id: str | None = Field(default=None, description="middle 区域模型版本 ID")
     region_lower_model_version_id: str | None = Field(default=None, description="lower 区域模型版本 ID")
@@ -55,6 +56,7 @@ class CameraConfigUpdate(BaseModel):
     patchcore_image_size: int | None = Field(default=None, ge=64, le=1024)
     patchcore_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     region_mode_enabled: bool | None = None
+    filter_classifier_model_version_id: str | None = Field(default=None)
     region_upper_model_version_id: str | None = Field(default=None)
     region_middle_model_version_id: str | None = Field(default=None)
     region_lower_model_version_id: str | None = Field(default=None)
@@ -66,6 +68,7 @@ class CameraConfigResponse(BaseModel):
     seat_model_id: str
     patchcore_model_version_id: str | None
     yolo_model_version_id: str | None
+    filter_classifier_model_version_id: str | None
     detection_confidence: float
     patchcore_image_size: int
     patchcore_threshold: float

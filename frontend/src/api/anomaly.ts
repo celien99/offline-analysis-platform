@@ -4,6 +4,7 @@ import type { AnomalyRecord, PaginatedResponse } from "../types";
 export const anomalyApi = {
   list: (params: {
     camera_id?: string;
+    seat_model_id?: string;
     source?: string;
     status?: string;
     page?: number;
