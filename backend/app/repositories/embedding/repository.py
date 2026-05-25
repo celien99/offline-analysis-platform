@@ -9,7 +9,7 @@ from app.models.embedding import EmbeddingVector
 from app.repositories.base import BaseRepository
 
 
-class EmbeddingRepository(BaseRepository):
+class EmbeddingRepository(BaseRepository[EmbeddingVector]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, EmbeddingVector)
 

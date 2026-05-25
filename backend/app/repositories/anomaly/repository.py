@@ -9,7 +9,7 @@ from app.models.anomaly import AnomalyRecord
 from app.repositories.base import BaseRepository
 
 
-class AnomalyRepository(BaseRepository):
+class AnomalyRepository(BaseRepository[AnomalyRecord]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, AnomalyRecord)
 

@@ -9,7 +9,7 @@ from app.models.taxonomy import DefectTreeNode
 from app.repositories.base import BaseRepository
 
 
-class TaxonomyRepository(BaseRepository):
+class TaxonomyRepository(BaseRepository[DefectTreeNode]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, DefectTreeNode)
 

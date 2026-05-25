@@ -9,7 +9,7 @@ from app.models.training import TrainingRun
 from app.repositories.base import BaseRepository
 
 
-class TrainingRunRepository(BaseRepository):
+class TrainingRunRepository(BaseRepository[TrainingRun]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, TrainingRun)
 

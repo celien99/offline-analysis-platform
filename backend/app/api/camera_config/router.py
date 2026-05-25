@@ -9,6 +9,7 @@ from app.schemas.camera_config import (
     CameraConfigCreate,
     CameraConfigResponse,
     CameraConfigUpdate,
+    CameraOption,
     SeatModelCreate,
     SeatModelOption,
     SeatModelResponse,
@@ -37,7 +38,7 @@ async def list_seat_model_options(
                 seat_model_id=sm.seat_model_id,
                 display_name=sm.display_name,
                 cameras=[
-                    {"camera_id": c.camera_id}
+                    CameraOption(camera_id=c.camera_id)
                     for c in cameras
                 ],
             )
@@ -107,6 +108,7 @@ async def delete_seat_model(
         raise HTTPException(status_code=404, detail="座椅型号不存在")
     await seat_repo.soft_delete(seat_model_db_id)
     await session.commit()
+    return None
 
 
 # ── Camera Config CRUD ──
@@ -191,3 +193,4 @@ async def delete_camera(
         raise HTTPException(status_code=404, detail="相机配置不存在")
     await cam_repo.soft_delete(camera_db_id)
     await session.commit()
+    return None

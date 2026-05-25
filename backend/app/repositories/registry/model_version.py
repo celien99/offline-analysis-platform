@@ -7,7 +7,7 @@ from app.models.registry import ModelVersion
 from app.repositories.base import BaseRepository
 
 
-class ModelVersionRepository(BaseRepository):
+class ModelVersionRepository(BaseRepository[ModelVersion]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ModelVersion)
 
