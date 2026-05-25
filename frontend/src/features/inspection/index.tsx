@@ -4,7 +4,6 @@ import {
   Table,
   Button,
   Tag,
-  Input,
   Upload,
   Space,
   message,
@@ -14,62 +13,80 @@ import {
   Col,
   Progress,
   Spin,
+  Select,
 } from "antd";
 import {
   PlayCircleOutlined,
-  PlusOutlined,
-  DeleteOutlined,
   InboxOutlined,
   ScanOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
-import { useInspectionRun, useInspectionResult } from "../../hooks/queries";
+import { useInspectionRun, useInspectionResult, useSeatModelOptions } from "../../hooks/queries";
+import type { SeatModelOption } from "../../types";
 
 const { Dragger } = Upload;
 
 interface CameraSlot {
-  key: number;
   cameraId: string;
   file: File | null;
 }
 
-const DEFAULT_CAMERAS = [
-  { key: 0, cameraId: "cam_back", file: null },
-  { key: 1, cameraId: "cam_side", file: null },
-];
-
 export default function InspectionPage() {
-  const [slots, setSlots] = useState<CameraSlot[]>(DEFAULT_CAMERAS);
-  const [nextKey, setNextKey] = useState(DEFAULT_CAMERAS.length);
+  const [selectedSeatModel, setSelectedSeatModel] = useState<string | null>(null);
+  const [selectedCameras, setSelectedCameras] = useState<string[]>([]);
+  const [slots, setSlots] = useState<CameraSlot[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
 
+  const { data: seatModelOptions, isLoading: optionsLoading } = useSeatModelOptions();
   const runMutation = useInspectionRun();
   const { data: result } = useInspectionResult(taskId);
 
-  const addSlot = () => {
-    setSlots([...slots, { key: nextKey, cameraId: "", file: null }]);
-    setNextKey(nextKey + 1);
+  // 找到当前选中座椅型号的配置
+  const currentSeatModel: SeatModelOption | undefined = seatModelOptions?.find(
+    (s) => s.seat_model_id === selectedSeatModel,
+  );
+
+  // 座椅型号切换时，自动生成相机槽位
+  const handleSeatModelChange = (seatModelId: string) => {
+    setSelectedSeatModel(seatModelId);
+    const model = seatModelOptions?.find((s) => s.seat_model_id === seatModelId);
+    if (model) {
+      const allCameraIds = model.cameras.map((c) => c.camera_id);
+      setSelectedCameras(allCameraIds);
+      setSlots(allCameraIds.map((cid) => ({ cameraId: cid, file: null })));
+    }
   };
 
-  const removeSlot = (key: number) => {
-    if (slots.length <= 1) return;
-    setSlots(slots.filter((s) => s.key !== key));
+  // 相机多选变化时更新槽位
+  const handleCamerasChange = (cameraIds: string[]) => {
+    setSelectedCameras(cameraIds);
+    setSlots(
+      cameraIds.map((cid) => {
+        const existing = slots.find((s) => s.cameraId === cid);
+        return existing ?? { cameraId: cid, file: null };
+      }),
+    );
   };
 
-  const updateSlot = (key: number, patch: Partial<CameraSlot>) => {
-    setSlots(slots.map((s) => (s.key === key ? { ...s, ...patch } : s)));
+  const updateSlotFile = (cameraId: string, file: File | null) => {
+    setSlots(slots.map((s) => (s.cameraId === cameraId ? { ...s, file } : s)));
   };
 
   const handleRun = () => {
-    const filled = slots.filter((s) => s.cameraId.trim() && s.file);
+    if (!selectedSeatModel) {
+      message.error("请选择座椅型号");
+      return;
+    }
+    const filled = slots.filter((s) => s.file);
     if (filled.length === 0) {
-      message.error("请至少配置一个相机并上传图像");
+      message.error("请至少上传一张图像");
       return;
     }
 
     const formData = new FormData();
-    formData.append("camera_ids", filled.map((s) => s.cameraId.trim()).join(","));
+    formData.append("seat_model_id", selectedSeatModel);
+    formData.append("camera_ids", filled.map((s) => s.cameraId).join(","));
     filled.forEach((s) => formData.append("image_files", s.file!));
 
     runMutation.mutate(formData, {
@@ -83,7 +100,9 @@ export default function InspectionPage() {
 
   const handleReset = () => {
     setTaskId(null);
-    setSlots(DEFAULT_CAMERAS.map((s) => ({ ...s, file: null })));
+    if (currentSeatModel) {
+      setSlots(currentSeatModel.cameras.map((c) => ({ cameraId: c.camera_id, file: null })));
+    }
   };
 
   const statusColor = (s: string) => {
@@ -109,67 +128,68 @@ export default function InspectionPage() {
       />
 
       <Row gutter={24}>
-        {/* 左侧：相机上传区 */}
+        {/* 左侧：配置区 */}
         <Col span={10}>
-          <Card
-            title={
-              <Space>
-                <ScanOutlined />
-                相机图像
-              </Space>
-            }
-            extra={
-              <Button icon={<PlusOutlined />} onClick={addSlot} disabled={isRunning} size="small">
-                添加相机
-              </Button>
-            }
-          >
-            <Typography.Paragraph type="secondary" className="text-xs mb-2">
-              为每个相机填写 ID 并拖拽上传对应图像。
-            </Typography.Paragraph>
+          <Card title={<Space><ScanOutlined />检测配置</Space>}>
+            <Typography.Text strong>1. 选择座椅型号</Typography.Text>
+            <Select
+              style={{ width: "100%", marginTop: 4, marginBottom: 16 }}
+              placeholder="选择座椅型号"
+              loading={optionsLoading}
+              value={selectedSeatModel}
+              onChange={handleSeatModelChange}
+              disabled={isRunning}
+              allowClear
+              options={(seatModelOptions ?? []).map((s) => ({
+                value: s.seat_model_id,
+                label: `${s.display_name} (${s.seat_model_id})`,
+              }))}
+            />
 
-            {slots.map((slot) => (
-              <div key={slot.key} className="mb-3 p-3 border rounded-lg border-gray-200">
-                <Row gutter={8} align="middle" className="mb-2">
-                  <Col flex="auto">
-                    <Input
-                      placeholder="相机ID"
-                      value={slot.cameraId}
-                      onChange={(e) => updateSlot(slot.key, { cameraId: e.target.value })}
-                      disabled={isRunning}
-                      size="small"
-                    />
-                  </Col>
-                  <Col>
-                    <Button
-                      icon={<DeleteOutlined />}
-                      danger
-                      size="small"
-                      onClick={() => removeSlot(slot.key)}
-                      disabled={slots.length <= 1 || isRunning}
-                    />
-                  </Col>
-                </Row>
-                <Dragger
-                  accept="image/*"
-                  maxCount={1}
+            {currentSeatModel && (
+              <>
+                <Typography.Text strong>2. 选择相机</Typography.Text>
+                <Select
+                  style={{ width: "100%", marginTop: 4, marginBottom: 16 }}
+                  mode="multiple"
+                  placeholder="勾选检测相机"
+                  value={selectedCameras}
+                  onChange={handleCamerasChange}
                   disabled={isRunning}
-                  beforeUpload={(file) => {
-                    updateSlot(slot.key, { file });
-                    return false;
-                  }}
-                  onRemove={() => updateSlot(slot.key, { file: null })}
-                  className={slot.file ? "border-green-400" : ""}
-                >
-                  <p className="ant-upload-drag-icon">
-                    <InboxOutlined />
-                  </p>
-                  <p className="ant-upload-text">
-                    {slot.file ? slot.file.name : "点击或拖拽图像到此区域"}
-                  </p>
-                </Dragger>
-              </div>
-            ))}
+                  options={currentSeatModel.cameras.map((c) => ({
+                    value: c.camera_id,
+                    label: c.camera_id,
+                  }))}
+                />
+              </>
+            )}
+
+            {slots.length > 0 && (
+              <>
+                <Typography.Text strong>3. 上传图像</Typography.Text>
+                {slots.map((slot) => (
+                  <div key={slot.cameraId} style={{ marginBottom: 12, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                    <Typography.Text strong>{slot.cameraId}</Typography.Text>
+                    <Dragger
+                      accept="image/*"
+                      maxCount={1}
+                      disabled={isRunning}
+                      beforeUpload={(file) => {
+                        updateSlotFile(slot.cameraId, file);
+                        return false;
+                      }}
+                      onRemove={() => updateSlotFile(slot.cameraId, null)}
+                      style={slot.file ? { borderColor: "#52c41a" } : undefined}
+                    >
+                      <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+                      <p className="ant-upload-text">
+                        {slot.file ? slot.file.name : "点击或拖拽图像到此区域"}
+                      </p>
+                    </Dragger>
+                  </div>
+                ))}
+              </>
+            )}
 
             <Button
               type="primary"
@@ -178,7 +198,7 @@ export default function InspectionPage() {
               block
               onClick={handleRun}
               loading={runMutation.isPending}
-              disabled={isRunning}
+              disabled={isRunning || !selectedSeatModel || slots.length === 0}
             >
               开始检测
             </Button>
@@ -189,14 +209,15 @@ export default function InspectionPage() {
         <Col span={14}>
           <Card title="检测结果">
             {isRunning && (
-              <div className="text-center py-8">
-                <Spin size="large" tip="检测运行中，请稍候..." />
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 12, color: "#999" }}>检测运行中，请稍候...</div>
               </div>
             )}
 
             {result && !isRunning && (
               <>
-                <Descriptions column={2} size="small" bordered className="mb-4">
+                <Descriptions column={2} size="small" bordered style={{ marginBottom: 16 }}>
                   <Descriptions.Item label="任务 ID" span={2}>
                     {result.task_id}
                   </Descriptions.Item>
@@ -214,7 +235,7 @@ export default function InspectionPage() {
                 </Descriptions>
 
                 {result.error_message && (
-                  <Typography.Text type="danger" className="block mb-4">
+                  <Typography.Text type="danger" style={{ display: "block", marginBottom: 16 }}>
                     {result.error_message}
                   </Typography.Text>
                 )}
@@ -235,26 +256,26 @@ export default function InspectionPage() {
                           title: "异常分数",
                           dataIndex: "anomaly_score",
                           width: 120,
-                          render: (v: number | null) => (
+                          render: (v: number | null) =>
                             v != null ? (
                               <Space size={4}>
-                                <span className="text-xs">{v.toFixed(4)}</span>
+                                <span style={{ fontSize: 12 }}>{v.toFixed(4)}</span>
                                 <Progress
                                   percent={Math.min(v * 100, 100)}
                                   showInfo={false}
                                   size="small"
                                   strokeColor={v > 0.5 ? "#ff4d4f" : "#52c41a"}
-                                  className="w-12 inline-block"
+                                  style={{ width: 48, display: "inline-block" }}
                                 />
                               </Space>
-                            ) : "-"
-                          ),
+                            ) : "-",
                         },
                         {
                           title: "是否异常",
                           dataIndex: "is_anomaly",
                           width: 90,
-                          render: (v: boolean | null) => (v == null ? "-" : <Tag color={v ? "red" : "green"}>{v ? "是" : "否"}</Tag>),
+                          render: (v: boolean | null) =>
+                            v == null ? "-" : <Tag color={v ? "red" : "green"}>{v ? "是" : "否"}</Tag>,
                         },
                         { title: "原因", dataIndex: "decision_reason", ellipsis: true },
                       ]}
@@ -263,24 +284,14 @@ export default function InspectionPage() {
                       size="small"
                     />
 
-                    {/* 各机位检测叠加图 */}
-                    <Typography.Title level={5} className="mt-4">
-                      检测图像
-                    </Typography.Title>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 16,
-                        flexWrap: "wrap",
-                        justifyContent: "flex-start",
-                      }}
-                    >
+                    <Typography.Title level={5} style={{ marginTop: 16 }}>检测图像</Typography.Title>
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                       {result.camera_results.map((r) =>
                         r.overlay_image_base64 ? (
                           <Card
                             key={r.camera_id}
                             size="small"
-                            title={`${r.camera_id}`}
+                            title={r.camera_id}
                             extra={<Tag color={statusColor(r.status)}>{r.status}</Tag>}
                             style={{ width: 420 }}
                             styles={{ body: { padding: 0 } }}
@@ -288,12 +299,7 @@ export default function InspectionPage() {
                             <img
                               src={`data:image/jpeg;base64,${r.overlay_image_base64}`}
                               alt={`${r.camera_id} overlay`}
-                              style={{
-                                width: "100%",
-                                maxHeight: 400,
-                                objectFit: "contain",
-                                display: "block",
-                              }}
+                              style={{ width: "100%", maxHeight: 400, objectFit: "contain", display: "block" }}
                             />
                           </Card>
                         ) : null,
@@ -305,10 +311,10 @@ export default function InspectionPage() {
             )}
 
             {!taskId && !result && (
-              <div className="text-center py-8">
-                <ScanOutlined className="text-4xl text-gray-300 block mb-3" />
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <ScanOutlined style={{ fontSize: 40, color: "#d9d9d9", display: "block", marginBottom: 12 }} />
                 <Typography.Text type="secondary">
-                  上传图像并点击「开始检测」按钮
+                  选择座椅型号和相机，上传图像后点击「开始检测」
                 </Typography.Text>
               </div>
             )}
