@@ -75,9 +75,12 @@ class QwenVLMAnalyzer:
             {"type": "text", "text": ANALYSIS_PROMPT}
         ]
 
-        # 主图：缺陷区域裁剪
+        # 主图：缺陷区域裁剪（支持多张 crop，cluster 分析时传递更多样本给 VLM）
+        crop_imgs = request.crop_images.copy() if request.crop_images else []
         if request.crop_image is not None:
-            b64 = self._ndarray_to_base64(request.crop_image)
+            crop_imgs.insert(0, request.crop_image)
+        for crop_arr in crop_imgs:
+            b64 = self._ndarray_to_base64(crop_arr)
             content_parts.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"},

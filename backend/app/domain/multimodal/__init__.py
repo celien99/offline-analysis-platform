@@ -11,6 +11,7 @@ class VLMRequest:
     original_image: np.ndarray | None = None
     heatmap_image: np.ndarray | None = None
     crop_image: np.ndarray | None = None
+    crop_images: list[np.ndarray] = field(default_factory=list)
     cluster_representative_paths: list[str] = field(default_factory=list)
     cluster_metadata: dict[str, object] = field(default_factory=dict)
     prompt_override: str | None = None
