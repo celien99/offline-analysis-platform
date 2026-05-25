@@ -99,7 +99,7 @@
             },
 
             "filter_classifier": {
-              "enabled": false,
+              "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
               "device": "mps",
               "input_size": 224,
@@ -107,8 +107,9 @@
             },
 
             "rule_engine": {
-              "enabled": false,
-              "rules": []
+              "enabled": true,
+              "rules": [],
+              "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
 
             "regions": [
