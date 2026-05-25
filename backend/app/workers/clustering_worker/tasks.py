@@ -40,8 +40,8 @@ async def _run_clustering(
 ) -> dict[str, object]:
     async with async_session_factory() as session:
         embedding_repo = EmbeddingRepository(session)
-        # 只聚类非 reviewed 的 anomaly，避免覆盖已审核状态
-        rows = await embedding_repo.get_embeddings_excluding_reviewed()
+        # 只聚类 embedded（新嵌入）和 noise（未成簇）的 anomaly，避免将已聚类的 anomaly 重新打散
+        rows = await embedding_repo.get_embeddings_for_clustering()
 
     if anomaly_ids:
         rows = [(aid, vec) for aid, vec in rows if aid in anomaly_ids]

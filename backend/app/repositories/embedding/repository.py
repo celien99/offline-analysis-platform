@@ -91,7 +91,7 @@ class EmbeddingRepository(BaseRepository):
     async def get_embeddings_excluding_reviewed(
         self,
     ) -> list[tuple[str, list[float]]]:
-        """获取所有非 reviewed 状态的 anomaly 的 embedding，用于增量聚类。"""
+        """获取所有非 reviewed 状态的 anomaly 的 embedding，用于图谱构建等全量场景。"""
         from app.models.anomaly import AnomalyRecord
 
         stmt = (
@@ -101,6 +101,27 @@ class EmbeddingRepository(BaseRepository):
                 EmbeddingVector.deleted_at.is_(None),
                 AnomalyRecord.deleted_at.is_(None),
                 AnomalyRecord.status != "reviewed",
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]
+
+    async def get_embeddings_for_clustering(
+        self,
+    ) -> list[tuple[str, list[float]]]:
+        """获取待聚类的 anomaly embedding：仅包含 embedded（新嵌入）和 noise（未成簇）状态。
+
+        已聚类的 anomaly（status='clustered'）不应被重新打散，因此排除在外。
+        """
+        from app.models.anomaly import AnomalyRecord
+
+        stmt = (
+            select(EmbeddingVector)
+            .join(AnomalyRecord, EmbeddingVector.anomaly_id == AnomalyRecord.id)
+            .where(
+                EmbeddingVector.deleted_at.is_(None),
+                AnomalyRecord.deleted_at.is_(None),
+                AnomalyRecord.status.in_(["embedded", "noise"]),
             )
         )
         result = await self._session.execute(stmt)
