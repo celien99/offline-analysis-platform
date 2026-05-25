@@ -50,9 +50,9 @@ def upgrade() -> None:
             comment="相机标识符",
         ),
         sa.Column(
-            "seat_model_db_id", sa.String(128),
-            sa.ForeignKey("seat_models.id", ondelete="CASCADE"),
-            nullable=False, index=True, comment="关联 seat_models.id 外键",
+            "seat_model_id", sa.String(128),
+            sa.ForeignKey("seat_models.seat_model_id", ondelete="CASCADE"),
+            nullable=False, index=True, comment="所属座椅型号 seat_model_id",
         ),
         sa.Column(
             "patchcore_model_path", sa.String(512), nullable=False,
@@ -100,7 +100,7 @@ def upgrade() -> None:
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("trace_id", sa.String(32), nullable=True),
-        sa.UniqueConstraint("seat_model_db_id", "camera_id", name="uq_seat_camera"),
+        sa.UniqueConstraint("seat_model_id", "camera_id", name="uq_seat_camera"),
     )
 
 
