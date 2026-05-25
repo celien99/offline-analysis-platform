@@ -82,8 +82,10 @@ class FastFlowService:
             tensor = (tensor - mean) / std
             diagnostics["preprocess_ms"] = (perf_counter() - pre_start) * 1000.0
 
-            # 推理
+            # 推理 — 将输入移到模型所在设备
             infer_start = perf_counter()
+            device = next(self._model.parameters()).device
+            tensor = tensor.to(device)
             with torch.no_grad():
                 latents: list[torch.Tensor] = self._model(tensor)
             diagnostics["inference_ms"] = (perf_counter() - infer_start) * 1000.0

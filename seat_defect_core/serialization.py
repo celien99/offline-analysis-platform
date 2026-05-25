@@ -56,6 +56,7 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
         ],
         "color_result": color_result_to_dict(result.color_result),
         "filter_result": filter_result_to_dict(result.filter_result),
+        "fastflow_result": fastflow_result_to_dict(result.fastflow_result),
         "artifact_paths": dict(result.artifact_paths),
     }
 
@@ -126,6 +127,17 @@ def filter_result_to_dict(filter_result) -> Optional[Dict[str, Any]]:
         "false_alarm_score": filter_result.false_alarm_score,
         "class_id": filter_result.class_id,
         "diagnostics": dict(filter_result.diagnostics),
+    }
+
+
+def fastflow_result_to_dict(fastflow_result) -> Optional[Dict[str, Any]]:
+    if fastflow_result is None:
+        return None
+    return {
+        "anomaly_score": fastflow_result.anomaly_score,
+        "is_anomaly": fastflow_result.is_anomaly,
+        "threshold": fastflow_result.threshold,
+        "diagnostics": dict(fastflow_result.diagnostics),
     }
 
 
