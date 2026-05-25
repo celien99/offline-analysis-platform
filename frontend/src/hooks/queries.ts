@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
 import { cameraConfigApi } from "../api/camera-config";
-import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData } from "../types";
+import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData } from "../types";
 
 // ── Cluster queries ──
 
@@ -430,6 +430,26 @@ export function useDeleteCamera() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["cameras", variables.seatModelId] });
       queryClient.invalidateQueries({ queryKey: ["seat-models", "options"] });
+    },
+  });
+}
+
+// ── Model registry hooks ──
+
+export function useModelOptions(modelType?: string) {
+  return useQuery({
+    queryKey: ["model", "options", modelType],
+    queryFn: ({ signal }) => modelApi.listOptions(modelType, signal),
+    staleTime: 30_000,
+  });
+}
+
+export function useRegisterModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ModelRegisterData) => modelApi.register(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["model", "options"] });
     },
   });
 }
