@@ -64,9 +64,13 @@ class ClusteringPipeline:
         scaled = self._scaler.fit_transform(embeddings)
 
         # HDBSCAN 在原始高维空间聚类
+        # effective_min_cluster_size 不会低于 2，避免单点成簇
+        effective_min_cluster_size = max(2, min(self._hdbscan_min_cluster_size, len(scaled) - 1))
+        effective_min_samples = max(1, min(self._hdbscan_min_samples, len(scaled) - 1))
+
         self._hdbscan = HDBSCAN(
-            min_cluster_size=min(self._hdbscan_min_cluster_size, len(scaled) - 1),
-            min_samples=min(self._hdbscan_min_samples, len(scaled) - 1),
+            min_cluster_size=effective_min_cluster_size,
+            min_samples=effective_min_samples,
             metric=self._hdbscan_metric,
         )
         labels = self._hdbscan.fit_predict(scaled)
@@ -75,7 +79,7 @@ class ClusteringPipeline:
         # Fallback: 当 HDBSCAN 把全部点判为 noise 时，用余弦相似度连通分量法
         if np.all(labels == -1):
             labels, probabilities = self._cosine_similarity_clustering(
-                scaled, self._hdbscan_min_cluster_size
+                scaled, effective_min_cluster_size
             )
 
         # UMAP 仅用于 2D 可视化；小数据集可能触发 k>=N 错误，回退到 PCA
