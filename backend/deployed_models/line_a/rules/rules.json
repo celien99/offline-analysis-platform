@@ -1,6 +1,6 @@
 [
   {
-    "name": "Auto: Ignore pattern from KB aa01d022",
+    "name": "Auto: Ignore pattern from KB 4c1d8382",
     "enabled": true,
     "camera_id": "cam_back",
     "defect_type": null,
@@ -11,11 +11,11 @@
     "require_filter_real_defect": false,
     "action": "ignore",
     "source": "offline_platform",
-    "knowledge_entry_id": "aa01d0222f8541d09248bfc2a1ef67f6",
+    "knowledge_entry_id": "4c1d83822f894080afcc7b5c501cebc8",
     "priority": 5
   },
   {
-    "name": "Auto: Ignore pattern from KB 22468397",
+    "name": "Auto: Ignore pattern from KB de1ea901",
     "enabled": true,
     "camera_id": "cam_back",
     "defect_type": null,
@@ -26,7 +26,37 @@
     "require_filter_real_defect": false,
     "action": "ignore",
     "source": "offline_platform",
-    "knowledge_entry_id": "224683971b7e40f488b9bea619939488",
+    "knowledge_entry_id": "de1ea9013eac46e9a6122abd2e260652",
+    "priority": 5
+  },
+  {
+    "name": "Auto: Ignore pattern from KB 6a51e4ae",
+    "enabled": true,
+    "camera_id": "cam_back",
+    "defect_type": null,
+    "min_classifier_confidence": null,
+    "max_classifier_confidence": null,
+    "max_anomaly_score": null,
+    "require_filter_false_alarm": true,
+    "require_filter_real_defect": false,
+    "action": "ignore",
+    "source": "offline_platform",
+    "knowledge_entry_id": "6a51e4aeadd24d17859ccac00ae674b3",
+    "priority": 5
+  },
+  {
+    "name": "Auto: Ignore pattern from KB 1941069c",
+    "enabled": true,
+    "camera_id": "cam_back",
+    "defect_type": null,
+    "min_classifier_confidence": null,
+    "max_classifier_confidence": null,
+    "max_anomaly_score": null,
+    "require_filter_false_alarm": true,
+    "require_filter_real_defect": false,
+    "action": "ignore",
+    "source": "offline_platform",
+    "knowledge_entry_id": "1941069c9c1b4ca3824881765f830437",
     "priority": 5
   }
 ]

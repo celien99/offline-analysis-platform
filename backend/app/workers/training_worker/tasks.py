@@ -267,7 +267,7 @@ def train_filter_classifier(
         model_version = run_async(_create_model_version(
             model_name=f"filter_classifier_{model_type}",
             model_type=model_type,
-            artifact_path=str(torchscript_path),
+            artifact_path=str(torchscript_path.resolve()),
             metrics=numeric_metrics,
             mlflow_run_id=mlflow_run_id,
         ))
@@ -632,7 +632,7 @@ def train_metric_embedding(
         model_version = run_async(_create_model_version(
             model_name=model_name,
             model_type="metric_embedding",
-            artifact_path=str(torchscript_path),
+            artifact_path=str(torchscript_path.resolve()),
             metrics=numeric_metrics,
             mlflow_run_id=mlflow_run_id,
         ))
