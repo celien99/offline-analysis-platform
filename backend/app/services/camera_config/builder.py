@@ -79,7 +79,7 @@ class ConfigBuilder:
 
     DEFAULT_FILTER_CLASSIFIER = {
         "enabled": True,
-        "model_path": "../backend/deployed_models/line_a/filter_classifier/",
+        "model_path": "backend/deployed_models/line_a/filter_classifier/",
         "device": "cpu",
         "input_size": 224,
         "confidence_threshold": 0.5,
@@ -88,7 +88,7 @@ class ConfigBuilder:
     DEFAULT_RULE_ENGINE = {
         "enabled": False,
         "rules": [],
-        "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json",
+        "deployed_rules_path": "backend/deployed_models/line_a/rules/rules.json",
     }
 
     def __init__(self, repo_root: str | None = None) -> None:
