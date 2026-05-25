@@ -51,7 +51,6 @@ pnpm run build                                        # typecheck + build
 
 Industrial AI offline intelligent analysis platform for seat defect detection. An "AI evolution platform" that sits alongside an online real-time detection system (YOLO + PatchCore + Filter Classifier). This offline system handles anomaly accumulation, clustering, VLM-based explanation, knowledge base construction, and filter classifier training — but never participates in online real-time detection.
 
-Full architecture spec is in `prompt.md`.
 
 ## Tech Stack
 

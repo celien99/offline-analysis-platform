@@ -116,17 +116,6 @@ class ColorBranchConfig:
 
 
 @dataclass
-class FastFlowConfig:
-    """FastFlow 端到端异常检测模型配置（从 PatchCore 蒸馏的学生模型）。"""
-
-    enabled: bool = False
-    model_path: Optional[str] = None
-    device: str = "cpu"
-    threshold: Optional[float] = None
-    """异常判定阈值。None 表示使用训练时计算的阈值（默认 1.5）。"""
-
-
-@dataclass
 class FilterClassifierConfig:
     """过滤器分类器配置，用于抑制 PatchCore 误报。"""
 
@@ -234,7 +223,6 @@ class CameraConfig:
     patchcore: PatchCoreConfig = field(default_factory=PatchCoreConfig)
     color_branch: ColorBranchConfig = field(default_factory=ColorBranchConfig)
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
-    fastflow: FastFlowConfig = field(default_factory=FastFlowConfig)
     rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
     regions: List[RegionConfig] = field(default_factory=list)
 
@@ -281,7 +269,6 @@ __all__ = [
     "CameraConfig",
     "ColorBranchConfig",
     "DetectionConfig",
-    "FastFlowConfig",
     "FilterClassifierConfig",
     "FusionConfig",
     "InspectionConfig",

@@ -67,7 +67,6 @@ class Settings(BaseSettings):
         "production_line_b": "./deployed_models/line_b",
     }
     deploy_model_subdir: str = "filter_classifier"
-    deploy_fastflow_subdir: str = "fastflow"
     deploy_rules_subdir: str = "rules"
     deploy_on_train_complete: bool = False
     default_deploy_target: str = "production_line_a"
