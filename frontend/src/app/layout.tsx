@@ -10,6 +10,7 @@ import {
   ExperimentOutlined,
   RocketOutlined,
   ScanOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -26,6 +27,7 @@ const menuItems = [
   { key: "/rules", icon: <ThunderboltOutlined />, label: "规则引擎" },
   { key: "/training", icon: <ExperimentOutlined />, label: "训练管理" },
   { key: "/deploy", icon: <RocketOutlined />, label: "模型部署" },
+  { key: "/cameras", icon: <SettingOutlined />, label: "相机配置" },
 ];
 
 interface Props {
