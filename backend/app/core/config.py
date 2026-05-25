@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 32
 
     # Clustering
-    clustering_min_samples: int = 5
-    clustering_min_cluster_size: int = 3
+    clustering_min_samples: int = 2
+    clustering_min_cluster_size: int = 2
     umap_n_components: int = 2
     umap_n_neighbors: int = 15
 

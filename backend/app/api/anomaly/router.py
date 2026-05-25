@@ -34,6 +34,12 @@ async def upload_anomaly_with_files(
     anomaly_score: float | None = Form(default=None, ge=0.0),
     date_folder: str = Form(..., max_length=16),
     detected_at: str = Form(...),
+    decision_reason: str | None = Form(default=None, max_length=64),
+    filter_confidence: float | None = Form(default=None, ge=0.0, le=1.0),
+    filter_real_defect_score: float | None = Form(default=None, ge=0.0, le=1.0),
+    filter_false_alarm_score: float | None = Form(default=None, ge=0.0, le=1.0),
+    filter_class_id: int | None = Form(default=None, ge=0),
+    filter_action: str | None = Form(default=None, max_length=32),
     original_file: UploadFile | None = File(default=None),
     heatmap_file: UploadFile | None = File(default=None),
     crop_files: list[UploadFile] = File(default=[]),
@@ -58,6 +64,12 @@ async def upload_anomaly_with_files(
         anomaly_score=anomaly_score,
         date_folder=date_folder,
         detected_at=detected_dt,
+        decision_reason=decision_reason,
+        filter_confidence=filter_confidence,
+        filter_real_defect_score=filter_real_defect_score,
+        filter_false_alarm_score=filter_false_alarm_score,
+        filter_class_id=filter_class_id,
+        filter_action=filter_action,
         original_data=await _read(original_file),
         heatmap_data=await _read(heatmap_file),
         crop_data_list=crop_data_list,
@@ -132,6 +144,144 @@ async def reprocess_anomaly(
     service = AnomalyService(session, minio)
     await service.reprocess_anomaly(anomaly_id)
     return {"status": "queued", "anomaly_id": anomaly_id}
+
+
+@router.get(
+    "/noise",
+    response_model=dict,
+)
+async def list_noise_anomalies(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> dict:
+    """列出未被任何 cluster 包含的噪声异常（HDBSCAN label=-1）。"""
+    from app.services.review.noise_service import NoiseReviewService
+
+    service = NoiseReviewService(session)
+    offset = (page - 1) * page_size
+    records, total = await service.list_noise_anomalies(
+        offset=offset, limit=page_size
+    )
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": await asyncio.gather(*[_to_response(r, minio) for r in records]),
+    }
+
+
+@router.get(
+    "/filter-stats",
+    response_model=dict,
+)
+async def get_filter_classifier_stats(
+    camera_id: str | None = Query(default=None),
+    days: int = Query(default=7, ge=1, le=90),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """过滤器分类器效果统计，交叉对比人工审核结果。"""
+    from datetime import datetime as dt, timedelta, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models.cluster import Cluster, ClusterMembership
+
+    since = dt.now(tz=timezone.utc) - timedelta(days=days)
+
+    # 按 filter_action 统计
+    base_filters = []
+    if camera_id:
+        base_filters.append(AnomalyRecord.camera_id == camera_id)
+
+    action_stmt = (
+        select(
+            AnomalyRecord.filter_action,
+            func.count(AnomalyRecord.id),
+        )
+        .where(
+            AnomalyRecord.deleted_at.is_(None),
+            AnomalyRecord.detected_at >= since,
+            AnomalyRecord.filter_action.isnot(None),
+            *(base_filters if base_filters else [])
+        )
+        .group_by(AnomalyRecord.filter_action)
+    )
+    action_result = await session.execute(action_stmt)
+    action_counts = dict(action_result.all())
+
+    # 交叉对比：filter_action vs 人工审核结果
+    review_stmt = (
+        select(
+            AnomalyRecord.filter_action,
+            Cluster.review_status,
+            func.count(AnomalyRecord.id),
+        )
+        .join(
+            ClusterMembership,
+            ClusterMembership.anomaly_id == AnomalyRecord.id,
+        )
+        .join(
+            Cluster,
+            Cluster.id == ClusterMembership.cluster_id,
+        )
+        .where(
+            AnomalyRecord.deleted_at.is_(None),
+            AnomalyRecord.detected_at >= since,
+            AnomalyRecord.filter_action.isnot(None),
+            Cluster.review_status.isnot(None),
+            Cluster.deleted_at.is_(None),
+            ClusterMembership.deleted_at.is_(None),
+            *(base_filters if base_filters else [])
+        )
+        .group_by(
+            AnomalyRecord.filter_action,
+            Cluster.review_status,
+        )
+    )
+    review_result = await session.execute(review_stmt)
+    review_breakdown = [
+        {"filter_action": row[0], "human_review": row[1], "count": row[2]}
+        for row in review_result.all()
+    ]
+
+    total_with_filter = sum(action_counts.values())
+
+    # 计算准确率：filter confirmed_ng → 人工标记 real_defect = 正确
+    confirmed_total = action_counts.get("confirmed_ng", 0)
+    suppressed_total = action_counts.get("suppressed_to_ok", 0)
+    confirmed_correct = sum(
+        r["count"]
+        for r in review_breakdown
+        if r["filter_action"] == "confirmed_ng" and r["human_review"] == "real_defect"
+    )
+    suppressed_correct = sum(
+        r["count"]
+        for r in review_breakdown
+        if r["filter_action"] == "suppressed_to_ok" and r["human_review"] == "false_alarm"
+    )
+
+    return {
+        "period_days": days,
+        "total_with_filter_decision": total_with_filter,
+        "by_action": {
+            "confirmed_ng": action_counts.get("confirmed_ng", 0),
+            "suppressed_to_ok": action_counts.get("suppressed_to_ok", 0),
+            "not_applied": action_counts.get("not_applied", 0),
+        },
+        "accuracy": {
+            "confirmed_precision": (
+                confirmed_correct / confirmed_total if confirmed_total > 0 else None
+            ),
+            "suppressed_precision": (
+                suppressed_correct / suppressed_total if suppressed_total > 0 else None
+            ),
+        },
+        "filter_vs_human_review": review_breakdown,
+    }
 
 
 @router.delete(

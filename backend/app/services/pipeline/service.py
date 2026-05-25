@@ -46,6 +46,32 @@ class PipelineService:
         logger.info("embedding_batch_dispatched", task_id=result.id, count=len(anomaly_batch))
         return result.id
 
+    def dispatch_single_reprocess(self, anomaly_id: str, crop_path: str) -> str:
+        """单条 anomaly 重处理：仅对该 anomaly 提取 embedding，再对所有非 reviewed 做聚类。
+
+        与 dispatch_for_new_anomalies 不同，此方法不会拉入其他 pending 异常，
+        避免单条重处理触发全量扫描。
+        """
+        from celery import chain
+
+        from app.infrastructure.queue.celery_app import celery_app
+
+        pipeline = chain(
+            celery_app.signature(
+                "embedding.batch_extract",
+                kwargs={"anomaly_batch": [{"anomaly_id": anomaly_id, "crop_path": crop_path}]},
+            ),
+            celery_app.signature("clustering.run", kwargs={}, immutable=True),
+            celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
+        )
+        result = pipeline.delay()
+        logger.info(
+            "single_reprocess_dispatched",
+            task_id=result.id,
+            anomaly_id=anomaly_id,
+        )
+        return result.id
+
     def dispatch_full_chain(
         self,
         anomaly_batch: list[dict[str, str]],

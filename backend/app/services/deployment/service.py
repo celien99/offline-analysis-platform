@@ -29,6 +29,7 @@ class DeploymentService:
         version: str,
         target: str,
         deployed_by: str | None = None,
+        strategy: str = "immediate",
     ) -> DeploymentRecord:
         model = await self._model_version_repo.get_by_name_and_version(
             model_name, version
@@ -52,16 +53,46 @@ class DeploymentService:
                 previous_deployment.model_version_id if previous_deployment else None
             ),
             deployment_status="active",
+            strategy=strategy,
+            canary_status="pending_promotion" if strategy == "canary" else None,
         )
         self._session.add(deployment)
 
-        if previous_deployment is not None:
-            previous_deployment.deployment_status = "superseded"
+        match strategy:
+            case "immediate":
+                self._copy_model_to_target(model.artifact_path, target)
+                if previous_deployment is not None:
+                    previous_deployment.deployment_status = "superseded"
+                model.status = "deployed"
 
-        model.status = "deployed"
+            case "shadow":
+                # 影子部署：复制到 shadow 子目录，不切换生产模型
+                shadow_dir = Path(settings.deploy_targets.get(target, "./deployed_models")) / "shadow"
+                shadow_dir.mkdir(parents=True, exist_ok=True)
+                shadow_dest = shadow_dir / "model.pt"
+                shutil.copy2(model.artifact_path, str(shadow_dest))
+                if previous_deployment is not None:
+                    previous_deployment.deployment_status = "superseded"
+                model.status = "deployed"
 
-        # 拷贝模型文件到部署目标目录
-        self._copy_model_to_target(model.artifact_path, target)
+            case "canary":
+                # 金丝雀部署：复制到 canary 子目录，生产仍用旧模型
+                canary_dir = Path(settings.deploy_targets.get(target, "./deployed_models")) / "canary"
+                canary_dir.mkdir(parents=True, exist_ok=True)
+                canary_dest = canary_dir / "model.pt"
+                tmp = canary_dir / ".model.pt.tmp"
+                shutil.copy2(model.artifact_path, str(tmp))
+                tmp.rename(canary_dest)
+                model.status = "deployed"
+                # 调度金丝雀监控任务
+                from app.workers.deployment_worker.tasks import watch_canary_metrics
+                watch_canary_metrics.apply_async(
+                    kwargs={"deployment_id": deployment.id, "target": target},
+                    countdown=settings.deploy_canary_watch_seconds,
+                )
+
+            case _:
+                raise DeploymentError(f"Unknown deployment strategy: {strategy}")
 
         await self._session.flush()
 
@@ -70,6 +101,7 @@ class DeploymentService:
             model_name=model_name,
             version=version,
             target=target,
+            strategy=strategy,
         )
         return deployment
 
@@ -97,6 +129,58 @@ class DeploymentService:
             destination=str(dest),
             target=target,
         )
+
+    async def confirm_canary(
+        self, deployment_id: str, reviewer: str
+    ) -> DeploymentRecord:
+        """推广金丝雀模型到正式目录。"""
+        deployment = await self._deployment_repo.get_by_id(deployment_id)
+        if deployment is None:
+            raise DeploymentError(f"部署记录不存在: {deployment_id}")
+        if deployment.strategy != "canary":
+            raise DeploymentError("该部署非金丝雀策略")
+
+        target_root = settings.deploy_targets.get(deployment.target)
+        if target_root is None:
+            raise DeploymentError(f"未知部署目标: {deployment.target}")
+
+        # 从 canary 目录拷贝到正式目录
+        canary_path = Path(target_root) / "canary" / "model.pt"
+        main_path = Path(target_root) / settings.deploy_model_subdir / "model.pt"
+        main_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = main_path.with_name(".model.pt.tmp")
+        shutil.copy2(str(canary_path), str(tmp))
+        tmp.rename(main_path)
+
+        deployment.canary_status = "promoted"
+        deployment.canary_promoted_at = datetime.now(tz=timezone.utc)
+
+        # 旧部署标记为 superseded
+        prev = await self._deployment_repo.get_active_by_target(deployment.target)
+        if prev and prev.id != deployment_id:
+            prev.deployment_status = "superseded"
+
+        await self._session.flush()
+        logger.info("canary_promoted", deployment_id=deployment_id, reviewer=reviewer)
+        return deployment
+
+    async def rollback_canary(
+        self, deployment_id: str, reason: str | None = None
+    ) -> DeploymentRecord:
+        """回滚金丝雀部署（保留旧模型不变）。"""
+        deployment = await self._deployment_repo.get_by_id(deployment_id)
+        if deployment is None:
+            raise DeploymentError(f"部署记录不存在: {deployment_id}")
+        if deployment.strategy != "canary":
+            raise DeploymentError("该部署非金丝雀策略")
+
+        deployment.deployment_status = "rolled_back"
+        deployment.canary_status = "rolled_back_by_metrics"
+        deployment.rollback_reason = reason
+
+        await self._session.flush()
+        logger.info("canary_rolled_back", deployment_id=deployment_id, reason=reason)
+        return deployment
 
     async def rollback(
         self,

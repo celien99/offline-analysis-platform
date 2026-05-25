@@ -87,3 +87,21 @@ class EmbeddingRepository(BaseRepository):
         )
         result = await self._session.execute(stmt)
         return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]
+
+    async def get_embeddings_excluding_reviewed(
+        self,
+    ) -> list[tuple[str, list[float]]]:
+        """获取所有非 reviewed 状态的 anomaly 的 embedding，用于增量聚类。"""
+        from app.models.anomaly import AnomalyRecord
+
+        stmt = (
+            select(EmbeddingVector)
+            .join(AnomalyRecord, EmbeddingVector.anomaly_id == AnomalyRecord.id)
+            .where(
+                EmbeddingVector.deleted_at.is_(None),
+                AnomalyRecord.deleted_at.is_(None),
+                AnomalyRecord.status != "reviewed",
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]

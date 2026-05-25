@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cluster import Cluster, ClusterMembership
@@ -80,6 +81,45 @@ class ClusterRepository(BaseRepository):
         result = await self._session.execute(stmt)
         return result.scalars().all()
 
+
+    async def count_reviewed(self) -> int:
+        """统计所有已完成审核的 cluster 数。"""
+        stmt = select(func.count()).select_from(Cluster).where(
+            Cluster.deleted_at.is_(None),
+            Cluster.status == "reviewed",
+            Cluster.review_status.isnot(None),
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_reviewed_since(self, since: datetime) -> int:
+        """统计自 since 以来完成审核的 cluster 数。"""
+        stmt = select(func.count()).select_from(Cluster).where(
+            Cluster.deleted_at.is_(None),
+            Cluster.status == "reviewed",
+            Cluster.review_status.isnot(None),
+            Cluster.reviewed_at >= since,
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def get_reviewed_since(
+        self, since: datetime, *, offset: int = 0, limit: int = 10000
+    ) -> Sequence[Cluster]:
+        """获取自 since 以来完成审核的 cluster 列表。"""
+        stmt = (
+            select(Cluster)
+            .where(
+                Cluster.deleted_at.is_(None),
+                Cluster.status == "reviewed",
+                Cluster.review_status.isnot(None),
+                Cluster.reviewed_at >= since,
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
 
     async def update_fields(self, cluster_id: str, **values: object) -> None:
         stmt = update(Cluster).where(Cluster.id == cluster_id).values(**values)

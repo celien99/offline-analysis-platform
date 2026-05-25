@@ -104,6 +104,7 @@ export default function AnomalyBrowser() {
               options={[
                 { value: "pending", label: "Pending" },
                 { value: "embedded", label: "Embedded" },
+                { value: "noise", label: "Noise" },
                 { value: "clustered", label: "Clustered" },
                 { value: "reviewed", label: "Reviewed" },
               ]}

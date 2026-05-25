@@ -31,31 +31,57 @@ def upload_camera_result(
     *,
     date_folder: Optional[str] = None,
     timeout: float = 30.0,
+    include_ok_suppressed: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """将单机位 NG 检测结果上传到离线平台。
+    """将单机位检测结果上传到离线平台。
 
     Args:
-        result: 单机位检测结果（仅 status=="NG" 的会上传）。
+        result: 单机位检测结果。
         base_url: 后端 API 基础地址，如 "http://localhost:8000"。
         date_folder: 日期文件夹名，默认用当天日期 YYYY-MM-DD。
         timeout: HTTP 请求超时秒数。
+        include_ok_suppressed: 是否也上传被分类器抑制的 OK 结果（用于反馈统计）。
 
     Returns:
-        后端返回的 JSON 响应，包含 anomaly_id；非 NG 或无有效数据时返回 None。
+        后端返回的 JSON 响应，包含 anomaly_id；不上传时返回 None。
     """
-    if result.status != "NG":
+    is_ng = result.status == "NG"
+    is_suppressed = (
+        result.status == "OK"
+        and result.filter_result is not None
+        and "filter_classifier_suppressed" in (result.reason or "")
+    )
+
+    if not is_ng and not (include_ok_suppressed and is_suppressed):
         return None
 
     if date_folder is None:
         date_folder = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
-    files: Dict[str, tuple] = {}
+    files: list[tuple[str, tuple]] = []
     data: Dict[str, Any] = {
         "camera_id": result.camera_id,
         "source": "patchcore",
         "date_folder": date_folder,
         "detected_at": datetime.now(tz=timezone.utc).isoformat(),
+        "decision_reason": result.reason,
     }
+
+    # 传递过滤器分类器决策元数据
+    if result.filter_result is not None:
+        fr = result.filter_result
+        data["filter_confidence"] = float(fr.confidence)
+        data["filter_real_defect_score"] = float(fr.real_defect_score)
+        data["filter_false_alarm_score"] = float(fr.false_alarm_score)
+        data["filter_class_id"] = int(fr.class_id)
+        if is_ng and fr.is_real_defect:
+            data["filter_action"] = "confirmed_ng"
+        elif is_suppressed and not fr.is_real_defect:
+            data["filter_action"] = "suppressed_to_ok"
+        elif fr.is_real_defect:
+            data["filter_action"] = "confirmed_ng"
+        else:
+            data["filter_action"] = "not_applied"
 
     # 异常分数
     if result.texture_result is not None:
@@ -72,47 +98,47 @@ def upload_camera_result(
 
     # 原图：用户/产线上传到 inspection 的原始大图，不含热力图叠加。
     if result.original_image is not None:
-        files["original_file"] = (
+        files.append(("original_file", (
             "original.jpg",
             _encode_bgr_image(result.original_image, ".jpg"),
             "image/jpeg",
-        )
+        )))
 
     # Crop：利用热力图裁剪异常高响应区域，供离线平台 embedding 提取使用。
     # 一张图可能存在多处异常 → 提取全部连通域，每张 crop 单独上传。
     anomaly_crops = _extract_anomaly_crop(result)
     if anomaly_crops:
         for i, crop_img in enumerate(anomaly_crops):
-            files[f"crop_{i}"] = (
+            files.append(("crop_files", (
                 f"crop_{i}.jpg",
                 _encode_bgr_image(crop_img, ".jpg"),
                 "image/jpeg",
-            )
+            )))
     elif result.roi_aligned_image is not None:
-        files["crop_files"] = (
+        files.append(("crop_files", (
             "crop_0.jpg",
             _encode_bgr_image(result.roi_aligned_image, ".jpg"),
             "image/jpeg",
-        )
+        )))
     elif result.roi_image is not None:
-        files["crop_files"] = (
+        files.append(("crop_files", (
             "crop_0.jpg",
             _encode_bgr_image(result.roi_image, ".jpg"),
             "image/jpeg",
-        )
+        )))
 
     # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
     # PatchCore 的热力图统一映射回原图坐标系。
     if result.overlay_image is not None:
-        files["heatmap_file"] = (
+        files.append(("heatmap_file", (
             "heatmap.jpg",
             _encode_bgr_image(result.overlay_image, ".jpg"),
             "image/jpeg",
-        )
+        )))
     else:
         heatmap = _extract_heatmap_for_upload(result)
         if heatmap is not None:
-            files["heatmap_file"] = ("heatmap.png", _encode_heatmap(heatmap), "image/png")
+            files.append(("heatmap_file", ("heatmap.png", _encode_heatmap(heatmap), "image/png")))
 
     try:
         url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
@@ -143,14 +169,16 @@ def upload_inspection_response(
     *,
     date_folder: Optional[str] = None,
     timeout: float = 30.0,
+    include_ok_suppressed: bool = True,
 ) -> List[Dict[str, Any]]:
-    """遍历 InspectionResponse 中的所有相机结果，上传每个 NG 到离线平台。
+    """遍历 InspectionResponse 中的所有相机结果，上传异常到离线平台。
 
     Args:
         response: 整件检测响应。
         base_url: 后端 API 基础地址。
         date_folder: 日期文件夹名。
         timeout: HTTP 请求超时秒数。
+        include_ok_suppressed: 是否也上传被分类器抑制的 OK 结果。
 
     Returns:
         成功上传的异常记录列表（每项包含 backend 返回的 anomaly_id）。
@@ -162,6 +190,7 @@ def upload_inspection_response(
             base_url,
             date_folder=date_folder,
             timeout=timeout,
+            include_ok_suppressed=include_ok_suppressed,
         )
         if uploaded is not None:
             results.append(uploaded)
@@ -227,21 +256,21 @@ def _crop_by_heatmap(
     heatmap: np.ndarray,
     image: np.ndarray,
     *,
-    threshold_ratio: float = 0.1,
-    padding_ratio: float = 0.15,
+    threshold_ratio: float = 0.2,
+    padding_ratio: float = 0.1,
     min_crop_size: int = 20,
     min_component_area: int = 4,
 ) -> list[np.ndarray]:
     """按热力图高响应连通域裁剪图像，支持多异常区域。
 
-    PatchCore 热力图通常是高度局部化的尖锐热点，需要较低的阈值
-    和较小的 min_crop_size 才能捕获有效区域。
+    PatchCore 热力图通常是高度局部化的尖锐热点，阈值取 max*0.2 保留
+    高响应区域，配合 10% 外扩兼顾精度与 embedding 模型所需的上下文。
 
     Args:
         heatmap: 浮点热力图 (H, W)
         image: BGR 图像 (H, W, 3)，与 heatmap 同坐标系
-        threshold_ratio: 阈值 = max * ratio
-        padding_ratio: 裁剪框外扩比例
+        threshold_ratio: 阈值 = max * ratio（默认 0.2）
+        padding_ratio: 裁剪框外扩比例（默认 0.1）
         min_crop_size: 最小裁剪边长 (px)
         min_component_area: 连通域最小面积 (px)
 

@@ -44,5 +44,9 @@ celery_app.conf.update(
             "task": "maintenance.cleanup_expired",
             "schedule": 86400.0,
         },
+        "auto-train-check": {
+            "task": "training.check_and_auto_train",
+            "schedule": 3600.0,
+        },
     },
 )

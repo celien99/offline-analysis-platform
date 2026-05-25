@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from app.infrastructure.database.session import async_session_factory
 from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.storage.minio_client import minio_client
 from app.models.registry import ModelVersion
+from app.models.training import TrainingRun
 from app.repositories.anomaly.repository import AnomalyRepository
 from app.repositories.cluster.repository import ClusterMembershipRepository, ClusterRepository
 from app.workers import run_async
@@ -46,11 +48,16 @@ class _ImageDataset(Dataset):
 
 async def _load_training_data(
     anomaly_ids: list[str],
+    since: datetime | None = None,
 ) -> tuple[list[np.ndarray], list[int]]:
+    """加载训练数据。since 不为 None 时仅加载该时间后审核的 cluster。"""
     async with async_session_factory() as session:
         cluster_repo = ClusterRepository(session)
         membership_repo = ClusterMembershipRepository(session)
-        reviewed_clusters = await cluster_repo.get_by_status("reviewed", offset=0, limit=10000)
+        if since is not None:
+            reviewed_clusters = await cluster_repo.get_reviewed_since(since, offset=0, limit=10000)
+        else:
+            reviewed_clusters = await cluster_repo.get_by_status("reviewed", offset=0, limit=10000)
 
         image_label_pairs: list[tuple[str, int]] = []
         for cluster in reviewed_clusters:
@@ -99,15 +106,22 @@ def train_filter_classifier(
     class_names: list[str] | None = None,
     augmentations: bool = True,
     anomaly_ids: list[str] | None = None,
+    fine_tune: bool = False,
+    trigger: str = "manual",
 ) -> dict[str, object]:
     if class_names is None:
         class_names = ["false_alarm", "real_defect"]
+
+    if trigger not in ("manual", "auto_threshold"):
+        trigger = "manual"
 
     logger.info(
         "training_started",
         model_type=model_type,
         epochs=epochs,
         batch_size=batch_size,
+        fine_tune=fine_tune,
+        trigger=trigger,
     )
 
     import mlflow
@@ -118,7 +132,40 @@ def train_filter_classifier(
     mlflow_run_id: str | None = None
 
     try:
-        images, labels = run_async(_load_training_data(anomaly_ids or []))
+        # 增量训练：查找最新 checkpoint 和数据截止时间
+        checkpoint_path: str | None = None
+        since: datetime | None = None
+
+        if fine_tune:
+            async def _resolve_fine_tune() -> tuple[str | None, datetime | None]:
+                from app.repositories.registry.model_version import ModelVersionRepository
+                from app.repositories.training.repository import TrainingRunRepository
+
+                async with async_session_factory() as session:
+                    model_repo = ModelVersionRepository(session)
+                    prev = await model_repo.get_latest_by_model_name(
+                        f"filter_classifier_{model_type}", status="deployed"
+                    )
+                    if prev is None:
+                        prev = await model_repo.get_latest_by_model_name(
+                            f"filter_classifier_{model_type}"
+                        )
+                    if prev is None:
+                        return None, None
+
+                    cp = prev.artifact_path if prev.artifact_path and Path(prev.artifact_path).exists() else None
+
+                    training_run_repo = TrainingRunRepository(session)
+                    latest_run = await training_run_repo.get_latest_train()
+                    cutoff = latest_run.started_at if latest_run else None
+                    return cp, cutoff
+
+            checkpoint_path, since = run_async(_resolve_fine_tune())
+            if checkpoint_path is None:
+                logger.warning("fine_tune_no_checkpoint_found", model_type=model_type)
+                fine_tune = False
+
+        images, labels = run_async(_load_training_data(anomaly_ids or [], since=since))
 
         if len(images) < 4:
             logger.warning("training_insufficient_data", count=len(images))
@@ -175,16 +222,28 @@ def train_filter_classifier(
                 "augmentations": augmentations,
                 "train_samples": len(train_imgs),
                 "val_samples": len(val_imgs),
+                "train_type": "fine_tune" if fine_tune else "full",
             })
 
-            metrics = trainer.train(
-                train_dataset=train_ds,
-                val_dataset=val_ds,
-                batch_size=batch_size,
-                epochs=epochs,
-                class_names=class_names,
-                output_dir=output_dir,
-            )
+            if fine_tune and checkpoint_path:
+                metrics = trainer.fine_tune(
+                    checkpoint_path=checkpoint_path,
+                    train_dataset=train_ds,
+                    val_dataset=val_ds,
+                    batch_size=batch_size,
+                    epochs=epochs,
+                    class_names=class_names,
+                    output_dir=output_dir,
+                )
+            else:
+                metrics = trainer.train(
+                    train_dataset=train_ds,
+                    val_dataset=val_ds,
+                    batch_size=batch_size,
+                    epochs=epochs,
+                    class_names=class_names,
+                    output_dir=output_dir,
+                )
 
             numeric_metrics = {
                 k: v for k, v in metrics.items() if isinstance(v, (float, int))
@@ -211,6 +270,17 @@ def train_filter_classifier(
             artifact_path=str(torchscript_path),
             metrics=numeric_metrics,
             mlflow_run_id=mlflow_run_id,
+        ))
+
+        # 记录训练执行记录（支撑增量训练数据范围判定）
+        run_async(_create_training_run(
+            model_version_id=model_version.id,
+            trigger=trigger,
+            train_type="fine_tune" if fine_tune else "full",
+            reviewed_cluster_count=0,  # TODO: 从 _load_training_data 传回实际值
+            total_anomaly_count=len(images),
+            new_anomaly_count=0 if not fine_tune else len(images),
+            metrics_json=json.dumps(numeric_metrics),
         ))
 
         # 训练完成后自动部署到默认目标
@@ -286,6 +356,75 @@ async def _create_model_version(
         await repo.create(model)
         await session.commit()
         return model
+
+
+@celery_app.task(name="training.check_and_auto_train")
+def check_and_auto_train() -> dict[str, object]:
+    """周期性检查是否有足够的新审核标签，满足条件则自动触发训练。"""
+    from app.core.config import settings
+
+    if not settings.auto_train_enabled:
+        return {"status": "skipped", "reason": "auto_train_disabled"}
+
+    async def _check() -> dict[str, object]:
+        async with async_session_factory() as session:
+            from app.services.training.service import TrainingService
+
+            service = TrainingService(session)
+            readiness = await service.get_training_readiness()
+
+        if not readiness["ready"]:
+            logger.info(
+                "auto_train_not_ready",
+                new=readiness["new_reviewed_clusters_since_last_train"],
+                total=readiness["total_reviewed_clusters"],
+            )
+            return {"status": "skipped", **readiness}
+
+        task = train_filter_classifier.delay(
+            model_type=settings.auto_train_model_type,
+            batch_size=settings.auto_train_batch_size,
+            epochs=settings.auto_train_epochs,
+            trigger="auto_threshold",
+        )
+        logger.info("auto_train_dispatched", task_id=task.id)
+        return {"status": "dispatched", "task_id": str(task.id), **readiness}
+
+    return run_async(_check())
+
+
+async def _create_training_run(
+    *,
+    model_version_id: str,
+    trigger: str,
+    train_type: str,
+    reviewed_cluster_count: int,
+    total_anomaly_count: int,
+    new_anomaly_count: int,
+    metrics_json: str | None = None,
+) -> TrainingRun:
+    from datetime import datetime, timezone
+
+    from app.models.training import TrainingRun
+    from app.repositories.training.repository import TrainingRunRepository
+
+    async with async_session_factory() as session:
+        run = TrainingRun(
+            id=generate_uuid(),
+            model_version_id=model_version_id,
+            trigger=trigger,
+            train_type=train_type,
+            reviewed_cluster_count=reviewed_cluster_count,
+            total_anomaly_count=total_anomaly_count,
+            new_anomaly_count=new_anomaly_count,
+            metrics_json=metrics_json,
+            started_at=datetime.now(tz=timezone.utc),
+            completed_at=datetime.now(tz=timezone.utc),
+        )
+        repo = TrainingRunRepository(session)
+        await repo.create(run)
+        await session.commit()
+        return run
 
 
 @celery_app.task(name="training.export_model")

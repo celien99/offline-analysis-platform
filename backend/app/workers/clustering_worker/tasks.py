@@ -40,12 +40,14 @@ async def _run_clustering(
 ) -> dict[str, object]:
     async with async_session_factory() as session:
         embedding_repo = EmbeddingRepository(session)
-        rows = await embedding_repo.get_all_embeddings_with_ids()
+        # 只聚类非 reviewed 的 anomaly，避免覆盖已审核状态
+        rows = await embedding_repo.get_embeddings_excluding_reviewed()
 
     if anomaly_ids:
         rows = [(aid, vec) for aid, vec in rows if aid in anomaly_ids]
 
-    if len(rows) < 3:
+    effective_min_size = min_cluster_size if min_cluster_size is not None else settings.clustering_min_cluster_size
+    if len(rows) < effective_min_size:
         logger.info("clustering_skipped_too_few", count=len(rows))
         return {"status": "skipped", "reason": "too_few_embeddings", "count": len(rows)}
 
@@ -54,6 +56,14 @@ async def _run_clustering(
     }
 
     async with async_session_factory() as session:
+        from app.repositories.cluster.repository import ClusterMembershipRepository
+
+        # 清理本次参与聚类的 anomaly 的旧 membership，避免孤儿数据
+        membership_repo = ClusterMembershipRepository(session)
+        affected_ids = list(embeddings.keys())
+        for aid in affected_ids:
+            await membership_repo.soft_delete_by_anomaly_id(aid)
+
         service = ClusteringService(session)
         config = _build_cluster_config(min_cluster_size, min_samples)
         result, label_map, probability_map = await service.run_clustering(
@@ -71,6 +81,8 @@ async def _run_clustering(
         for aid, label in label_map.items():
             if label >= 0:
                 await anomaly_repo.update_status(aid, "clustered")
+            else:
+                await anomaly_repo.update_status(aid, "noise")
 
         await session.commit()
 

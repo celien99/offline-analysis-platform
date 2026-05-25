@@ -100,7 +100,7 @@
 
             "filter_classifier": {
               "enabled": false,
-              "model_path": "../deployed_models/line_a/filter_classifier/",
+              "model_path": "../backend/deployed_models/line_a/filter_classifier/",
               "device": "mps",
               "input_size": 224,
               "confidence_threshold": 0.5
