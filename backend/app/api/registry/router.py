@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.common.logging import get_logger
 from app.schemas.common import StatusResponse
 from app.core.config import settings
+from app.core.exceptions import AppError
 from app.schemas.registry import (
     DeploymentResponse,
     ModelDeployRequest,
@@ -23,12 +24,19 @@ async def deploy_model(
     session: AsyncSession = Depends(get_session),
 ) -> DeploymentResponse:
     service = DeploymentService(session)
-    deployment = await service.deploy_model(
-        model_name=request.model_name,
-        version=request.version,
-        target=request.target,
-        deployed_by=request.deployed_by,
-    )
+    try:
+        deployment = await service.deploy_model(
+            model_name=request.model_name,
+            version=request.version,
+            target=request.target,
+            deployed_by=request.deployed_by,
+        )
+    except AppError as exc:
+        logger.warning("deploy_failed", error=exc.message, code=exc.code)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        )
     return DeploymentResponse(
         deployment_id=deployment.id,
         model_version_id=deployment.model_version_id,

@@ -14,4 +14,7 @@ export const modelApi = {
     page_size?: number;
   }, signal?: AbortSignal) =>
     get<DeploymentRecord[]>("/model/deployments", { params, signal }),
+
+  getDeployTargets: (signal?: AbortSignal) =>
+    get<Record<string, string>>("/model/deploy-targets", { signal }),
 };

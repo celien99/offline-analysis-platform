@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from app.models.camera_config import CameraConfig
@@ -101,12 +102,12 @@ class ConfigBuilder:
         self,
         seat_model_id: str,
         display_name: str,
-        cameras: list[CameraConfig],
+        cameras: Sequence[CameraConfig],
         selected_camera_ids: list[str] | None = None,
         *,
         part_id: str = "seat_demo",
         upload_base_url: str = "http://localhost:8000",
-    ) -> dict:
+    ) -> dict[str, object]:
         """生成完整的检测配置字典。"""
         selected_ids = set(selected_camera_ids) if selected_camera_ids else None
 
@@ -148,7 +149,7 @@ class ConfigBuilder:
             return str(p)
         return str(self._repo_root / raw)
 
-    def _build_camera_config(self, cam: CameraConfig) -> dict:
+    def _build_camera_config(self, cam: CameraConfig) -> dict[str, object]:
         detection = dict(self.DEFAULT_DETECTION)
         detection["model_path"] = self._resolve_path(cam.yolo_model_path)
         detection["confidence"] = cam.detection_confidence
@@ -157,18 +158,17 @@ class ConfigBuilder:
         patchcore["image_size"] = cam.patchcore_image_size
         patchcore["threshold_quantile"] = cam.patchcore_threshold
 
-        filter_classifier = dict(self.DEFAULT_FILTER_CLASSIFIER)
+        filter_classifier: dict[str, object] = dict(self.DEFAULT_FILTER_CLASSIFIER)
         filter_classifier["model_path"] = self._resolve_path(
-            filter_classifier["model_path"]
+            str(filter_classifier["model_path"])
         )
 
-        rule_engine = dict(self.DEFAULT_RULE_ENGINE)
-        if rule_engine.get("deployed_rules_path"):
-            rule_engine["deployed_rules_path"] = self._resolve_path(
-                rule_engine["deployed_rules_path"]
-            )
+        rule_engine: dict[str, object] = dict(self.DEFAULT_RULE_ENGINE)
+        deployed_rules = rule_engine.get("deployed_rules_path")
+        if deployed_rules:
+            rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
 
-        config: dict = {
+        config: dict[str, object] = {
             "camera_id": cam.camera_id,
             "patchcore_model_path": self._resolve_path(cam.patchcore_model_path),
             "source": "",

@@ -19,7 +19,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
-import { useDeployments, useDeployModel, useRollbackModel, useTrainedModels } from "../../hooks/queries";
+import { useDeployments, useDeployModel, useDeployTargets, useRollbackModel, useTrainedModels } from "../../hooks/queries";
 import type { DeploymentRecord, TrainedModel } from "../../types";
 import dayjs from "dayjs";
 
@@ -31,6 +31,7 @@ export default function ModelDeployPage() {
 
   const { data: deployments, refetch: refetchDeployments } = useDeployments({ page });
   const { data: modelsData } = useTrainedModels({ page: 1 });
+  const { data: deployTargets } = useDeployTargets();
   const deployModel = useDeployModel();
   const rollbackModel = useRollbackModel();
 
@@ -187,13 +188,12 @@ export default function ModelDeployPage() {
             rules={[{ required: true, message: "部署目标为必填项" }]}
           >
             <Select
-              placeholder="例如: production_line_1"
-              options={[
-                { value: "production_line_1", label: "产线 1" },
-                { value: "production_line_2", label: "产线 2" },
-                { value: "camera_group_a", label: "相机组 A" },
-                { value: "camera_group_b", label: "相机组 B" },
-              ]}
+              placeholder="选择部署目标"
+              options={Object.entries(deployTargets ?? {}).map(([key, path]) => ({
+                value: key,
+                label: `${key} (${path})`,
+              }))}
+              loading={!deployTargets}
             />
           </Form.Item>
           <Form.Item name="deployed_by" label="部署人">

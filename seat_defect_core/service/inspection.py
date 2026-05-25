@@ -23,7 +23,6 @@ from .inspection_camera import (
     inspect_prepared_camera,
 )
 from .response import (
-    build_missing_frame_result,
     build_reject_result,
     export_result,
 )
@@ -70,11 +69,7 @@ def inspect_frames(
     for index, camera in enumerate(context.cameras):
         external_frame = frame_map.get(camera.camera_id)
         if external_frame is None:
-            camera_results_by_index[index] = build_missing_frame_result(
-                camera,
-                frame_id=run_frame_id,
-                seat_model_id=context.seat_model_id,
-            )
+            continue  # 跳过未提供图像帧的相机，不生成多余结果
         elif external_frame.error_reason is not None:
             camera_results_by_index[index] = build_reject_result(
                 camera_id=camera.camera_id,
