@@ -53,6 +53,29 @@ async def run_inspection_with_files(
                 message=f"相机 {cid} 在座椅型号 {seat_model_id} 下无配置",
             )
 
+    # 收集所有用到的 model_version_id，查询 artifact_path
+    model_version_ids: set[str] = set()
+    for c in cameras:
+        for mv_id in (
+            c.patchcore_model_version_id,
+            c.yolo_model_version_id,
+            c.region_upper_model_version_id,
+            c.region_middle_model_version_id,
+            c.region_lower_model_version_id,
+        ):
+            if mv_id:
+                model_version_ids.add(mv_id)
+
+    model_paths: dict[str, str] = {}
+    if model_version_ids:
+        from app.models.registry import ModelVersion
+        from sqlalchemy import select
+
+        mv_stmt = select(ModelVersion).where(ModelVersion.id.in_(model_version_ids))
+        mv_result = await session.execute(mv_stmt)
+        for mv in mv_result.scalars().all():
+            model_paths[mv.id] = mv.artifact_path
+
     # 生成完整配置文件
     from app.services.camera_config.builder import ConfigBuilder
 
@@ -61,6 +84,7 @@ async def run_inspection_with_files(
         seat_model_id=seat_model_id,
         display_name=seat_model.display_name,
         cameras=cameras,
+        model_paths=model_paths,
         selected_camera_ids=camera_id_list,
         upload_base_url=settings.backend_base_url,
     )

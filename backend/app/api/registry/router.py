@@ -11,7 +11,10 @@ from app.core.exceptions import AppError
 from app.schemas.registry import (
     DeploymentResponse,
     ModelDeployRequest,
+    ModelOption,
+    ModelRegisterRequest,
 )
+from app.services.training.service import TrainingService
 from app.services.deployment.service import DeploymentService
 
 router = APIRouter(prefix="/api/model", tags=["registry"])
@@ -120,3 +123,60 @@ async def list_deployments(
         )
         for d in deployments
     ]
+
+
+@router.get("/options", response_model=list[ModelOption])
+async def list_model_options(
+    model_type: str | None = Query(default=None, description="按类型筛选: yolo / patchcore / filter_classifier / embedding"),
+    session: AsyncSession = Depends(get_session),
+) -> list[ModelOption]:
+    """获取已注册模型列表，供相机配置页下拉框使用。"""
+    service = TrainingService(session)
+    models, _ = await service.list_models(model_type=model_type, offset=0, limit=500)
+    return [
+        ModelOption(
+            model_id=m.id,
+            model_name=m.model_name,
+            version=m.version,
+            model_type=m.model_type,
+            artifact_path=m.artifact_path,
+        )
+        for m in models
+    ]
+
+
+@router.post("/register", response_model=ModelOption, status_code=201)
+async def register_model(
+    request: ModelRegisterRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ModelOption:
+    """手动注册外部模型（如 YOLO），校验文件路径存在。"""
+    from pathlib import Path
+
+    artifact_path = Path(request.artifact_path)
+    if not artifact_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"模型文件不存在: {request.artifact_path}",
+        )
+    if not artifact_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail=f"路径不是文件: {request.artifact_path}",
+        )
+
+    service = TrainingService(session)
+    model = await service.create_model_version(
+        model_name=request.model_name,
+        version=request.version,
+        model_type=request.model_type,
+        artifact_path=str(artifact_path.absolute()),
+    )
+    await session.commit()
+    return ModelOption(
+        model_id=model.id,
+        model_name=model.model_name,
+        version=model.version,
+        model_type=model.model_type,
+        artifact_path=model.artifact_path,
+    )
