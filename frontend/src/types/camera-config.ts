@@ -23,6 +23,7 @@ export interface CameraConfig {
   seat_model_id: string;
   patchcore_model_version_id: string | null;
   yolo_model_version_id: string | null;
+  filter_classifier_model_version_id: string | null;
   detection_confidence: number;
   patchcore_image_size: number;
   patchcore_threshold: number;
@@ -38,6 +39,7 @@ export interface CameraConfigFormData {
   camera_id: string;
   patchcore_model_version_id: string | null;
   yolo_model_version_id: string | null;
+  filter_classifier_model_version_id: string | null;
   detection_confidence: number;
   patchcore_image_size: number;
   patchcore_threshold: number;

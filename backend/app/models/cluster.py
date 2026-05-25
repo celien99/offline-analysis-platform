@@ -11,6 +11,9 @@ from app.models.base import BaseModel
 class Cluster(BaseModel):
     __tablename__ = "clusters"
 
+    seat_model_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True, comment="所属座椅型号 ID，用于数据隔离"
+    )
     name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     possible_type: Mapped[str | None] = mapped_column(String(64), nullable=True)

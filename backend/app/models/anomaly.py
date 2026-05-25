@@ -13,6 +13,9 @@ class AnomalyRecord(BaseModel):
     __tablename__ = "anomaly_records"
 
     camera_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    seat_model_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True, comment="所属座椅型号 ID"
+    )
     source: Mapped[str] = mapped_column(
         String(32), nullable=False, comment="patchcore / filter_classifier / rule_engine"
     )

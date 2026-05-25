@@ -49,6 +49,7 @@ class GraphBuildStatusResponse(BaseModel):
 
 class BuildGraphRequest(BaseModel):
     k: int = Field(default=10, ge=1, le=50, description="每个节点的 K 近邻数")
+    seat_model_id: str | None = Field(default=None, description="限定座椅型号")
 
 
 class FindPathRequest(BaseModel):

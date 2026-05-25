@@ -28,8 +28,11 @@ class ClusterRepository(BaseRepository[Cluster]):
         *,
         offset: int = 0,
         limit: int = 20,
+        seat_model_id: str | None = None,
     ) -> Sequence[Cluster]:
-        return await self.list_all(status=status, offset=offset, limit=limit)
+        return await self.list_all(
+            status=status, seat_model_id=seat_model_id, offset=offset, limit=limit,
+        )
 
     async def get_pending_review(
         self, *, offset: int = 0, limit: int = 20
@@ -82,39 +85,53 @@ class ClusterRepository(BaseRepository[Cluster]):
         return result.scalars().all()
 
 
-    async def count_reviewed(self) -> int:
+    async def count_reviewed(
+        self, seat_model_id: str | None = None,
+    ) -> int:
         """统计所有已完成审核的 cluster 数。"""
-        stmt = select(func.count()).select_from(Cluster).where(
+        conditions = [
             Cluster.deleted_at.is_(None),
             Cluster.status == "reviewed",
             Cluster.review_status.isnot(None),
-        )
+        ]
+        if seat_model_id:
+            conditions.append(Cluster.seat_model_id == seat_model_id)
+        stmt = select(func.count()).select_from(Cluster).where(*conditions)
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
-    async def count_reviewed_since(self, since: datetime) -> int:
+    async def count_reviewed_since(
+        self, since: datetime, seat_model_id: str | None = None,
+    ) -> int:
         """统计自 since 以来完成审核的 cluster 数。"""
-        stmt = select(func.count()).select_from(Cluster).where(
+        conditions = [
             Cluster.deleted_at.is_(None),
             Cluster.status == "reviewed",
             Cluster.review_status.isnot(None),
             Cluster.reviewed_at >= since,
-        )
+        ]
+        if seat_model_id:
+            conditions.append(Cluster.seat_model_id == seat_model_id)
+        stmt = select(func.count()).select_from(Cluster).where(*conditions)
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
     async def get_reviewed_since(
-        self, since: datetime, *, offset: int = 0, limit: int = 10000
+        self, since: datetime, *, offset: int = 0, limit: int = 10000,
+        seat_model_id: str | None = None,
     ) -> Sequence[Cluster]:
         """获取自 since 以来完成审核的 cluster 列表。"""
+        conditions = [
+            Cluster.deleted_at.is_(None),
+            Cluster.status == "reviewed",
+            Cluster.review_status.isnot(None),
+            Cluster.reviewed_at >= since,
+        ]
+        if seat_model_id:
+            conditions.append(Cluster.seat_model_id == seat_model_id)
         stmt = (
             select(Cluster)
-            .where(
-                Cluster.deleted_at.is_(None),
-                Cluster.status == "reviewed",
-                Cluster.review_status.isnot(None),
-                Cluster.reviewed_at >= since,
-            )
+            .where(*conditions)
             .offset(offset)
             .limit(limit)
         )

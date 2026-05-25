@@ -28,7 +28,9 @@ class GraphService:
 
     # ── 图谱构建 ─────────────────────────────────────────
 
-    async def build_graph(self, *, k: int = DEFAULT_K) -> GraphBuildRecord:
+    async def build_graph(
+        self, *, k: int = DEFAULT_K, seat_model_id: str | None = None,
+    ) -> GraphBuildRecord:
         """构建/重建 KNN 相似度图谱"""
         record = GraphBuildRecord(
             id=generate_uuid(),
@@ -42,7 +44,9 @@ class GraphService:
             embedding_repo = EmbeddingRepository(self._session)
 
             # 获取所有未被审核的 embedding
-            embedding_rows = await embedding_repo.get_embeddings_excluding_reviewed()
+            embedding_rows = await embedding_repo.get_embeddings_excluding_reviewed(
+                seat_model_id=seat_model_id,
+            )
             if not embedding_rows:
                 record.status = "completed"
                 record.total_anomalies = 0

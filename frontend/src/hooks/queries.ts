@@ -8,7 +8,7 @@ import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormDat
 export function useClusterList(page: number, enabled = true) {
   return useQuery({
     queryKey: ["clusters", "list", page],
-    queryFn: ({ signal }) => clusterApi.list(page, 20, undefined, signal),
+    queryFn: ({ signal }) => clusterApi.list(page, 20, undefined, undefined, signal),
     placeholderData: (prev) => prev,
     enabled,
   });
@@ -33,7 +33,7 @@ export function useClusterAnomalies(clusterId: string | null) {
 export function useClusterVisualization() {
   return useQuery({
     queryKey: ["clusters", "visualization"],
-    queryFn: ({ signal }) => clusterApi.visualization(signal),
+    queryFn: ({ signal }) => clusterApi.visualization(undefined, signal),
     staleTime: 60_000,
   });
 }

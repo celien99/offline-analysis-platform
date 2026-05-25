@@ -29,6 +29,7 @@ class AnomalyService:
         self,
         *,
         camera_id: str,
+        seat_model_id: str | None = None,
         source: str = "patchcore",
         anomaly_score: float | None = None,
         date_folder: str,
@@ -70,6 +71,7 @@ class AnomalyService:
             anomaly = AnomalyRecord(
                 id=anomaly_id,
                 camera_id=camera_id,
+                seat_model_id=seat_model_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -95,6 +97,7 @@ class AnomalyService:
             anomaly = AnomalyRecord(
                 id=anomaly_id,
                 camera_id=camera_id,
+                seat_model_id=seat_model_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -135,6 +138,7 @@ class AnomalyService:
         self,
         *,
         camera_id: str | None = None,
+        seat_model_id: str | None = None,
         source: str | None = None,
         status: str | None = None,
         offset: int = 0,
@@ -142,13 +146,17 @@ class AnomalyService:
     ) -> tuple[list[AnomalyRecord], int]:
         records = await self._repo.list_all(
             camera_id=camera_id,
+            seat_model_id=seat_model_id,
             source=source,
             status=status,
             offset=offset,
             limit=limit,
         )
         total = await self._repo.count(
-            camera_id=camera_id, source=source, status=status
+            camera_id=camera_id,
+            seat_model_id=seat_model_id,
+            source=source,
+            status=status,
         )
         return list(records), total
 

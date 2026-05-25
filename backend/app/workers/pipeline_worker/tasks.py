@@ -21,6 +21,8 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
     logger.info("pipeline_process_started", limit=limit)
 
     async def _run() -> dict[str, object]:
+        from collections import defaultdict
+
         async with async_session_factory() as session:
             anomaly_repo = AnomalyRepository(session)
             pending = await anomaly_repo.get_unprocessed(limit=limit)
@@ -29,35 +31,80 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
             logger.info("pipeline_no_pending_anomalies")
             return {"status": "skipped", "reason": "no_pending"}
 
-        batch = [
-            {
-                "anomaly_id": a.id,
-                "crop_path": a.crop_path or "",
-            }
-            for a in pending
-            if a.crop_path
-        ]
+        # 按 seat_model_id 分组，不同座椅型号的异常独立聚类
+        groups: dict[str, list[dict[str, str]]] = defaultdict(list)
+        for a in pending:
+            if a.crop_path:
+                groups[a.seat_model_id or "__unknown__"].append({
+                    "anomaly_id": a.id,
+                    "crop_path": a.crop_path,
+                })
 
-        if not batch:
+        if not groups:
             logger.info("pipeline_no_crops")
             return {"status": "skipped", "reason": "no_crop_path"}
 
-        pipeline = chain(
-            celery_app.signature(
-                "embedding.batch_extract",
-                kwargs={"anomaly_batch": batch},
-            ),
-            celery_app.signature(
-                "clustering.run",
-                kwargs={},
-                immutable=True,  # 丢弃前一步 embedding 结果，只用自己的 kwargs
-            ),
-            celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
-        )
-        result = pipeline.delay()
+        # 若同时存在已知座椅型号和无型号的旧异常，跳过无型号组避免跨型号混合聚类；
+        # 仅全部异常都无型号时才不加过滤地聚类（旧行为兼容）。
+        has_known = any(k != "__unknown__" for k in groups)
+        unknown_batch = groups.pop("__unknown__", [])
 
-        logger.info("pipeline_dispatched", task_id=result.id, anomaly_count=len(batch))
-        return {"status": "dispatched", "task_id": result.id, "anomaly_count": len(batch)}
+        task_ids: list[str] = []
+        for sm_id, batch in groups.items():
+            pipeline = chain(
+                celery_app.signature(
+                    "embedding.batch_extract",
+                    kwargs={"anomaly_batch": batch},
+                ),
+                celery_app.signature(
+                    "clustering.run",
+                    kwargs={"seat_model_id": sm_id},
+                    immutable=True,
+                ),
+                celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
+            )
+            result = pipeline.delay()
+            task_ids.append(result.id)
+            logger.info(
+                "pipeline_dispatched_per_seat_model",
+                task_id=result.id,
+                seat_model_id=sm_id,
+                anomaly_count=len(batch),
+            )
+
+        if unknown_batch and not has_known:
+            pipeline = chain(
+                celery_app.signature(
+                    "embedding.batch_extract",
+                    kwargs={"anomaly_batch": unknown_batch},
+                ),
+                celery_app.signature(
+                    "clustering.run",
+                    kwargs={},
+                    immutable=True,
+                ),
+                celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
+            )
+            result = pipeline.delay()
+            task_ids.append(result.id)
+            logger.info(
+                "pipeline_dispatched_unknown_seat_model",
+                task_id=result.id,
+                anomaly_count=len(unknown_batch),
+            )
+        elif unknown_batch:
+            logger.warning(
+                "pipeline_skipped_unknown_seat_model",
+                anomaly_count=len(unknown_batch),
+                hint="旧异常缺少 seat_model_id，请先关联到具体座椅型号后再处理",
+            )
+
+        return {
+            "status": "dispatched",
+            "task_ids": task_ids,
+            "anomaly_count": sum(len(b) for b in groups.values()),
+            "groups": len(groups),
+        }
 
     return run_async(_run())
 

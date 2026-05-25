@@ -16,6 +16,7 @@ class ClusterListParams(BaseModel):
 
 class ClusterSummary(BaseModel):
     cluster_id: str
+    seat_model_id: str | None = None
     name: str | None
     sample_count: int
     possible_type: str | None
