@@ -50,7 +50,7 @@ def check_imports() -> dict[str, bool]:
 
 def check_torch_device() -> None:
     import torch
-    cpu = torch.cpu.is_available()
+    cpu = True  # torch imported → CPU always available
     mps = torch.backends.mps.is_available() if hasattr(torch.backends, "mps") else False
     cuda = torch.cuda.is_available()
     print(f" [{STATUS_OK}] torch {torch.__version__} — CPU={cpu}, MPS={mps}, CUDA={cuda}")
