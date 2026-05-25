@@ -89,16 +89,16 @@ def _run_inspect(args) -> int:
         for cam_result in response.result.camera_results:
             print(f"  [{cam_result.camera_id}] status={cam_result.status} reason={cam_result.reason}")
 
-        if args.upload and response.status == "NG":
+        if args.upload:
             from seat_defect_core.anomaly_uploader import upload_inspection_response
-            print(f"上传 NG 结果到 {args.upload}...")
+            print(f"上传检测结果到 {args.upload}...")
             results = upload_inspection_response(response, args.upload)
             for r in results:
                 ids = r.get("anomaly_ids", [r.get("anomaly_id", "?")])
                 count = r.get("count", len(ids) if isinstance(ids, list) else 1)
                 print(f"  上传成功: anomaly_ids={ids} count={count}")
             if not results:
-                print("  上传失败（网络不通或后端未运行）")
+                print("  无异常需上传或上传失败（网络不通/后端未运行）")
 
         if args.output:
             import cv2
