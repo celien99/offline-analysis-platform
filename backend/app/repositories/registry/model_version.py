@@ -22,6 +22,20 @@ class ModelVersionRepository(BaseRepository):
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_latest_by_model_name(
+        self, model_name: str, status: str | None = None
+    ) -> ModelVersion | None:
+        """按 model_name 查询最新版本，可选按 status 过滤。"""
+        stmt = select(ModelVersion).where(
+            ModelVersion.deleted_at.is_(None),
+            ModelVersion.model_name == model_name,
+        )
+        if status is not None:
+            stmt = stmt.where(ModelVersion.status == status)
+        stmt = stmt.order_by(ModelVersion.trained_at.desc()).limit(1)
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_by_type(
         self,
         model_type: str | None = None,

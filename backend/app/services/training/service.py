@@ -23,6 +23,42 @@ class TrainingService:
         self._cluster_repo = ClusterRepository(session)
         self._model_version_repo = ModelVersionRepository(session)
 
+    async def get_training_readiness(self) -> dict[str, object]:
+        """检查是否有足够的新审核标签触发自动训练。"""
+        from app.core.config import settings
+        from app.repositories.training.repository import TrainingRunRepository
+
+        training_run_repo = TrainingRunRepository(self._session)
+        latest_run = await training_run_repo.get_latest_train()
+
+        since = (
+            latest_run.started_at
+            if latest_run
+            else datetime(2000, 1, 1, tzinfo=timezone.utc)
+        )
+
+        total_reviewed = await self._cluster_repo.count_reviewed()
+        new_reviewed = await self._cluster_repo.count_reviewed_since(since)
+
+        ready = (
+            total_reviewed >= settings.auto_train_min_total_samples
+            and new_reviewed >= settings.auto_train_min_new_labels
+        )
+
+        logger.info(
+            "training_readiness_checked",
+            ready=ready,
+            total_reviewed=total_reviewed,
+            new_reviewed=new_reviewed,
+            last_trained_at=str(latest_run.started_at) if latest_run else None,
+        )
+        return {
+            "ready": ready,
+            "total_reviewed_clusters": total_reviewed,
+            "new_reviewed_clusters_since_last_train": new_reviewed,
+            "last_trained_at": latest_run.started_at.isoformat() if latest_run else None,
+        }
+
     async def prepare_training_data(
         self,
         *,

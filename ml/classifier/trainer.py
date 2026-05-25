@@ -182,6 +182,56 @@ class FilterClassifierTrainer:
             self._model.load_state_dict(checkpoint)
         self._model.eval()
 
+    def fine_tune(
+        self,
+        checkpoint_path: str | Path,
+        train_dataset: Dataset,
+        val_dataset: Dataset,
+        *,
+        batch_size: int = 32,
+        epochs: int = 20,
+        class_names: list[str] | None = None,
+        early_stopping_patience: int = 5,
+        output_dir: str | Path = "./models",
+    ) -> dict[str, object]:
+        """从已有 checkpoint 微调模型，仅在新数据上训练。
+
+        相比完整训练使用更少的 epoch、更低的 LR 和更激进的早停，
+        适合在少量新增标签上的增量学习。
+        """
+        self.load_checkpoint(checkpoint_path)
+        # 增量训练使用原始 LR 的 1/5，避免灾难性遗忘
+        original_lr = self._learning_rate
+        self._learning_rate = original_lr / 5.0
+        try:
+            return self.train(
+                train_dataset=train_dataset,
+                val_dataset=val_dataset,
+                batch_size=batch_size,
+                epochs=epochs,
+                class_names=class_names,
+                early_stopping_patience=early_stopping_patience,
+                output_dir=output_dir,
+            )
+        finally:
+            self._learning_rate = original_lr
+
+    def save_checkpoint(
+        self, output_path: str | Path, metrics: dict | None = None
+    ) -> str:
+        """保存完整 checkpoint（state_dict + 元数据），供后续增量训练复用。"""
+        output_path = Path(output_path)
+        torch.save(
+            {
+                "model_state_dict": self._model.state_dict(),
+                "model_type": self._model_type,
+                "num_classes": self._num_classes,
+                "metrics": metrics or {},
+            },
+            output_path,
+        )
+        return str(output_path)
+
     def export_torchscript(self, output_path: str | Path) -> str:
         output_path = Path(output_path)
         self._model.eval()

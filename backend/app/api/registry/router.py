@@ -53,6 +53,32 @@ async def rollback_model(
     return StatusResponse(status="rolled_back", message=f"Model for {target} rolled back")
 
 
+@router.post("/deploy/canary/{deployment_id}/promote")
+async def promote_canary(
+    deployment_id: str,
+    reviewer: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+) -> StatusResponse:
+    """推广金丝雀模型到正式目录。"""
+    service = DeploymentService(session)
+    await service.confirm_canary(deployment_id, reviewer)
+    await session.commit()
+    return StatusResponse(status="promoted", message=f"Canary {deployment_id} promoted")
+
+
+@router.post("/deploy/canary/{deployment_id}/rollback")
+async def rollback_canary(
+    deployment_id: str,
+    reason: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> StatusResponse:
+    """回滚金丝雀部署。"""
+    service = DeploymentService(session)
+    await service.rollback_canary(deployment_id, reason)
+    await session.commit()
+    return StatusResponse(status="rolled_back", message=f"Canary {deployment_id} rolled back")
+
+
 @router.get("/deploy-targets")
 async def list_deploy_targets() -> dict[str, str]:
     """列出所有已配置的部署目标及其目录路径。"""

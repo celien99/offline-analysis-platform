@@ -50,3 +50,17 @@ class DeploymentRecord(BaseModel):
         comment="active / rolled_back / superseded"
     )
     rollback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    strategy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="immediate",
+        comment="immediate / shadow / canary"
+    )
+    canary_promoted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    canary_metrics_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="金丝雀评估指标 JSON"
+    )
+    canary_status: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+        comment="pending_promotion / promoted / rolled_back_by_metrics"
+    )

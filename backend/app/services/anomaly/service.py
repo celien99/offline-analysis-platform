@@ -33,6 +33,12 @@ class AnomalyService:
         anomaly_score: float | None = None,
         date_folder: str,
         detected_at: datetime,
+        decision_reason: str | None = None,
+        filter_confidence: float | None = None,
+        filter_real_defect_score: float | None = None,
+        filter_false_alarm_score: float | None = None,
+        filter_class_id: int | None = None,
+        filter_action: str | None = None,
         original_data: bytes | None = None,
         heatmap_data: bytes | None = None,
         crop_data_list: list[bytes] | None = None,
@@ -68,6 +74,12 @@ class AnomalyService:
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
                 detected_at=detected_at,
+                decision_reason=decision_reason,
+                filter_confidence=filter_confidence,
+                filter_real_defect_score=filter_real_defect_score,
+                filter_false_alarm_score=filter_false_alarm_score,
+                filter_class_id=filter_class_id,
+                filter_action=filter_action,
                 original_path=original_path,
                 heatmap_path=heatmap_path,
                 crop_path=crop_path,
@@ -87,6 +99,12 @@ class AnomalyService:
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
                 detected_at=detected_at,
+                decision_reason=decision_reason,
+                filter_confidence=filter_confidence,
+                filter_real_defect_score=filter_real_defect_score,
+                filter_false_alarm_score=filter_false_alarm_score,
+                filter_class_id=filter_class_id,
+                filter_action=filter_action,
                 original_path=original_path,
                 heatmap_path=heatmap_path,
                 crop_path=None,
@@ -144,6 +162,13 @@ class AnomalyService:
         record = await self._repo.get_by_id(anomaly_id)
         if record is None:
             raise NotFoundError("Anomaly", anomaly_id)
+        # 级联清理 embedding 和 membership，避免孤儿数据污染后续聚类
+        embedding_repo = EmbeddingRepository(self._session)
+        existing_embedding = await embedding_repo.get_by_anomaly_id(anomaly_id)
+        if existing_embedding is not None:
+            await embedding_repo.soft_delete(existing_embedding.id)
+        membership_repo = ClusterMembershipRepository(self._session)
+        await membership_repo.soft_delete_by_anomaly_id(anomaly_id)
         await self._repo.soft_delete(anomaly_id)
         logger.info("anomaly_soft_deleted", anomaly_id=anomaly_id)
 
@@ -180,5 +205,10 @@ class AnomalyService:
         logger.info("anomaly_reprocess_start", anomaly_id=anomaly_id)
         from app.services.pipeline.service import PipelineService
         pipeline = PipelineService()
-        pipeline.dispatch_for_new_anomalies()
+        # 只对该 anomaly 提取 embedding + 对所有非 reviewed 做增量聚类，
+        # 避免 dispatch_for_new_anomalies 拉入其他 pending 异常导致全量扫描
+        if record.crop_path:
+            pipeline.dispatch_single_reprocess(anomaly_id, record.crop_path)
+        else:
+            logger.warning("reprocess_no_crop_path", anomaly_id=anomaly_id)
         return record

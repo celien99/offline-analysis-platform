@@ -40,6 +40,7 @@ export const STATUS_COLOR_MAP: Record<string, string> = {
 export const ANOMALY_STATUS_COLOR_MAP: Record<string, string> = {
   pending: "orange",
   embedded: "blue",
+  noise: "volcano",
   clustered: "cyan",
   reviewed: "green",
 };

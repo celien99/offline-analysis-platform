@@ -43,9 +43,13 @@ class ClusteringService:
     ) -> tuple[ClusteringResult, dict[str, int], dict[str, float]]:
         cfg = config or self._build_cluster_config()
 
-        if len(embeddings) < max(cfg.hdbscan_min_cluster_size, 3):
+        num_samples = len(embeddings)
+        effective_min_cluster_size = min(cfg.hdbscan_min_cluster_size, num_samples)
+        effective_min_samples = min(cfg.hdbscan_min_samples, num_samples)
+
+        if num_samples < effective_min_cluster_size:
             raise ClusteringError(
-                f"Need at least {settings.clustering_min_cluster_size} embeddings for clustering"
+                f"Need at least {effective_min_cluster_size} embeddings for clustering, got {num_samples}"
             )
 
         ids = list(embeddings.keys())
@@ -57,8 +61,8 @@ class ClusteringService:
             umap_n_components=cfg.umap_n_components,
             umap_n_neighbors=cfg.umap_n_neighbors,
             umap_min_dist=cfg.umap_min_dist,
-            hdbscan_min_cluster_size=cfg.hdbscan_min_cluster_size,
-            hdbscan_min_samples=cfg.hdbscan_min_samples,
+            hdbscan_min_cluster_size=effective_min_cluster_size,
+            hdbscan_min_samples=effective_min_samples,
             hdbscan_metric=cfg.hdbscan_metric,
         )
 

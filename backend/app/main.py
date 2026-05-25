@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.api.anomaly.router import router as anomaly_router
 from app.api.cluster.router import router as cluster_router
 from app.api.review.router import router as review_router
+from app.api.review.noise_router import router as noise_review_router
 from app.api.training.router import router as training_router
 from app.api.registry.router import router as registry_router
 from app.api.embedding.router import router as embedding_router
@@ -74,6 +75,7 @@ async def health_check() -> dict[str, str]:
 app.include_router(anomaly_router)
 app.include_router(cluster_router)
 app.include_router(review_router)
+app.include_router(noise_review_router)
 app.include_router(training_router)
 app.include_router(registry_router)
 app.include_router(embedding_router)

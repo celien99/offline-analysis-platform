@@ -51,16 +51,20 @@ class SeatDefectInspector:
         return response, collect_camera_images(result)
 
     def _maybe_upload_anomalies(self, response: InspectionResponse) -> None:
-        """后台线程上传 NG 异常到离线分析平台。"""
+        """后台线程上传异常到离线分析平台，包括被分类器抑制的 OK 结果。"""
         upload_url = self.config.upload_base_url
-        if not upload_url or response.status != "NG":
+        if not upload_url:
             return
         from .anomaly_uploader import upload_inspection_response
         import threading
 
         def _upload() -> None:
             try:
-                upload_inspection_response(response, upload_url)
+                # include_ok_suppressed=True: 将过滤器分类器抑制的假阳性也上传到
+                # 离线平台，供人工审核确认，形成反馈闭环
+                upload_inspection_response(
+                    response, upload_url, include_ok_suppressed=True
+                )
             except Exception:
                 pass  # 上传失败不影响在线检测主流程
 

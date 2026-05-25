@@ -171,6 +171,7 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
         ),
         filter_classifier=_parse_filter_classifier_config(
             payload.get("filter_classifier"),
+            config_dir,
             scope=f"{scope}.filter_classifier",
         ),
         rule_engine=_parse_rule_engine_config(
@@ -441,15 +442,23 @@ def _parse_color_branch_config(payload: Any, *, scope: str) -> ColorBranchConfig
     )
 
 
-def _parse_filter_classifier_config(payload: Any, *, scope: str) -> FilterClassifierConfig:
+def _parse_filter_classifier_config(
+    payload: Any, config_dir: Path, *, scope: str
+) -> FilterClassifierConfig:
     defaults = FilterClassifierConfig()
     if payload is None:
         return defaults
     payload = _expect_dict(payload, scope)
     _reject_unknown_keys(payload, _field_names(FilterClassifierConfig), scope)
+    raw_model_path = _optional_string(payload.get("model_path"))
+    model_path: str | None = None
+    if raw_model_path is not None:
+        model_path = _resolve_local_path(config_dir, raw_model_path, force=False)
+        if model_path is None:
+            model_path = raw_model_path
     return FilterClassifierConfig(
         enabled=_bool_or_default(payload.get("enabled"), defaults.enabled),
-        model_path=_optional_string(payload.get("model_path")),
+        model_path=model_path,
         device=_string_or_default(payload.get("device"), defaults.device),
         input_size=_int_or_default(payload.get("input_size"), defaults.input_size),
         confidence_threshold=_float_or_default(
