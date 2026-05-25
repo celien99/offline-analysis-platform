@@ -10,7 +10,7 @@ from app.models.knowledge import KnowledgeEntry, RuleEntry
 from app.repositories.base import BaseRepository
 
 
-class KnowledgeRepository(BaseRepository):
+class KnowledgeRepository(BaseRepository[KnowledgeEntry]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, KnowledgeEntry)
 
@@ -58,7 +58,7 @@ class KnowledgeRepository(BaseRepository):
         return result.scalars().all()
 
 
-class RuleRepository(BaseRepository):
+class RuleRepository(BaseRepository[RuleEntry]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, RuleEntry)
 

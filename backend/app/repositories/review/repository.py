@@ -9,7 +9,7 @@ from app.models.review import ReviewRecord
 from app.repositories.base import BaseRepository
 
 
-class ReviewRepository(BaseRepository):
+class ReviewRepository(BaseRepository[ReviewRecord]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ReviewRecord)
 

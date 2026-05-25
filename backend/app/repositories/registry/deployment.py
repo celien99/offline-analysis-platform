@@ -7,7 +7,7 @@ from app.models.registry import DeploymentRecord
 from app.repositories.base import BaseRepository
 
 
-class DeploymentRepository(BaseRepository):
+class DeploymentRepository(BaseRepository[DeploymentRecord]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, DeploymentRecord)
 

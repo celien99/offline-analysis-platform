@@ -9,7 +9,7 @@ from app.models.graph import GraphBuildRecord, SimilarityEdge
 from app.repositories.base import BaseRepository
 
 
-class GraphRepository(BaseRepository):
+class GraphRepository(BaseRepository[SimilarityEdge]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, SimilarityEdge)
 
@@ -64,7 +64,7 @@ class GraphRepository(BaseRepository):
         return len(result.scalars().all())
 
 
-class GraphBuildRecordRepository(BaseRepository):
+class GraphBuildRecordRepository(BaseRepository[GraphBuildRecord]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, GraphBuildRecord)
 

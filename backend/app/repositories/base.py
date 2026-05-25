@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TypeVar
+from datetime import datetime
+from typing import Generic, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,15 +12,15 @@ from app.infrastructure.database.base import Base
 T = TypeVar("T", bound=Base)
 
 
-class BaseRepository:
+class BaseRepository(Generic[T]):
     def __init__(self, session: AsyncSession, model: type[T]) -> None:
         self._session = session
         self._model = model
 
     async def get_by_id(self, id_: str) -> T | None:
         stmt = select(self._model).where(
-            self._model.id == id_,
-            self._model.deleted_at.is_(None),
+            self._model.id == id_,  # type: ignore[attr-defined]
+            self._model.deleted_at.is_(None),  # type: ignore[attr-defined]
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
@@ -31,7 +32,7 @@ class BaseRepository:
         limit: int = 20,
         **filters: object,
     ) -> Sequence[T]:
-        stmt = select(self._model).where(self._model.deleted_at.is_(None))
+        stmt = select(self._model).where(self._model.deleted_at.is_(None))  # type: ignore[attr-defined]
         for key, value in filters.items():
             if value is not None:
                 stmt = stmt.where(getattr(self._model, key) == value)
@@ -41,7 +42,7 @@ class BaseRepository:
 
     async def count(self, **filters: object) -> int:
         stmt = select(func.count()).select_from(self._model).where(
-            self._model.deleted_at.is_(None)
+            self._model.deleted_at.is_(None)  # type: ignore[attr-defined]
         )
         for key, value in filters.items():
             if value is not None:
@@ -68,15 +69,15 @@ class BaseRepository:
         if entity is not None:
             from datetime import datetime, timezone
 
-            entity.deleted_at = datetime.now(tz=timezone.utc)
+            entity.deleted_at = datetime.now(tz=timezone.utc)  # type: ignore[attr-defined]
             await self._session.flush()
 
-    async def hard_delete_expired_before(self, cutoff) -> int:
+    async def hard_delete_expired_before(self, cutoff: datetime) -> int:
         from sqlalchemy import delete
 
         stmt = delete(self._model).where(
-            self._model.deleted_at.isnot(None),
-            self._model.deleted_at < cutoff,
+            self._model.deleted_at.isnot(None),  # type: ignore[attr-defined]
+            self._model.deleted_at < cutoff,  # type: ignore[attr-defined]
         )
         result = await self._session.execute(stmt)
-        return result.rowcount
+        return result.rowcount  # type: ignore[no-any-return, attr-defined]

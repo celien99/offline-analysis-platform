@@ -10,7 +10,7 @@ from app.models.cluster import Cluster, ClusterMembership
 from app.repositories.base import BaseRepository
 
 
-class ClusterRepository(BaseRepository):
+class ClusterRepository(BaseRepository[Cluster]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Cluster)
 
@@ -126,7 +126,7 @@ class ClusterRepository(BaseRepository):
         await self._session.execute(stmt)
 
 
-class ClusterMembershipRepository(BaseRepository):
+class ClusterMembershipRepository(BaseRepository[ClusterMembership]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ClusterMembership)
 
