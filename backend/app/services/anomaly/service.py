@@ -11,6 +11,8 @@ from app.core.security import generate_trace_id, generate_uuid
 from app.infrastructure.storage.minio_client import MinIOClient
 from app.models.anomaly import AnomalyRecord
 from app.repositories.anomaly.repository import AnomalyRepository
+from app.repositories.cluster.repository import ClusterMembershipRepository
+from app.repositories.embedding.repository import EmbeddingRepository
 
 logger = get_logger(__name__)
 
@@ -146,10 +148,31 @@ class AnomalyService:
         logger.info("anomaly_soft_deleted", anomaly_id=anomaly_id)
 
     async def reprocess_anomaly(self, anomaly_id: str) -> AnomalyRecord:
-        """重置异常状态并触发 Celery pipeline 重新处理。"""
+        """重置异常状态并触发 Celery pipeline 重新处理。
+
+        清理已有嵌入向量和聚类归属，确保 embedding worker 不会因去重逻辑跳过。
+        """
         record = await self._repo.get_by_id(anomaly_id)
         if record is None:
             raise NotFoundError("Anomaly", anomaly_id)
+
+        # 软删除已有嵌入向量，否则 embedding worker 会因为 unique 约束跳过
+        embedding_repo = EmbeddingRepository(self._session)
+        existing_embedding = await embedding_repo.get_by_anomaly_id(anomaly_id)
+        if existing_embedding is not None:
+            await embedding_repo.soft_delete(existing_embedding.id)
+            logger.info("reprocess_embedding_cleared", anomaly_id=anomaly_id)
+
+        # 软删除已有聚类归属
+        membership_repo = ClusterMembershipRepository(self._session)
+        deleted_count = await membership_repo.soft_delete_by_anomaly_id(anomaly_id)
+        if deleted_count > 0:
+            logger.info(
+                "reprocess_membership_cleared",
+                anomaly_id=anomaly_id,
+                deleted_count=deleted_count,
+            )
+
         await self._repo.update_status(anomaly_id, "pending")
         await self._session.commit()
         await self._session.refresh(record)
