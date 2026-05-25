@@ -36,43 +36,43 @@ class SeatModelWithCameras(SeatModelResponse):
 
 class CameraConfigCreate(BaseModel):
     camera_id: str = Field(..., max_length=128, description="相机标识符")
-    patchcore_model_path: str = Field(..., max_length=512, description="PatchCore 模型路径")
-    yolo_model_path: str = Field(..., max_length=512, description="YOLO 检测模型路径")
+    patchcore_model_version_id: str = Field(..., description="PatchCore 模型版本 ID")
+    yolo_model_version_id: str = Field(..., description="YOLO 检测模型版本 ID")
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
     patchcore_image_size: int = Field(default=256, ge=64, le=1024)
     patchcore_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
     region_mode_enabled: bool = False
-    region_upper_model_path: str | None = Field(default=None, max_length=512)
-    region_middle_model_path: str | None = Field(default=None, max_length=512)
-    region_lower_model_path: str | None = Field(default=None, max_length=512)
+    region_upper_model_version_id: str | None = Field(default=None, description="upper 区域模型版本 ID")
+    region_middle_model_version_id: str | None = Field(default=None, description="middle 区域模型版本 ID")
+    region_lower_model_version_id: str | None = Field(default=None, description="lower 区域模型版本 ID")
 
 
 class CameraConfigUpdate(BaseModel):
     camera_id: str | None = Field(default=None, max_length=128)
-    patchcore_model_path: str | None = Field(default=None, max_length=512)
-    yolo_model_path: str | None = Field(default=None, max_length=512)
+    patchcore_model_version_id: str | None = Field(default=None)
+    yolo_model_version_id: str | None = Field(default=None)
     detection_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     patchcore_image_size: int | None = Field(default=None, ge=64, le=1024)
     patchcore_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     region_mode_enabled: bool | None = None
-    region_upper_model_path: str | None = Field(default=None, max_length=512)
-    region_middle_model_path: str | None = Field(default=None, max_length=512)
-    region_lower_model_path: str | None = Field(default=None, max_length=512)
+    region_upper_model_version_id: str | None = Field(default=None)
+    region_middle_model_version_id: str | None = Field(default=None)
+    region_lower_model_version_id: str | None = Field(default=None)
 
 
 class CameraConfigResponse(BaseModel):
     id: str
     camera_id: str
     seat_model_id: str
-    patchcore_model_path: str
-    yolo_model_path: str
+    patchcore_model_version_id: str | None
+    yolo_model_version_id: str | None
     detection_confidence: float
     patchcore_image_size: int
     patchcore_threshold: float
     region_mode_enabled: bool
-    region_upper_model_path: str | None
-    region_middle_model_path: str | None
-    region_lower_model_path: str | None
+    region_upper_model_version_id: str | None
+    region_middle_model_version_id: str | None
+    region_lower_model_version_id: str | None
     created_at: datetime
     updated_at: datetime
 

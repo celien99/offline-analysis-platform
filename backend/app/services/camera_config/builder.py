@@ -103,19 +103,24 @@ class ConfigBuilder:
         seat_model_id: str,
         display_name: str,
         cameras: Sequence[CameraConfig],
+        model_paths: dict[str, str],
         selected_camera_ids: list[str] | None = None,
         *,
         part_id: str = "seat_demo",
         upload_base_url: str = "http://localhost:8000",
     ) -> dict[str, object]:
-        """生成完整的检测配置字典。"""
+        """生成完整的检测配置字典。
+
+        Args:
+            model_paths: model_version_id → artifact_path 的映射，由调用方从 model_versions 表查询。
+        """
         selected_ids = set(selected_camera_ids) if selected_camera_ids else None
 
         camera_configs = []
         for cam in cameras:
             if selected_ids is not None and cam.camera_id not in selected_ids:
                 continue
-            camera_configs.append(self._build_camera_config(cam))
+            camera_configs.append(self._build_camera_config(cam, model_paths))
 
         return {
             "seat_defect_inspection": {
@@ -143,15 +148,27 @@ class ConfigBuilder:
         }
 
     def _resolve_path(self, raw: str) -> str:
-        """将用户输入的相对路径转为绝对路径，使其在临时配置目录中也能正确解析。"""
+        """将相对路径转为绝对路径，使其在临时配置目录中也能正确解析。"""
         p = Path(raw)
         if p.is_absolute():
             return str(p)
         return str(self._repo_root / raw)
 
-    def _build_camera_config(self, cam: CameraConfig) -> dict[str, object]:
+    def _resolve_model_path(
+        self, model_version_id: str | None, model_paths: dict[str, str]
+    ) -> str:
+        """从 model_paths 映射中解析模型文件路径。"""
+        if not model_version_id:
+            return ""
+        path = model_paths.get(model_version_id, "")
+        return self._resolve_path(path) if path else ""
+
+    def _build_camera_config(
+        self, cam: CameraConfig, model_paths: dict[str, str]
+    ) -> dict[str, object]:
+        yolo_path = self._resolve_model_path(cam.yolo_model_version_id, model_paths)
         detection = dict(self.DEFAULT_DETECTION)
-        detection["model_path"] = self._resolve_path(cam.yolo_model_path)
+        detection["model_path"] = yolo_path
         detection["confidence"] = cam.detection_confidence
 
         patchcore = dict(self.DEFAULT_PATCHCORE)
@@ -168,9 +185,13 @@ class ConfigBuilder:
         if deployed_rules:
             rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
 
+        patchcore_path = self._resolve_model_path(
+            cam.patchcore_model_version_id, model_paths
+        )
+
         config: dict[str, object] = {
             "camera_id": cam.camera_id,
-            "patchcore_model_path": self._resolve_path(cam.patchcore_model_path),
+            "patchcore_model_path": patchcore_path,
             "source": "",
             "enabled": True,
             "color_insensitive_mode": True,
@@ -185,7 +206,7 @@ class ConfigBuilder:
         }
 
         if cam.region_mode_enabled:
-            region_patchcore_overrides = {
+            region_patchcore_overrides: dict[str, object] = {
                 "backbone_pretrained": True,
                 "min_target_coverage": 0.5,
                 "min_valid_patch_ratio": 0.35,
@@ -194,28 +215,28 @@ class ConfigBuilder:
                 {
                     "region_id": "upper",
                     "box": [0.03, 0.03, 0.97, 0.42],
-                    "patchcore_model_path": self._resolve_path(cam.region_upper_model_path)
-                    if cam.region_upper_model_path
-                    else "",
-                    "enabled": bool(cam.region_upper_model_path),
+                    "patchcore_model_path": self._resolve_model_path(
+                        cam.region_upper_model_version_id, model_paths
+                    ),
+                    "enabled": bool(cam.region_upper_model_version_id),
                     "patchcore": region_patchcore_overrides,
                 },
                 {
                     "region_id": "middle",
                     "box": [0.03, 0.38, 0.97, 0.67],
-                    "patchcore_model_path": self._resolve_path(cam.region_middle_model_path)
-                    if cam.region_middle_model_path
-                    else "",
-                    "enabled": bool(cam.region_middle_model_path),
+                    "patchcore_model_path": self._resolve_model_path(
+                        cam.region_middle_model_version_id, model_paths
+                    ),
+                    "enabled": bool(cam.region_middle_model_version_id),
                     "patchcore": region_patchcore_overrides,
                 },
                 {
                     "region_id": "lower",
                     "box": [0.03, 0.66, 0.97, 0.97],
-                    "patchcore_model_path": self._resolve_path(cam.region_lower_model_path)
-                    if cam.region_lower_model_path
-                    else "",
-                    "enabled": bool(cam.region_lower_model_path),
+                    "patchcore_model_path": self._resolve_model_path(
+                        cam.region_lower_model_version_id, model_paths
+                    ),
+                    "enabled": bool(cam.region_lower_model_version_id),
                     "patchcore": region_patchcore_overrides,
                 },
             ]

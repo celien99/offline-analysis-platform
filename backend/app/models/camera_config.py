@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 
@@ -31,12 +31,17 @@ class CameraConfig(BaseModel):
         String(128), ForeignKey("seat_models.seat_model_id", ondelete="CASCADE"),
         nullable=False, index=True, comment="所属座椅型号 seat_model_id",
     )
-    patchcore_model_path: Mapped[str] = mapped_column(
-        String(512), nullable=False, comment="整体 PatchCore 模型路径",
+
+    # 模型引用 → model_versions.id
+    patchcore_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="整体 PatchCore 模型版本 ID",
     )
-    yolo_model_path: Mapped[str] = mapped_column(
-        String(512), nullable=False, comment="YOLO 检测模型路径",
+    yolo_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="YOLO 检测模型版本 ID",
     )
+
     detection_confidence: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.25, comment="YOLO 置信度阈值",
     )
@@ -49,12 +54,17 @@ class CameraConfig(BaseModel):
     region_mode_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, comment="是否启用三分区模式",
     )
-    region_upper_model_path: Mapped[str | None] = mapped_column(
-        String(512), nullable=True, comment="upper 区域 PatchCore 模型路径",
+
+    # 三分区模型引用
+    region_upper_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="upper 区域 PatchCore 模型版本 ID",
     )
-    region_middle_model_path: Mapped[str | None] = mapped_column(
-        String(512), nullable=True, comment="middle 区域 PatchCore 模型路径",
+    region_middle_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="middle 区域 PatchCore 模型版本 ID",
     )
-    region_lower_model_path: Mapped[str | None] = mapped_column(
-        String(512), nullable=True, comment="lower 区域 PatchCore 模型路径",
+    region_lower_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="lower 区域 PatchCore 模型版本 ID",
     )
