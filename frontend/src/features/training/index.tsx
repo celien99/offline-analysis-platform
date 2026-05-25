@@ -73,7 +73,7 @@ export default function TrainingPage() {
       {
         onSuccess: () => {
           setFilterVisible(false);
-          message.success("Filter Classifier training queued");
+          message.success("过滤器分类器训练已加入队列");
           refetchModels();
         },
       },
@@ -97,7 +97,7 @@ export default function TrainingPage() {
 
     patchcoreStart.mutate(formData, {
       onSuccess: () => {
-        message.success("PatchCore training queued");
+        message.success("PatchCore 训练已加入队列");
         setPcImageFiles([]);
         refetchModels();
       },
@@ -110,24 +110,24 @@ export default function TrainingPage() {
   };
 
   const columns = [
-    { title: "Model Name", dataIndex: "model_name", key: "model_name" },
-    { title: "Version", dataIndex: "version", key: "version", width: 140 },
+    { title: "模型名称", dataIndex: "model_name", key: "model_name" },
+    { title: "版本", dataIndex: "version", key: "version", width: 140 },
     {
-      title: "Type",
+      title: "类型",
       dataIndex: "model_type",
       key: "model_type",
       width: 120,
       render: (t: string) => <Tag color={modelTypeColor(t)}>{t}</Tag>,
     },
     {
-      title: "Framework",
+      title: "框架",
       dataIndex: "framework",
       key: "framework",
       width: 100,
       render: (f: string) => <Tag>{f}</Tag>,
     },
     {
-      title: "Status",
+      title: "状态",
       dataIndex: "status",
       key: "status",
       width: 100,
@@ -136,14 +136,14 @@ export default function TrainingPage() {
       ),
     },
     {
-      title: "Trained At",
+      title: "训练时间",
       dataIndex: "trained_at",
       key: "trained_at",
       width: 180,
       render: (d: string | null) => (d ? dayjs(d).format("YYYY-MM-DD HH:mm") : "-"),
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       width: 100,
       render: (_: unknown, record: TrainedModel) => (
@@ -154,7 +154,7 @@ export default function TrainingPage() {
             setStatusVisible(true);
           }}
         >
-          Status
+          状态
         </Button>
       ),
     },
@@ -163,7 +163,7 @@ export default function TrainingPage() {
   const tabItems = [
     {
       key: "models",
-      label: "Trained Models",
+      label: "已训练模型",
       children: (
         <Card>
           <Table
@@ -182,7 +182,7 @@ export default function TrainingPage() {
     },
     {
       key: "filter",
-      label: "Filter Classifier",
+      label: "过滤器分类器",
       children: (
         <Card>
           <Typography.Paragraph type="secondary">
@@ -193,14 +193,14 @@ export default function TrainingPage() {
             icon={<PlayCircleOutlined />}
             onClick={() => setFilterVisible(true)}
           >
-            Start Filter Classifier Training
+            开始过滤器分类器训练
           </Button>
         </Card>
       ),
     },
     {
       key: "patchcore",
-      label: "PatchCore Training",
+      label: "PatchCore 训练",
       children: (
         <Card>
           <Typography.Paragraph type="secondary" className="mb-4">
@@ -208,7 +208,7 @@ export default function TrainingPage() {
           </Typography.Paragraph>
 
           <Form layout="vertical" className="max-w-lg">
-            <Form.Item label="Camera ID" required>
+            <Form.Item label="相机ID" required>
               <Input
                 placeholder="例如: cam_front"
                 value={pcCameraId}
@@ -216,7 +216,7 @@ export default function TrainingPage() {
               />
             </Form.Item>
 
-            <Form.Item label="Good Reference Images" required>
+            <Form.Item label="正常参考图像" required>
               <Dragger
                 multiple
                 accept="image/*"
@@ -245,7 +245,7 @@ export default function TrainingPage() {
                 onClick={handlePatchcoreStart}
                 loading={patchcoreStart.isPending}
               >
-                Start PatchCore Training
+                开始 PatchCore 训练
               </Button>
             </Form.Item>
           </Form>
@@ -257,11 +257,11 @@ export default function TrainingPage() {
   return (
     <div>
       <PageHeader
-        title="Training Management"
+        title="训练管理"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={() => refetchModels()}>
-              Refresh
+              刷新
             </Button>
           </Space>
         }
@@ -271,7 +271,7 @@ export default function TrainingPage() {
 
       {/* ── Filter Classifier Modal ── */}
       <Modal
-        title="Start Filter Classifier Training"
+        title="开始过滤器分类器训练"
         open={filterVisible}
         onCancel={() => setFilterVisible(false)}
         onOk={() => filterForm.submit()}
@@ -292,29 +292,29 @@ export default function TrainingPage() {
             augmentations: true,
           }}
         >
-          <Form.Item name="model_type" label="Model Architecture">
+          <Form.Item name="model_type" label="模型架构">
             <Select options={FILTER_MODEL_TYPE_OPTIONS} />
           </Form.Item>
           <Space size="middle">
-            <Form.Item name="num_classes" label="Num Classes">
+            <Form.Item name="num_classes" label="类别数">
               <InputNumber min={2} max={10} />
             </Form.Item>
-            <Form.Item name="batch_size" label="Batch Size">
+            <Form.Item name="batch_size" label="批次大小">
               <InputNumber min={1} max={256} />
             </Form.Item>
-            <Form.Item name="epochs" label="Epochs">
+            <Form.Item name="epochs" label="训练轮数">
               <InputNumber min={1} max={500} />
             </Form.Item>
           </Space>
           <Space size="middle">
-            <Form.Item name="learning_rate" label="Learning Rate">
+            <Form.Item name="learning_rate" label="学习率">
               <InputNumber min={0.0001} max={0.1} step={0.0001} />
             </Form.Item>
-            <Form.Item name="validation_split" label="Validation Split">
+            <Form.Item name="validation_split" label="验证集比例">
               <InputNumber min={0.1} max={0.5} step={0.05} />
             </Form.Item>
-            <Form.Item name="augmentations" label="Augmentations" valuePropName="checked">
-              <Select options={[{ value: true, label: "Yes" }, { value: false, label: "No" }]} />
+            <Form.Item name="augmentations" label="数据增强" valuePropName="checked">
+              <Select options={[{ value: true, label: "是" }, { value: false, label: "否" }]} />
             </Form.Item>
           </Space>
         </Form>
@@ -322,32 +322,32 @@ export default function TrainingPage() {
 
       {/* ── Status Modal ── */}
       <Modal
-        title="Training Status"
+        title="训练状态"
         open={statusVisible}
         onCancel={() => setStatusVisible(false)}
         footer={null}
       >
         {statusData ? (
           <Descriptions column={1} size="small">
-            <Descriptions.Item label="Task ID">{statusData.task_id}</Descriptions.Item>
-            <Descriptions.Item label="Status">
+            <Descriptions.Item label="任务ID">{statusData.task_id}</Descriptions.Item>
+            <Descriptions.Item label="状态">
               <Tag color={statusData.status === "success" ? "green" : "blue"}>
                 {statusData.status}
               </Tag>
             </Descriptions.Item>
             {statusData.progress != null && (
-              <Descriptions.Item label="Progress">
+              <Descriptions.Item label="进度">
                 <Progress percent={Math.round(statusData.progress * 100)} />
               </Descriptions.Item>
             )}
             {statusData.metrics && (
-              <Descriptions.Item label="Metrics">
+              <Descriptions.Item label="指标">
                 <pre className="text-xs">{JSON.stringify(statusData.metrics, null, 2)}</pre>
               </Descriptions.Item>
             )}
           </Descriptions>
         ) : (
-          <Typography.Text type="secondary">Loading status...</Typography.Text>
+          <Typography.Text type="secondary">加载状态中...</Typography.Text>
         )}
       </Modal>
     </div>

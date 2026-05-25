@@ -15,7 +15,7 @@ interface Props {
 export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsType<ClusterSummary> {
   return [
     {
-      title: "Cluster",
+      title: "聚类",
       dataIndex: "name",
       key: "name",
       render: (_: string, record: ClusterSummary) => (
@@ -34,27 +34,27 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
       ),
     },
     {
-      title: "Samples",
+      title: "样本数",
       dataIndex: "sample_count",
       key: "sample_count",
       sorter: (a, b) => a.sample_count - b.sample_count,
     },
     {
-      title: "Possible Type",
+      title: "可能类型",
       dataIndex: "possible_type",
       key: "possible_type",
-      render: (t: string | null) => <Tag color="blue">{t || "unknown"}</Tag>,
+      render: (t: string | null) => <Tag color="blue">{t || "未知"}</Tag>,
     },
     {
-      title: "Review Status",
+      title: "审核状态",
       dataIndex: "review_status",
       key: "review_status",
       render: (s: string | null) => (
-        <Tag color={STATUS_COLOR_MAP[s || ""] || "orange"}>{s || "pending"}</Tag>
+        <Tag color={STATUS_COLOR_MAP[s || ""] || "orange"}>{s || "待审核"}</Tag>
       ),
     },
     {
-      title: "Defect Type",
+      title: "缺陷类型",
       dataIndex: "defect_type",
       key: "defect_type",
       render: (t: string | null) => <Tag color="purple">{t || "-"}</Tag>,
@@ -66,7 +66,7 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
         record.vlm_analyzed_at ? (
           <Space size={4}>
             <Tag color={record.vlm_is_false_alarm ? "green" : "orange"}>
-              {record.vlm_anomaly_type || "analyzed"}
+              {record.vlm_anomaly_type || "已分析"}
             </Tag>
           </Space>
         ) : (
@@ -74,13 +74,13 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
         ),
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       width: 320,
       render: (_: unknown, record: ClusterSummary) => (
         <Space>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onViewDetail(record.cluster_id)}>
-            Detail
+            详情
           </Button>
           {record.status === "pending_review" && (
             <>
@@ -90,7 +90,7 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
                 icon={<CheckOutlined />}
                 onClick={() => onReview(record, "confirm_defect")}
               >
-                Confirm
+                确认缺陷
               </Button>
               <Button
                 danger
@@ -98,7 +98,7 @@ export function useClusterColumns({ onViewDetail, onReview }: Props): ColumnsTyp
                 icon={<CloseOutlined />}
                 onClick={() => onReview(record, "mark_false_alarm")}
               >
-                False Alarm
+                标记误报
               </Button>
             </>
           )}

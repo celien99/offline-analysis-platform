@@ -30,12 +30,12 @@ export default function CreateKnowledgeForm({ form, open, submitting, initialClu
 
   const clusterOptions = (clusterData?.clusters ?? []).map((c) => ({
     value: c.cluster_id,
-    label: `${c.name || c.cluster_id.slice(0, 8)} (${c.sample_count} samples, ${c.review_status || c.status})`,
+    label: `${c.name || c.cluster_id.slice(0, 8)} (${c.sample_count} 个样本, ${c.review_status || c.status})`,
   }));
 
   return (
     <Modal
-      title="Create Knowledge Entry"
+      title="创建知识条目"
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}
@@ -44,31 +44,31 @@ export default function CreateKnowledgeForm({ form, open, submitting, initialClu
       afterOpenChange={(visible) => { if (visible) handleOpen(); }}
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-          <Input maxLength={256} placeholder="e.g. Reflection pattern on left seat edge" />
+        <Form.Item name="title" label="标题" rules={[{ required: true }]}>
+          <Input maxLength={256} placeholder="例如: 左座椅边缘反光模式" />
         </Form.Item>
         <Row gutter={16}>
           <Col span={12}>
-            <Form.Item name="category" label="Category" rules={[{ required: true }]}>
-              <Select options={CATEGORY_OPTIONS as { value: string; label: string }[]} placeholder="Select category" />
+            <Form.Item name="category" label="类别" rules={[{ required: true }]}>
+              <Select options={CATEGORY_OPTIONS as { value: string; label: string }[]} placeholder="选择类别" />
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="defect_type" label="Defect Type">
-              <Select options={DEFECT_TYPES as { value: string; label: string }[]} placeholder="Optional" allowClear />
+            <Form.Item name="defect_type" label="缺陷类型">
+              <Select options={DEFECT_TYPES as { value: string; label: string }[]} placeholder="可选" allowClear />
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item name="action" label="Action" rules={[{ required: true }]}>
-          <Select options={ACTION_OPTIONS as { value: string; label: string }[]} placeholder="Select action" />
+        <Form.Item name="action" label="动作" rules={[{ required: true }]}>
+          <Select options={ACTION_OPTIONS as { value: string; label: string }[]} placeholder="选择动作" />
         </Form.Item>
-        <Form.Item name="description" label="Description">
-          <TextArea rows={3} maxLength={2000} placeholder="Describe the defect pattern..." />
+        <Form.Item name="description" label="描述">
+          <TextArea rows={3} maxLength={2000} placeholder="描述缺陷模式..." />
         </Form.Item>
-        <Form.Item name="cluster_id" label="Cluster">
+        <Form.Item name="cluster_id" label="聚类">
           <Select
             options={clusterOptions}
-            placeholder={clustersLoading ? "Loading clusters..." : "Select a cluster (optional)"}
+            placeholder={clustersLoading ? "加载聚类中..." : "选择聚类 (可选)"}
             allowClear
             showSearch
             filterOption={(input, option) =>
@@ -77,8 +77,8 @@ export default function CreateKnowledgeForm({ form, open, submitting, initialClu
             notFoundContent={clustersLoading ? <Spin size="small" /> : null}
           />
         </Form.Item>
-        <Form.Item name="camera_ids" label="Camera IDs (comma separated)">
-          <Input placeholder="e.g. left_top, right_bottom" />
+        <Form.Item name="camera_ids" label="相机ID (逗号分隔)">
+          <Input placeholder="例如: left_top, right_bottom" />
         </Form.Item>
       </Form>
     </Modal>

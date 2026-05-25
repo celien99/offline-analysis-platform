@@ -45,7 +45,7 @@ export default function ModelDeployPage() {
       {
         onSuccess: () => {
           setDeployVisible(false);
-          message.success("Model deployed");
+          message.success("模型已部署");
           refetchDeployments();
         },
       },
@@ -54,10 +54,10 @@ export default function ModelDeployPage() {
 
   const handleRollback = (target: string) => {
     rollbackModel.mutate(
-      { target, reason: "Manual rollback" },
+      { target, reason: "手动回滚" },
       {
         onSuccess: () => {
-          message.success(`Rollback for ${target} initiated`);
+          message.success(`${target} 的回滚已启动`);
           refetchDeployments();
         },
       },
@@ -65,18 +65,18 @@ export default function ModelDeployPage() {
   };
 
   const columns = [
-    { title: "Deployment ID", dataIndex: "deployment_id", key: "deployment_id", width: 280, ellipsis: true },
-    { title: "Model", dataIndex: "model_name", key: "model_name", width: 180 },
-    { title: "Version", dataIndex: "version", key: "version", width: 140 },
+    { title: "部署ID", dataIndex: "deployment_id", key: "deployment_id", width: 280, ellipsis: true },
+    { title: "模型", dataIndex: "model_name", key: "model_name", width: 180 },
+    { title: "版本", dataIndex: "version", key: "version", width: 140 },
     {
-      title: "Target",
+      title: "目标",
       dataIndex: "target",
       key: "target",
       width: 120,
       render: (t: string) => <Tag color="purple">{t}</Tag>,
     },
     {
-      title: "Status",
+      title: "状态",
       dataIndex: "deployment_status",
       key: "deployment_status",
       width: 100,
@@ -87,24 +87,24 @@ export default function ModelDeployPage() {
       ),
     },
     {
-      title: "Deployed At",
+      title: "部署时间",
       dataIndex: "deployed_at",
       key: "deployed_at",
       width: 180,
       render: (d: string) => dayjs(d).format("YYYY-MM-DD HH:mm"),
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       width: 100,
       render: (_: unknown, record: DeploymentRecord) => (
         record.deployment_status === "active" ? (
           <Popconfirm
-            title={`Rollback ${record.target}?`}
+            title={`确定要回滚 ${record.target} 吗？`}
             onConfirm={() => handleRollback(record.target)}
           >
             <Button size="small" danger icon={<RollbackOutlined />}>
-              Rollback
+              回滚
             </Button>
           </Popconfirm>
         ) : null
@@ -115,18 +115,18 @@ export default function ModelDeployPage() {
   return (
     <div>
       <PageHeader
-        title="Model Deployment"
+        title="模型部署"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={() => refetchDeployments()}>
-              Refresh
+              刷新
             </Button>
             <Button
               type="primary"
               icon={<RocketOutlined />}
               onClick={() => setDeployVisible(true)}
             >
-              Deploy Model
+              部署模型
             </Button>
           </Space>
         }
@@ -143,7 +143,7 @@ export default function ModelDeployPage() {
       </Card>
 
       <Modal
-        title="Deploy Model to Target"
+        title="部署模型到目标"
         open={deployVisible}
         onCancel={() => setDeployVisible(false)}
         onOk={() => deployForm.submit()}
@@ -157,12 +157,12 @@ export default function ModelDeployPage() {
         >
           <Form.Item
             name="model_name"
-            label="Model Name"
+            label="模型名称"
             rules={[{ required: true }]}
           >
             <Select
               showSearch
-              placeholder="Select a trained model"
+              placeholder="选择已训练模型"
               options={(modelsData?.models ?? []).map((m) => ({
                 value: m.model_name,
                 label: `${m.model_name} (${m.version})`,
@@ -178,26 +178,26 @@ export default function ModelDeployPage() {
               }}
             />
           </Form.Item>
-          <Form.Item name="version" label="Version" rules={[{ required: true }]}>
-            <Input placeholder="e.g. 20250115120000" />
+          <Form.Item name="version" label="版本" rules={[{ required: true }]}>
+            <Input placeholder="例如: 20250115120000" />
           </Form.Item>
           <Form.Item
             name="target"
-            label="Deployment Target"
-            rules={[{ required: true, message: "Target is required" }]}
+            label="部署目标"
+            rules={[{ required: true, message: "部署目标为必填项" }]}
           >
             <Select
-              placeholder="e.g. production_line_1"
+              placeholder="例如: production_line_1"
               options={[
-                { value: "production_line_1", label: "Production Line 1" },
-                { value: "production_line_2", label: "Production Line 2" },
-                { value: "camera_group_a", label: "Camera Group A" },
-                { value: "camera_group_b", label: "Camera Group B" },
+                { value: "production_line_1", label: "产线 1" },
+                { value: "production_line_2", label: "产线 2" },
+                { value: "camera_group_a", label: "相机组 A" },
+                { value: "camera_group_b", label: "相机组 B" },
               ]}
             />
           </Form.Item>
-          <Form.Item name="deployed_by" label="Deployed By">
-            <Input placeholder="Engineer name (optional)" />
+          <Form.Item name="deployed_by" label="部署人">
+            <Input placeholder="工程师姓名 (可选)" />
           </Form.Item>
         </Form>
       </Modal>

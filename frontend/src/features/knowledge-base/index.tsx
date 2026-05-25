@@ -41,20 +41,20 @@ export default function KnowledgeBase() {
   const handleCreate = async (values: Record<string, unknown>) => {
     try {
       await createMutation.mutateAsync(values);
-      message.success("Knowledge entry created");
+      message.success("知识条目已创建");
       setCreateVisible(false);
       form.resetFields();
     } catch {
-      message.error("Failed to create entry");
+      message.error("创建条目失败");
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteMutation.mutateAsync(id);
-      message.success("Entry deleted");
+      message.success("条目已删除");
     } catch {
-      message.error("Failed to delete entry");
+      message.error("删除条目失败");
     }
   };
 
@@ -66,9 +66,9 @@ export default function KnowledgeBase() {
   const handleGenerateRule = async (entry: KnowledgeEntry) => {
     try {
       const data = await generateRuleMutation.mutateAsync(entry.knowledge_id);
-      message.success(`Generated ${(data as unknown[]).length} rule(s)`);
+      message.success(`已生成 ${(data as unknown[]).length} 条规则`);
     } catch {
-      message.error("Failed to generate rule");
+      message.error("生成规则失败");
     }
   };
 
@@ -81,11 +81,11 @@ export default function KnowledgeBase() {
   return (
     <div>
       <PageHeader
-        title="Knowledge Base"
+        title="知识库"
         extra={
           <Space>
             <Input.Search
-              placeholder="Search knowledge..."
+              placeholder="搜索知识..."
               allowClear
               style={{ width: 250 }}
               value={searchKeyword}
@@ -94,7 +94,7 @@ export default function KnowledgeBase() {
               enterButton={<SearchOutlined />}
             />
             <Select
-              placeholder="Category"
+              placeholder="类别"
               allowClear
               style={{ width: 140 }}
               value={categoryFilter}
@@ -102,7 +102,7 @@ export default function KnowledgeBase() {
               options={CATEGORY_OPTIONS as { value: string; label: string }[]}
             />
             <Select
-              placeholder="Defect type"
+              placeholder="缺陷类型"
               allowClear
               style={{ width: 140 }}
               value={defectFilter}
@@ -113,10 +113,10 @@ export default function KnowledgeBase() {
               icon={<ReloadOutlined />}
               onClick={() => { setSearchKeyword(""); setCategoryFilter(undefined); setDefectFilter(undefined); }}
             >
-              Reset
+              重置
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateVisible(true)}>
-              New Entry
+              新建条目
             </Button>
           </Space>
         }
@@ -128,7 +128,7 @@ export default function KnowledgeBase() {
           dataSource={entries}
           rowKey="knowledge_id"
           loading={loading}
-          pagination={{ pageSize: 20, showTotal: (t) => `Total ${t} entries` }}
+          pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条记录` }}
           size="middle"
         />
       </Card>

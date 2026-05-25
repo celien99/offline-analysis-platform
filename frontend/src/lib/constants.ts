@@ -1,29 +1,29 @@
 export const DEFECT_TYPES = [
-  { value: "wrinkle", label: "Wrinkle" },
-  { value: "scratch", label: "Scratch" },
-  { value: "reflection", label: "Reflection" },
-  { value: "stain", label: "Stain" },
-  { value: "seam_shift", label: "Seam Shift" },
+  { value: "wrinkle", label: "褶皱" },
+  { value: "scratch", label: "划痕" },
+  { value: "reflection", label: "反光" },
+  { value: "stain", label: "污渍" },
+  { value: "seam_shift", label: "接缝偏移" },
 ];
 
 export const CATEGORY_OPTIONS = [
-  { value: "defect", label: "Defect" },
-  { value: "false_alarm", label: "False Alarm" },
-  { value: "camera_issue", label: "Camera Issue" },
-  { value: "lighting", label: "Lighting" },
-  { value: "process", label: "Process" },
+  { value: "defect", label: "缺陷" },
+  { value: "false_alarm", label: "误报" },
+  { value: "camera_issue", label: "相机问题" },
+  { value: "lighting", label: "光照问题" },
+  { value: "process", label: "工艺问题" },
 ];
 
 export const ACTION_OPTIONS = [
-  { value: "ignore", label: "Ignore" },
+  { value: "ignore", label: "忽略" },
   { value: "NG", label: "NG" },
-  { value: "review_required", label: "Review Required" },
+  { value: "review_required", label: "需人工复核" },
 ];
 
 export const RULE_TYPE_OPTIONS = [
-  { value: "ignore", label: "Ignore" },
-  { value: "flag", label: "Flag" },
-  { value: "escalate", label: "Escalate" },
+  { value: "ignore", label: "忽略" },
+  { value: "flag", label: "标记" },
+  { value: "escalate", label: "升级" },
 ];
 
 export const STATUS_COLORS: Record<string, string> = {

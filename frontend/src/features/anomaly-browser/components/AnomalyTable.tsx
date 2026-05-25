@@ -20,28 +20,28 @@ export function useAnomalyColumns({ onViewDetail, onReprocess, onDelete }: Props
       key: "anomaly_id",
       render: (id: string) => <Text code>{id.slice(0, 12)}...</Text>,
     },
-    { title: "Camera", dataIndex: "camera_id", key: "camera_id" },
-    { title: "Source", dataIndex: "source", key: "source", render: (s: string) => <Tag>{s}</Tag> },
+    { title: "相机", dataIndex: "camera_id", key: "camera_id" },
+    { title: "来源", dataIndex: "source", key: "source", render: (s: string) => <Tag>{s}</Tag> },
     {
-      title: "Score",
+      title: "分数",
       dataIndex: "anomaly_score",
       key: "anomaly_score",
       render: (s: number | null) => (s !== null ? s.toFixed(3) : "-"),
     },
-    { title: "Date", dataIndex: "date_folder", key: "date_folder" },
+    { title: "日期", dataIndex: "date_folder", key: "date_folder" },
     {
-      title: "Status",
+      title: "状态",
       dataIndex: "status",
       key: "status",
       render: (s: string) => <Tag color={ANOMALY_STATUS_COLOR_MAP[s] || "default"}>{s}</Tag>,
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       render: (_: unknown, record: AnomalyRecord) => (
         <Space>
           <Button type="link" size="small" onClick={() => onViewDetail(record.anomaly_id)}>
-            Detail
+            详情
           </Button>
           <Button
             type="link"
@@ -49,17 +49,17 @@ export function useAnomalyColumns({ onViewDetail, onReprocess, onDelete }: Props
             icon={<RetweetOutlined />}
             onClick={() => onReprocess(record.anomaly_id)}
           >
-            Reprocess
+            重新处理
           </Button>
           <Popconfirm
-            title="Delete this anomaly?"
-            description="The data will be soft-deleted and excluded from pipeline."
+            title="确定要删除此异常吗？"
+            description="数据将被软删除并从流程中排除。"
             onConfirm={() => onDelete(record.anomaly_id)}
-            okText="Delete"
-            cancelText="Cancel"
+            okText="删除"
+            cancelText="取消"
           >
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              Delete
+              删除
             </Button>
           </Popconfirm>
         </Space>

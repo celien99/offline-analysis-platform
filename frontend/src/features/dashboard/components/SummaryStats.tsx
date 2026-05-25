@@ -16,18 +16,18 @@ export default function SummaryStats({ summary }: Props) {
     <Row gutter={[16, 16]}>
       <Col span={6}>
         <Card>
-          <Statistic title="Total Anomalies" value={summary.total_samples} prefix={<BugOutlined />} />
+          <Statistic title="异常总数" value={summary.total_samples} prefix={<BugOutlined />} />
         </Card>
       </Col>
       <Col span={6}>
         <Card>
-          <Statistic title="Clusters" value={summary.total_clusters} prefix={<ClusterOutlined />} />
+          <Statistic title="聚类数" value={summary.total_clusters} prefix={<ClusterOutlined />} />
         </Card>
       </Col>
       <Col span={6}>
         <Card>
           <Statistic
-            title="Real Defects"
+            title="真实缺陷"
             value={summary.real_defect}
             prefix={<CheckCircleOutlined />}
             valueStyle={{ color: "#ff4d4f" }}
@@ -37,7 +37,7 @@ export default function SummaryStats({ summary }: Props) {
       <Col span={6}>
         <Card>
           <Statistic
-            title="False Alarms"
+            title="误报"
             value={summary.false_alarm}
             prefix={<CloseCircleOutlined />}
             valueStyle={{ color: "#52c41a" }}

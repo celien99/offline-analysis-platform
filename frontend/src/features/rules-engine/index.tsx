@@ -32,9 +32,9 @@ export default function RulesManagement() {
   const handleDeploy = async () => {
     try {
       const data = await deployMutation.mutateAsync("production_line_a");
-      message.success(`Deployed ${data.rule_count} rules to ${data.target}`);
+      message.success(`已部署 ${data.rule_count} 条规则到 ${data.target}`);
     } catch {
-      message.error("Rules deployment failed");
+      message.error("规则部署失败");
     }
   };
 
@@ -45,7 +45,7 @@ export default function RulesManagement() {
         JSON.parse(values.condition_json as string);
         conditionJson = values.condition_json as string;
       } catch {
-        message.error("Invalid JSON in condition");
+        message.error("条件中的 JSON 格式无效");
         return;
       }
       await createMutation.mutateAsync({
@@ -57,29 +57,29 @@ export default function RulesManagement() {
         camera_ids: values.camera_ids || undefined,
         knowledge_entry_id: values.knowledge_entry_id || undefined,
       });
-      message.success("Rule created");
+      message.success("规则已创建");
       setCreateVisible(false);
       form.resetFields();
     } catch {
-      message.error("Failed to create rule");
+      message.error("创建规则失败");
     }
   };
 
   const handleToggle = async (ruleId: string, enabled: boolean) => {
     try {
       await toggleMutation.mutateAsync({ ruleId, enabled });
-      message.success(`Rule ${enabled ? "enabled" : "disabled"}`);
+      message.success(`规则已${enabled ? "启用" : "禁用"}`);
     } catch {
-      message.error("Failed to toggle rule");
+      message.error("切换规则状态失败");
     }
   };
 
   const handleDelete = async (ruleId: string) => {
     try {
       await deleteMutation.mutateAsync(ruleId);
-      message.success("Rule deleted");
+      message.success("规则已删除");
     } catch {
-      message.error("Failed to delete rule");
+      message.error("删除规则失败");
     }
   };
 
@@ -94,18 +94,18 @@ export default function RulesManagement() {
         }),
       );
     } catch {
-      message.error("Evaluation failed");
+      message.error("评估失败");
     }
   };
 
   const handleGenerateFromKb = async (values: Record<string, unknown>) => {
     try {
       const data = await generateMutation.mutateAsync(values.knowledge_entry_id as string);
-      message.success(`Generated ${data.length} rule(s)`);
+      message.success(`已生成 ${data.length} 条规则`);
       setGenFromKbVisible(false);
       kbForm.resetFields();
     } catch {
-      message.error("Failed to generate rules");
+      message.error("生成规则失败");
     }
   };
 
@@ -114,32 +114,32 @@ export default function RulesManagement() {
   return (
     <div>
       <PageHeader
-        title="Rules Engine"
+        title="规则引擎"
         extra={
           <Space>
             <Select
-              placeholder="Rule Type"
+              placeholder="规则类型"
               allowClear
               style={{ width: 130 }}
               value={typeFilter}
               onChange={setTypeFilter}
               options={RULE_TYPE_OPTIONS as { value: string; label: string }[]}
             />
-            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>
-            <Button icon={<CloudUploadOutlined />} loading={deployMutation.isPending} onClick={handleDeploy}>Deploy Rules</Button>
-            <Button icon={<BookOutlined />} onClick={() => setGenFromKbVisible(true)}>From KB</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
+            <Button icon={<CloudUploadOutlined />} loading={deployMutation.isPending} onClick={handleDeploy}>部署规则</Button>
+            <Button icon={<BookOutlined />} onClick={() => setGenFromKbVisible(true)}>从知识库</Button>
             <Button
               icon={<PlayCircleOutlined />}
               onClick={() => { setEvalResult(null); setEvalVisible(true); }}
             >
-              Evaluate
+              评估
             </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => { form.resetFields(); setCreateVisible(true); }}
             >
-              New Rule
+              新建规则
             </Button>
           </Space>
         }
@@ -151,7 +151,7 @@ export default function RulesManagement() {
           dataSource={rules}
           rowKey="rule_id"
           loading={isLoading}
-          pagination={{ pageSize: 20, showTotal: (t) => `Total ${t} rules` }}
+          pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条规则` }}
           size="middle"
         />
       </Card>
@@ -175,7 +175,7 @@ export default function RulesManagement() {
       {evalResult && <EvalResultDisplay result={evalResult} />}
 
       <Modal
-        title="Generate Rules from Knowledge Base"
+        title="从知识库生成规则"
         open={genFromKbVisible}
         onCancel={() => { setGenFromKbVisible(false); kbForm.resetFields(); }}
         onOk={() => kbForm.submit()}
@@ -184,11 +184,11 @@ export default function RulesManagement() {
         <Form form={kbForm} layout="vertical" onFinish={(v) => handleGenerateFromKb(v)}>
           <Form.Item
             name="knowledge_entry_id"
-            label="Knowledge Entry ID"
+            label="知识条目ID"
             rules={[{ required: true }]}
-            help="Rules will be auto-generated based on the knowledge entry's category and action"
+            help="规则将根据知识条目的类别和动作自动生成"
           >
-            <Input placeholder="Enter knowledge entry ID" />
+            <Input placeholder="输入知识条目ID" />
           </Form.Item>
         </Form>
       </Modal>

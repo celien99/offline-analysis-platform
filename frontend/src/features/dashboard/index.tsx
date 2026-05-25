@@ -19,7 +19,7 @@ export default function Dashboard() {
     return (
       <Result
         status="error"
-        title="Failed to load dashboard"
+        title="加载数据面板失败"
         subTitle="无法加载可视化数据，请确认聚类任务已完成"
         extra={<Button onClick={() => refetch()}>重试</Button>}
       />

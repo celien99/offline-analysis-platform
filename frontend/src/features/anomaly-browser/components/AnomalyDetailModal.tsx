@@ -22,7 +22,7 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
   if (!anomaly) {
     return (
-      <Modal title="Anomaly Detail" open={open} onCancel={onClose} footer={null} width={840}>
+      <Modal title="异常详情" open={open} onCancel={onClose} footer={null} width={840}>
         <div className="flex items-center justify-center py-12">
           <Spin size="large" />
         </div>
@@ -32,14 +32,14 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
 
   const allCropUrls = [anomaly.crop_url, ...(anomaly.crop_urls ?? [])].filter(Boolean) as string[];
   const cropItems = allCropUrls.map((url, i) => ({
-    label: allCropUrls.length > 1 ? `Crop ${i + 1}` : "Crop",
+    label: allCropUrls.length > 1 ? `裁剪 ${i + 1}` : "裁剪",
     url,
     alt: `crop-${i}`,
   }));
 
   const imageItems = [
-    { label: "Original", url: anomaly.original_url, alt: "original" },
-    { label: "Heatmap", url: anomaly.heatmap_url, alt: "heatmap" },
+    { label: "原图", url: anomaly.original_url, alt: "original" },
+    { label: "热力图", url: anomaly.heatmap_url, alt: "heatmap" },
     ...cropItems,
   ].filter((item): item is { label: string; url: string; alt: string } => Boolean(item.url));
 
@@ -56,17 +56,17 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
   };
 
   return (
-    <Modal title="Anomaly Detail" open={open} onCancel={onClose} footer={null} width={900}>
+    <Modal title="异常详情" open={open} onCancel={onClose} footer={null} width={900}>
       <Descriptions column={2} bordered size="small" className="mb-4">
         <Descriptions.Item label="ID">{anomaly.anomaly_id}</Descriptions.Item>
-        <Descriptions.Item label="Camera">{anomaly.camera_id}</Descriptions.Item>
-        <Descriptions.Item label="Source">{anomaly.source}</Descriptions.Item>
-        <Descriptions.Item label="Score">{anomaly.anomaly_score?.toFixed(3) ?? "-"}</Descriptions.Item>
-        <Descriptions.Item label="Status">
+        <Descriptions.Item label="相机">{anomaly.camera_id}</Descriptions.Item>
+        <Descriptions.Item label="来源">{anomaly.source}</Descriptions.Item>
+        <Descriptions.Item label="分数">{anomaly.anomaly_score?.toFixed(3) ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="状态">
           <Tag color={ANOMALY_STATUS_COLOR_MAP[anomaly.status]}>{anomaly.status}</Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="Date">{anomaly.date_folder}</Descriptions.Item>
-        <Descriptions.Item label="Cluster" span={2}>
+        <Descriptions.Item label="日期">{anomaly.date_folder}</Descriptions.Item>
+        <Descriptions.Item label="聚类" span={2}>
           {anomaly.cluster_id ? (
             <Button
               type="link"
@@ -95,24 +95,24 @@ export default function AnomalyDetailModal({ anomaly, open, onClose }: Props) {
       </Row>
 
       <Button icon={<SearchOutlined />} onClick={handleSearchSimilar} loading={searchingSimilar}>
-        Find Similar
+        查找相似
       </Button>
 
       {similarResults.length > 0 && (
         <div className="mt-4">
-          <Text strong>Similar Anomalies ({similarResults.length})</Text>
+          <Text strong>相似异常 ({similarResults.length})</Text>
           <Table
             className="mt-2"
             dataSource={similarResults}
             columns={[
               {
-                title: "Anomaly ID",
+                title: "异常ID",
                 dataIndex: "anomaly_id",
                 key: "id",
                 render: (id: string) => <Text code>{String(id).slice(0, 12)}...</Text>,
               },
               {
-                title: "Similarity",
+                title: "相似度",
                 dataIndex: "similarity",
                 key: "sim",
                 render: (s: number) => (
