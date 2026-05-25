@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>270+ 源文件</b> · <b>37 个 API 端点</b> · <b>9 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>8 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
+  <b>300+ 源文件</b> · <b>55+ API 端点</b> · <b>11 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
 </p>
 
 ---
@@ -45,19 +45,25 @@ flowchart TB
 
     subgraph OFFLINE["🔵 离线分析平台（本仓库）"]
         direction TB
-        INGEST["📥 异常样本<br/>收集缓冲"] --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
+        INGEST["📥 异常样本<br/>收集缓冲"] --> MASK["🧹 Mask Refinement<br/>背景消除/标准化"]
+        MASK --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
         EMBED --> CLUSTER["🔬 聚类分析<br/>UMAP + HDBSCAN"]
+        CLUSTER --> GRAPH["🕸 相似度图谱<br/>KNN Graph Builder"]
         CLUSTER --> VLM["🤖 多模态解释<br/>Qwen2.5-VL"]
         VLM --> REVIEW["👨‍🔧 人工复核<br/>确认/误报/拆分/合并"]
         REVIEW --> KB["📚 知识库<br/>缺陷模式沉淀"]
         REVIEW --> RULES["🧠 规则引擎<br/>优先级评估"]
+        REVIEW --> TAX["🌳 缺陷分类树<br/>层级缺陷分类"]
         KB --> TRAIN["🎯 分类器训练<br/>MobileNetV3"]
+        KB --> METRIC["📐 度量学习<br/>ArcFace / Triplet Loss"]
         TRAIN --> REGISTRY["📦 模型注册<br/>MLflow"]
-        REGISTRY --> DEPLOY["🚀 自动部署<br/>原子写入部署目录"]
+        METRIC --> REGISTRY
+        REGISTRY --> DEPLOY["🚀 原子部署<br/>模型 + 规则"]
+        DEPLOY --> HOT["🔴 在线热重载<br/>A/B 切换 · 信号文件"]
     end
 
     ONLINE -->|"NG 自动上传<br/>fire-and-forget"| INGEST
-    DEPLOY -->|"online 自动加载<br/>mtime 缓存失效"| FC
+    HOT -->|"reload.signal<br/>模型自动切换"| FC
 ```
 
 ---
@@ -117,11 +123,12 @@ flowchart TB
     <td width="50%">
       <h3>🎯 分类器训练与模型部署</h3>
       <ul>
-        <li>支持 MobileNetV3 / EfficientNet / ResNet18</li>
+        <li>支持 MobileNetV3 / EfficientNet / ResNet18 + ArcFace / Triplet Loss 度量学习</li>
         <li>Adam + ReduceLROnPlateau + Early Stopping (patience=10)</li>
         <li>自动数据加载：从 MinIO 读取已审核聚类数据，train/val split</li>
+        <li>按 defect_type 自动分组构建度量学习多类训练数据</li>
         <li>导出 TorchScript / ONNX，自动注册至 <b>MLflow</b> 和数据库</li>
-        <li>安全部署 + 版本化回滚</li>
+        <li>安全部署 + 版本化回滚 + 🔴 热重载信号自动通知在线系统</li>
       </ul>
     </td>
   </tr>
@@ -136,6 +143,62 @@ flowchart TB
         <li>多区域 PatchCore 支持，按区域独立判定 + 合并状态逻辑</li>
       </ul>
     </td>
+    <td width="50%">
+      <h3>🌳 缺陷分类树</h3>
+      <ul>
+        <li>4 大类预设分类体系：表面缺陷 / 缝线缺陷 / 结构缺陷 / 光学异常</li>
+        <li>自引用层级结构（parent_id），支持多级细分</li>
+        <li>审核确认缺陷时自动关联分类树节点</li>
+        <li>树统计 API：各节点下的异常计数和聚类计数</li>
+        <li>支持自定义扩展和人工调整分类结构</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🕸 相似度图谱</h3>
+      <ul>
+        <li>基于 pgvector 的 KNN 图谱构建</li>
+        <li>预计算相似边，支持快速邻居查询</li>
+        <li>BFS 最短路径导航（max_hops 可配置）</li>
+        <li>以任意异常为中心的子图探索</li>
+        <li>图谱构建记录追踪 + Celery 异步重建</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📐 度量学习训练</h3>
+      <ul>
+        <li>ArcFace 加性角度边际损失：同类嵌入更紧凑</li>
+        <li>Triplet Loss：锚点/正样本/负样本三元组优化</li>
+        <li>EmbeddingBackbone：从 MobileNetV3/ResNet/EfficientNet 提取归一化嵌入</li>
+        <li>按 defect_type 自动分组构建多类训练数据</li>
+        <li>训练完成后自动导出 TorchScript + 注册 MLflow</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🧹 Mask Refinement</h3>
+      <ul>
+        <li>GrabCut 前景/背景分离，去除背景噪声</li>
+        <li>CLAHE 自适应直方图均衡化，标准化光照</li>
+        <li>形态学操作：闭运算填充孔洞 + 开运算去噪</li>
+        <li>标准尺寸输出（224×224）保持宽高比</li>
+        <li>Celery 批量处理 + MinIO refined 图片存储</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🔴 在线热重载</h3>
+      <ul>
+        <li>reload.signal 信号文件机制，在线系统自动检测模型更新</li>
+        <li>A/B 模型版本管理（Active / Shadow），支持 Canary 提升</li>
+        <li>模型清单（manifest.json）追踪切换历史</li>
+        <li>一键回滚到上一版本</li>
+        <li>多部署目标状态总览 API</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
     <td width="50%">
       <h3>🔁 在线↔离线数据闭环</h3>
       <ul>
@@ -177,22 +240,26 @@ flowchart TB
 offline-analysis-platform/
 ├── backend/                          # Python 后端（125+ 文件）
 │   ├── app/
-│   │   ├── api/                      # 9 个 FastAPI 路由，36 个端点
+│   │   ├── api/                      # 13 个 FastAPI 路由，55+ 端点
 │   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
 │   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
 │   │   │   ├── review/               #   提交复核 · 查询历史
 │   │   │   ├── embedding/            #   按异常 ID / 向量相似检索
 │   │   │   ├── knowledge/            #   增删改查 · 全文搜索 · 按簇查询
 │   │   │   ├── rules/                #   增删改查 · 在线评估 · 开关 · 从知识库生成
-│   │   │   ├── training/             #   启动训练 · 查询状态 · 模型列表
+│   │   │   ├── training/             #   分类器训练 · 度量学习训练 · 状态查询
 │   │   │   ├── registry/             #   部署 · 回滚 · 部署历史
-│   │   │   └── multimodal/           #   VLM 单簇 · 批量 · 单异常分析
-│   │   ├── domain/                   # 6 个领域模型 + Protocol 接口
-│   │   ├── services/                 # 9 个业务服务模块
-│   │   ├── repositories/             # 5 个 Repository（封装所有 DB 访问）
-│   │   ├── models/                   # 9 个 SQLAlchemy ORM 表（含 pgvector）
+│   │   │   ├── multimodal/           #   VLM 单簇 · 批量 · 单异常分析
+│   │   │   ├── taxonomy/             #   🌳 缺陷分类树 · 统计 · 自动分类
+│   │   │   ├── graph/                #   🕸 相似度图谱 · 邻居 · 路径 · 子图
+│   │   │   ├── mask_refinement/      #   🧹 背景消除 · 图像标准化
+│   │   │   └── hot_reload/           #   🔴 热重载信号 · A/B 切换 · 回滚
+│   │   ├── domain/                   # 8 个领域模型 + Protocol 接口
+│   │   ├── services/                 # 13 个业务服务模块
+│   │   ├── repositories/             # 7 个 Repository（封装所有 DB 访问）
+│   │   ├── models/                   # 12 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
-│   │   ├── workers/                  # 9 个 Celery Worker 模块（含部署 + Pipeline 编排）
+│   │   ├── workers/                  # 11 个 Celery Worker 模块
 │   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
 │   │   ├── core/                     # 配置类 · 异常体系 · 安全工具
 │   │   ├── common/                   # 共享类型 · structlog 结构化日志
@@ -222,10 +289,12 @@ offline-analysis-platform/
 │       ├── hooks/                    # useApi 通用 hook
 │       ├── components/ui/            # PageHeader 等共享 UI 组件
 │       └── lib/                      # constants 等共享常量
-└── ml/                               # ML 模块（12 文件）
+└── ml/                               # ML 模块（14 文件）
     ├── embedding/                    # DINOv2-S 提取器（384 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
-    ├── classifier/                   # MobileNetV3 训练器 + ONNX 导出
+    ├── classifier/                   # Filter Classifier 训练器
+    │   ├── trainer.py                #   MobileNetV3/EfficientNet/ResNet 二元分类
+    │   └── metric_learning.py        #   📐 ArcFace + Triplet Loss 度量学习
     └── vlm/                          # Qwen2.5-VL 多模态分析器
 ```
 - `seat_defect_core/` 在线检测核心（38 个 Python 文件），详见下方
@@ -368,6 +437,30 @@ cd seat_defect_core && uv sync && cd ..
                      POST   /api/multimodal/analyze/cluster/{id}    🤖 多模态分析
                      POST   /api/multimodal/analyze/batch
                      POST   /api/multimodal/analyze/anomaly/{id}
+
+                     POST   /api/taxonomy/init                         🌳 缺陷分类树
+                     GET    /api/taxonomy/tree · /tree/stats
+                     CRUD   /api/taxonomy/nodes
+                     POST   /api/taxonomy/auto-classify
+                     POST   /api/taxonomy/link-knowledge
+
+                     POST   /api/graph/build                           🕸 相似度图谱
+                     GET    /api/graph/build/status
+                     GET    /api/graph/neighbors/{anomaly_id}
+                     POST   /api/graph/path
+                     GET    /api/graph/subgraph/{anomaly_id}
+
+                     POST   /api/training/metric-learning/start         📐 度量学习训练
+
+                     POST   /api/mask-refinement/refine/{id}            🧹 Mask 精化
+                     POST   /api/mask-refinement/refine-batch
+
+                     POST   /api/hot-reload/signal/{target}             🔴 热重载
+                     GET    /api/hot-reload/signal/{target}
+                     PUT    /api/hot-reload/manifest/{target}
+                     POST   /api/hot-reload/promote/{target}
+                     POST   /api/hot-reload/rollback/{target}
+                     GET    /api/hot-reload/targets
 ```
 
 ---
@@ -418,20 +511,32 @@ mkdir -p sample_images
 1. 在线 NG → seat_defect_core 检测到 NG 后，daemon 线程异步上传
    ROI 图片 + 元数据到 POST /api/anomaly/upload-with-files
                     ↓
-2. Embedding   → Celery Worker 提取 DINOv2-S 384 维特征向量
+2. Mask Refine → GrabCut 背景消除 + CLAHE 光照标准化
                     ↓
-3. 聚类分析    → UMAP + HDBSCAN 无监督发现缺陷模式
+3. Embedding   → Celery Worker 提取 DINOv2-S 384 维特征向量
                     ↓
-4. VLM 解释    → Qwen2.5-VL 多模态大模型自动解释每个簇
+4. 相似度图谱  → KNN 图谱构建，支持邻居查询和路径导航
                     ↓
-5. 人工复核    → 工程师确认缺陷 / 标记误报 / 拆分合并簇
+5. 聚类分析    → UMAP + HDBSCAN 无监督发现缺陷模式
                     ↓
-6. 分类器训练  → 基于已审核数据训练 Filter Classifier (MobileNetV3)
+6. VLM 解释    → Qwen2.5-VL 多模态大模型自动解释每个簇
                     ↓
-7. 自动部署    → 训练完成后自动触发 Celery 部署任务，
-   原子写入部署目录 (.tmp → rename)
+7. 人工复核    → 工程师确认缺陷 / 标记误报 / 拆分合并簇
+   → 确认缺陷时自动关联 🌳 缺陷分类树节点
                     ↓
-8. 在线加载    → seat_defect_core 通过 mtime 缓存自动发现新模型，
+8. 知识库 + 规则 → 缺陷模式沉淀 + 规则自动生成
+                    ↓
+9. 分类器训练  → Filter Classifier (MobileNetV3) 二元分类
+   度量学习    → ArcFace/Triplet Loss 缺陷嵌入学习 (可选)
+                    ↓
+10. 模型注册   → MLflow 模型注册 + 版本管理
+                    ↓
+11. 自动部署   → Celery 部署任务，原子写入 (.tmp → rename)
+                    ↓
+12. 热重载信号 → reload.signal + manifest.json，在线系统自动切换
+   支持 A/B 切换和版本回滚
+                    ↓
+13. 在线加载   → seat_defect_core 检测 reload.signal 热加载新模型，
    Filter Classifier 抑制 PatchCore 误报 → 降低误报率
                     ↓
                    ↺ 循环往复，持续进化
