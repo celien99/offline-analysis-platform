@@ -11,6 +11,7 @@ from app.models.training import TrainingRun
 from app.models.knowledge import KnowledgeEntry, RuleEntry
 from app.models.taxonomy import DefectTreeNode
 from app.models.graph import SimilarityEdge, GraphBuildRecord
+from app.models.camera_config import SeatModel, CameraConfig
 
 __all__ = [
     "BaseModel",
@@ -28,4 +29,6 @@ __all__ = [
     "DefectTreeNode",
     "SimilarityEdge",
     "GraphBuildRecord",
+    "SeatModel",
+    "CameraConfig",
 ]
