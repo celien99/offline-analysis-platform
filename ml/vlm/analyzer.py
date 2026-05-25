@@ -10,21 +10,23 @@ from PIL import Image
 
 from app.domain.multimodal import VLMRequest, VLMResult
 
-ANALYSIS_PROMPT = """你是一名工业视觉缺陷分析专家。你将看到汽车座椅检测中发现的 **NG 缺陷图**（异常区域裁剪）。
+ANALYSIS_PROMPT = """你是一名汽车座椅质检专家。你将看到一张从汽车座椅图像中自动裁剪出的**可疑区域**。
 
-请分析缺陷并返回 JSON：
+请判断：**正常座椅上是否应该存在这个东西？**
+
+返回 JSON：
 {
-  "type": "缺陷类型 (wrinkle/scratch/reflection/stain/seam_shift/other/none)",
-  "is_false_alarm": true或false,
+  "type": "若判定为异常，异常类型 (scratch/stain/wrinkle/hole/seam_shift/foreign_object/reflection/other/none)",
+  "is_false_alarm": true 或 false,
   "reason": "判定原因（中文）",
   "confidence": 0.0到1.0之间的置信度,
   "suggestion": "manual_review 或 add_to_false_alarm_library"
 }
 
 判断标准：
-1. 检查纹理、走线、颜色、表面是否存在明显异常
-2. 若无明显异常特征 → is_false_alarm=true
-3. 若存在肉眼可见的缺陷特征 → is_false_alarm=false
+1. 这是正常座椅面料、缝线、logo、褶皱、光影或已知结构的一部分 → is_false_alarm=true
+2. 这是正常座椅上**不应该出现**的东西（破损、污渍、异物、异常变形等）→ is_false_alarm=false
+3. 不确定或处于边界情况 → is_false_alarm=false, suggestion="manual_review"
 """
 
 
