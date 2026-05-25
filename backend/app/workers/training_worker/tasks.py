@@ -452,3 +452,234 @@ def export_model(
     except Exception as e:
         logger.error("export_failed", error=str(e))
         return {"status": "failed", "error": str(e)}
+
+
+# ══════════════════════════════════════════════════════════════
+# 度量学习训练 (Metric Learning)
+# ══════════════════════════════════════════════════════════════
+
+
+async def _load_metric_training_data(
+    anomaly_ids: list[str] | None = None,
+) -> tuple[list[np.ndarray], list[int], list[str]]:
+    """加载度量学习训练数据 — 按 defect_type 分组标注。
+
+    返回 (images, labels, class_names)，labels 为 0..N-1 的整数，
+    每个整数对应一个 defect_type 类别。
+    """
+    async with async_session_factory() as session:
+        cluster_repo = ClusterRepository(session)
+        membership_repo = ClusterMembershipRepository(session)
+        reviewed = await cluster_repo.get_by_status("reviewed", offset=0, limit=10000)
+
+        # 收集所有 defect_type
+        defect_type_set: set[str] = set()
+        aid_type_pairs: list[tuple[str, str]] = []
+        for cluster in reviewed:
+            if cluster.review_status != "real_defect" or not cluster.defect_type:
+                continue
+            dt = cluster.defect_type.strip()
+            cluster_aids = await membership_repo.get_anomaly_ids_by_cluster(cluster.id)
+            for aid in cluster_aids:
+                if anomaly_ids is None or aid in anomaly_ids:
+                    aid_type_pairs.append((aid, dt))
+                    defect_type_set.add(dt)
+
+        class_names = sorted(defect_type_set)
+        type_to_label = {dt: idx for idx, dt in enumerate(class_names)}
+
+    anomaly_repo_session = async_session_factory()
+    async with anomaly_repo_session as session:
+        anomaly_repo = AnomalyRepository(session)
+        anomalies = await anomaly_repo.get_by_ids([aid for aid, _ in aid_type_pairs])
+        anomaly_map = {a.id: a for a in anomalies}
+
+    images: list[np.ndarray] = []
+    labels: list[int] = []
+    for aid, defect_type in aid_type_pairs:
+        anomaly = anomaly_map.get(aid)
+        if anomaly is None or anomaly.crop_path is None:
+            continue
+        try:
+            raw = await minio_client.download(anomaly.crop_path)
+            img = np.array(Image.open(BytesIO(raw)).convert("RGB"))
+            images.append(img)
+            labels.append(type_to_label[defect_type])
+        except Exception as e:
+            logger.warning("metric_training_image_load_failed", anomaly_id=aid, error=str(e))
+
+    return images, labels, class_names
+
+
+@celery_app.task(name="training.train_metric_embedding")
+def train_metric_embedding(
+    backbone_type: str = "mobilenet_v3_small",
+    embedding_size: int = 256,
+    loss_type: str = "arcface",
+    batch_size: int = 32,
+    epochs: int = 50,
+    learning_rate: float = 0.001,
+    validation_split: float = 0.2,
+    trigger: str = "manual",
+    anomaly_ids: list[str] | None = None,
+) -> dict[str, object]:
+    """使用 ArcFace/Triplet 度量学习训练缺陷嵌入模型"""
+    if loss_type not in ("arcface", "triplet"):
+        return {"status": "failed", "error": f"Unsupported loss_type: {loss_type}"}
+
+    logger.info(
+        "metric_training_started",
+        backbone_type=backbone_type,
+        embedding_size=embedding_size,
+        loss_type=loss_type,
+        epochs=epochs,
+    )
+
+    import mlflow
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    mlflow.set_experiment("metric_embedding")
+
+    try:
+        images, labels, class_names = run_async(
+            _load_metric_training_data(anomaly_ids)
+        )
+
+        if len(class_names) < 2:
+            logger.warning(
+                "metric_training_insufficient_classes",
+                class_count=len(class_names),
+            )
+            return {
+                "status": "failed",
+                "error": f"Need at least 2 defect types, got {len(class_names)}: {class_names}",
+            }
+
+        if len(images) < 10:
+            return {
+                "status": "failed",
+                "error": f"Insufficient data: {len(images)} images",
+            }
+
+        from sklearn.model_selection import train_test_split
+        try:
+            train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
+                images, labels, test_size=validation_split, stratify=labels, random_state=42,
+            )
+        except ValueError:
+            train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
+                images, labels, test_size=validation_split, random_state=42,
+            )
+
+        from torchvision import transforms as T
+        transform = T.Compose([
+            T.Resize((224, 224)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
+        # 重用 _ImageDataset
+        train_ds = _ImageDataset(train_imgs, train_lbls, transform)
+        val_ds = _ImageDataset(val_imgs, val_lbls, transform)
+
+        output_dir = settings.model_dir / f"metric_training_{generate_uuid()[:8]}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        from ml.classifier.metric_learning import MetricEmbeddingTrainer
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        trainer = MetricEmbeddingTrainer(
+            backbone_type=backbone_type,
+            embedding_size=embedding_size,
+            device=device,
+            learning_rate=learning_rate,
+            loss_type=loss_type,
+        )
+
+        with mlflow.start_run() as run:
+            mlflow_run_id = run.info.run_id
+            mlflow.log_params({
+                "backbone_type": backbone_type,
+                "embedding_size": embedding_size,
+                "loss_type": loss_type,
+                "num_classes": len(class_names),
+                "class_names": json.dumps(class_names),
+                "batch_size": batch_size,
+                "epochs": epochs,
+                "learning_rate": learning_rate,
+                "train_samples": len(train_imgs),
+                "val_samples": len(val_imgs),
+            })
+
+            metrics = trainer.train_with_arcface(
+                train_dataset=train_ds,
+                val_dataset=val_ds,
+                num_classes=len(class_names),
+                batch_size=batch_size,
+                epochs=epochs,
+                output_dir=output_dir,
+            )
+
+            numeric_metrics = {
+                k: v for k, v in metrics.items()
+                if isinstance(v, (float, int))
+            }
+            mlflow.log_metrics(numeric_metrics)
+
+            torchscript_path = output_dir / "metric_embedding.pt"
+            mlflow.log_artifact(str(torchscript_path), artifact_path="model")
+
+        model_name = f"metric_embedding_{backbone_type}"
+        model_version = run_async(_create_model_version(
+            model_name=model_name,
+            model_type="metric_embedding",
+            artifact_path=str(torchscript_path),
+            metrics=numeric_metrics,
+            mlflow_run_id=mlflow_run_id,
+        ))
+
+        run_async(_create_training_run(
+            model_version_id=model_version.id,
+            trigger=trigger,
+            train_type="metric_learning",
+            reviewed_cluster_count=len(class_names),
+            total_anomaly_count=len(images),
+            new_anomaly_count=len(images),
+            metrics_json=json.dumps({**numeric_metrics, "class_names": class_names}),
+        ))
+
+        # 自动部署
+        if settings.deploy_on_train_complete:
+            from app.workers.deployment_worker.tasks import deploy_model_version_task
+            try:
+                deploy_model_version_task.delay(
+                    model_name=model_version.model_name,
+                    version=model_version.version,
+                    target=settings.default_deploy_target,
+                    deployed_by="system:metric_training_worker",
+                )
+            except Exception as deploy_err:
+                logger.warning("metric_auto_deploy_failed", error=str(deploy_err))
+
+        logger.info(
+            "metric_training_complete",
+            backbone_type=backbone_type,
+            loss_type=loss_type,
+            class_count=len(class_names),
+            metrics=numeric_metrics,
+        )
+        return {
+            "status": "completed",
+            "model_type": "metric_embedding",
+            "backbone_type": backbone_type,
+            "embedding_size": embedding_size,
+            "loss_type": loss_type,
+            "num_classes": len(class_names),
+            "artifact_path": str(torchscript_path),
+            "metrics": numeric_metrics,
+            "mlflow_run_id": mlflow_run_id,
+            "model_version_id": model_version.id,
+            "model_version": model_version.version,
+        }
+    except Exception as e:
+        logger.error("metric_training_failed", error=str(e))
+        return {"status": "failed", "error": str(e)}
