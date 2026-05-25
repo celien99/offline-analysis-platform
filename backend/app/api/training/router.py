@@ -107,10 +107,17 @@ async def get_training_status(
 
     result = AsyncResult(task_id, app=celery_app)
 
+    error_msg = None
+    if result.failed():
+        info = result.info
+        if isinstance(info, dict):
+            error_msg = str(info.get("error", "")) or None
+        elif info:
+            error_msg = str(info)
     return TrainingStatusResponse(
         task_id=task_id,
         status=result.state.lower(),
-        error_message=str(result.info.get("error")) if result.failed() else None,
+        error_message=error_msg,
     )
 
 

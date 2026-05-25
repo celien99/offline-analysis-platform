@@ -62,7 +62,9 @@ class MinIOClient:
                 bucket_name=self._bucket,
                 object_name=object_name,
             )
-            return await asyncio.to_thread(response.read)
+            data = await asyncio.to_thread(response.read)
+            await asyncio.to_thread(response.close)
+            return data
         except S3Error as e:
             raise StorageError(f"Download failed: {e}") from e
 

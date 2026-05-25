@@ -83,7 +83,7 @@ def upload_camera_result(
     anomaly_crops = _extract_anomaly_crop(result)
     if anomaly_crops:
         for i, crop_img in enumerate(anomaly_crops):
-            files[f"crop_files"] = (
+            files[f"crop_{i}"] = (
                 f"crop_{i}.jpg",
                 _encode_bgr_image(crop_img, ".jpg"),
                 "image/jpeg",
