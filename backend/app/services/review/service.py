@@ -86,6 +86,12 @@ class ReviewService:
             case _:
                 new_status = previous_status
 
+        # 审核完成后，将所有 member anomaly 标记为 reviewed，防止被重新聚类
+        if new_status == "reviewed":
+            member_ids = await self._membership_repo.get_anomaly_ids_by_cluster(cluster_id)
+            for aid in member_ids:
+                await self._anomaly_repo.update_status(aid, "reviewed")
+
         now = datetime.now(tz=timezone.utc)
         review = ReviewRecord(
             id=generate_uuid(),
