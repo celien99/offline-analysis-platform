@@ -50,6 +50,10 @@ class AnomalyRecord(BaseModel):
         String(32), nullable=True,
         comment="confirmed_ng / suppressed_to_ok / not_applied"
     )
+    refined_crop_path: Mapped[str | None] = mapped_column(
+        String(512), nullable=True,
+        comment="经 mask refinement 处理后的裁剪图 MinIO 路径"
+    )
 
     @property
     def crop_path_list(self) -> list[str]:

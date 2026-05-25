@@ -21,6 +21,7 @@ from app.api.patchcore_training.router import router as patchcore_training_route
 from app.api.inspection.router import router as inspection_router
 from app.api.taxonomy.router import router as taxonomy_router
 from app.api.graph.router import router as graph_router
+from app.api.mask_refinement.router import router as mask_refinement_router
 from app.common.logging import get_logger, setup_logging
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -88,3 +89,4 @@ app.include_router(patchcore_training_router)
 app.include_router(inspection_router)
 app.include_router(taxonomy_router)
 app.include_router(graph_router)
+app.include_router(mask_refinement_router)
