@@ -21,15 +21,15 @@ class SeatModel(BaseModel):
 class CameraConfig(BaseModel):
     __tablename__ = "camera_configs"
     __table_args__ = (
-        UniqueConstraint("seat_model_id", "camera_id", name="uq_seat_camera"),
+        UniqueConstraint("seat_model_db_id", "camera_id", name="uq_seat_camera"),
     )
 
     camera_id: Mapped[str] = mapped_column(
         String(128), nullable=False, comment="相机标识符",
     )
-    seat_model_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("seat_models.seat_model_id", ondelete="CASCADE"),
-        nullable=False, index=True, comment="所属座椅型号",
+    seat_model_db_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("seat_models.id", ondelete="CASCADE"),
+        nullable=False, index=True, comment="关联 seat_models.id 外键",
     )
     patchcore_model_path: Mapped[str] = mapped_column(
         String(512), nullable=False, comment="整体 PatchCore 模型路径",
