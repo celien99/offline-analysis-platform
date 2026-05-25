@@ -127,6 +127,21 @@ class ClusterMembershipRepository(BaseRepository):
         result = await self._session.execute(stmt)
         return [row[0] for row in result.all()]
 
+    async def soft_delete_by_anomaly_id(self, anomaly_id: str) -> int:
+        """软删除指定 anomaly 的所有活跃聚类归属记录。"""
+        from datetime import datetime, timezone
+
+        stmt = (
+            update(ClusterMembership)
+            .where(
+                ClusterMembership.deleted_at.is_(None),
+                ClusterMembership.anomaly_id == anomaly_id,
+            )
+            .values(deleted_at=datetime.now(tz=timezone.utc))
+        )
+        result = await self._session.execute(stmt)
+        return int(result.rowcount or 0)
+
     async def move_memberships(
         self,
         *,
