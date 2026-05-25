@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -27,6 +27,10 @@ class KnowledgeEntry(BaseModel):
     )
     example_image_paths: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="JSON array of MinIO paths"
+    )
+    taxonomy_node_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("defect_tree_nodes.id"), nullable=True, index=True,
+        comment="关联缺陷分类树节点"
     )
 
 

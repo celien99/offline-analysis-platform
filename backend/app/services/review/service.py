@@ -123,6 +123,15 @@ class ReviewService:
                     knowledge_entry_id=knowledge_entry.id,
                     camera_ids=camera_ids_list,
                 )
+                # 自动关联缺陷分类树节点
+                if defect_type:
+                    from app.services.taxonomy import TaxonomyService
+                    taxonomy_service = TaxonomyService(self._session)
+                    taxonomy_node_id = await taxonomy_service.auto_classify(defect_type)
+                    if taxonomy_node_id:
+                        await taxonomy_service.link_knowledge_to_taxonomy(
+                            knowledge_entry.id, taxonomy_node_id
+                        )
 
         logger.info(
             "review_submitted",
