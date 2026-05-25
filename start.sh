@@ -167,6 +167,14 @@ if docker compose -f backend/docker-compose.yml ps api --status running 2>/dev/n
     docker compose -f backend/docker-compose.yml stop api
 fi
 
+# 强制释放端口 8000（处理上次异常退出残留的进程）
+EXISTING_8000=$(lsof -ti :8000 -sTCP:LISTEN 2>/dev/null || true)
+if [ -n "$EXISTING_8000" ]; then
+    log_warn "端口 8000 已被占用 (PID: $EXISTING_8000)，正在释放..."
+    kill -9 $EXISTING_8000 2>/dev/null || true
+    sleep 1
+fi
+
 log_step "启动后端 API (port 8000)..."
 (cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
 API_PID=$!
@@ -197,6 +205,14 @@ fi
 # ---- 启动前端 ----
 if [ "$NO_FRONTEND" = false ]; then
     if [ -f frontend/node_modules/.package-lock.json ] || [ -d frontend/node_modules ]; then
+        # 强制释放端口 3000
+        EXISTING_3000=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$EXISTING_3000" ]; then
+            log_warn "端口 3000 已被占用 (PID: $EXISTING_3000)，正在释放..."
+            kill -9 $EXISTING_3000 2>/dev/null || true
+            sleep 1
+        fi
+
         log_step "启动前端 (port 3000)..."
         (cd frontend && pnpm run dev) &
         FRONTEND_PID=$!
