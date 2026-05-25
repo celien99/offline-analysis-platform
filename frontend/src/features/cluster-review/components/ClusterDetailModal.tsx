@@ -44,7 +44,7 @@ export default function ClusterDetailModal({ cluster, open, onClose }: Props) {
 
   if (!cluster) {
     return (
-      <Modal title="Cluster Detail" open={open} onCancel={onClose} footer={null} width={840}>
+      <Modal title="聚类详情" open={open} onCancel={onClose} footer={null} width={840}>
         <div className="flex items-center justify-center py-12">
           <Spin size="large" />
         </div>

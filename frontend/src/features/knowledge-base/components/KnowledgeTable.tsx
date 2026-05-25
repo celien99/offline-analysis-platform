@@ -19,13 +19,13 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
 
   return [
     {
-      title: "Title",
+      title: "标题",
       dataIndex: "title",
       key: "title",
       render: (t: string) => <Text strong>{t}</Text>,
     },
     {
-      title: "Category",
+      title: "类别",
       dataIndex: "category",
       key: "category",
       width: 120,
@@ -34,14 +34,14 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
       ),
     },
     {
-      title: "Defect Type",
+      title: "缺陷类型",
       dataIndex: "defect_type",
       key: "defect_type",
       width: 110,
       render: (d: string | null) => <Tag color="purple">{d || "-"}</Tag>,
     },
     {
-      title: "Action",
+      title: "动作",
       dataIndex: "action",
       key: "action",
       width: 80,
@@ -55,7 +55,7 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
       },
     },
     {
-      title: "Cluster",
+      title: "聚类",
       dataIndex: "cluster_id",
       key: "cluster_id",
       width: 120,
@@ -74,7 +74,7 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
         ),
     },
     {
-      title: "Cameras",
+      title: "相机",
       dataIndex: "camera_ids",
       key: "camera_ids",
       width: 140,
@@ -86,31 +86,31 @@ export function useKnowledgeColumns({ onViewDetail, onGenerateRule, onDelete }: 
             ))}
           </Space>
         ) : (
-          <Text type="secondary">all</Text>
+          <Text type="secondary">全部</Text>
         ),
     },
     {
-      title: "Created",
+      title: "创建时间",
       dataIndex: "created_at",
       key: "created_at",
       width: 170,
       render: (d: string) => new Date(d).toLocaleString(),
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       width: 200,
       render: (_: unknown, record: KnowledgeEntry) => (
         <Space>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onViewDetail(record)}>
-            View
+            查看
           </Button>
           <Button type="link" size="small" icon={<BookOutlined />} onClick={() => onGenerateRule(record)}>
-            Gen Rule
+            生成规则
           </Button>
-          <Popconfirm title="Delete this entry?" onConfirm={() => onDelete(record.knowledge_id)}>
+          <Popconfirm title="确定要删除此条目吗？" onConfirm={() => onDelete(record.knowledge_id)}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              Delete
+              删除
             </Button>
           </Popconfirm>
         </Space>

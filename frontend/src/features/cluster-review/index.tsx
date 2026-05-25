@@ -56,10 +56,10 @@ export default function ClusterReview() {
         defect_type: defectType as "wrinkle" | "scratch" | "reflection" | "stain" | "seam_shift" | undefined,
         comment: comment || undefined,
       });
-      message.success("Review submitted");
+      message.success("审核已提交");
       setReviewVisible(false);
     } catch {
-      message.error("Failed to submit review");
+      message.error("提交审核失败");
     }
   };
 
@@ -68,8 +68,8 @@ export default function ClusterReview() {
   return (
     <div>
       <PageHeader
-        title="Cluster Review"
-        extra={<Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>}
+        title="聚类审核"
+        extra={<Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>}
       />
 
       <Card>
@@ -83,7 +83,7 @@ export default function ClusterReview() {
             total: listData?.total ?? 0,
             pageSize: 20,
             onChange: setPage,
-            showTotal: (t) => `Total ${t} clusters`,
+            showTotal: (t) => `共 ${t} 个聚类`,
           }}
         />
       </Card>

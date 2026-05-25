@@ -35,7 +35,7 @@ interface CameraSlot {
 }
 
 const DEFAULT_CAMERAS = [
-  { key: 0, cameraId: "cam_front", file: null },
+  { key: 0, cameraId: "cam_back", file: null },
   { key: 1, cameraId: "cam_side", file: null },
 ];
 
@@ -45,7 +45,7 @@ export default function InspectionPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
 
   const runMutation = useInspectionRun();
-  const { data: result, isFetching } = useInspectionResult(taskId);
+  const { data: result } = useInspectionResult(taskId);
 
   const addSlot = () => {
     setSlots([...slots, { key: nextKey, cameraId: "", file: null }]);
@@ -100,10 +100,10 @@ export default function InspectionPage() {
   return (
     <div>
       <PageHeader
-        title="Inspection"
+        title="在线检测"
         extra={
           <Button icon={<ReloadOutlined />} onClick={handleReset} disabled={isRunning}>
-            Reset
+            重置
           </Button>
         }
       />
@@ -115,12 +115,12 @@ export default function InspectionPage() {
             title={
               <Space>
                 <ScanOutlined />
-                Camera Images
+                相机图像
               </Space>
             }
             extra={
               <Button icon={<PlusOutlined />} onClick={addSlot} disabled={isRunning} size="small">
-                Add Camera
+                添加相机
               </Button>
             }
           >
@@ -133,7 +133,7 @@ export default function InspectionPage() {
                 <Row gutter={8} align="middle" className="mb-2">
                   <Col flex="auto">
                     <Input
-                      placeholder="Camera ID"
+                      placeholder="相机ID"
                       value={slot.cameraId}
                       onChange={(e) => updateSlot(slot.key, { cameraId: e.target.value })}
                       disabled={isRunning}
@@ -180,14 +180,14 @@ export default function InspectionPage() {
               loading={runMutation.isPending}
               disabled={isRunning}
             >
-              Run Inspection
+              开始检测
             </Button>
           </Card>
         </Col>
 
         {/* 右侧：检测结果 */}
         <Col span={14}>
-          <Card title="Inspection Result">
+          <Card title="检测结果">
             {isRunning && (
               <div className="text-center py-8">
                 <Spin size="large" tip="检测运行中，请稍候..." />
@@ -197,18 +197,18 @@ export default function InspectionPage() {
             {result && !isRunning && (
               <>
                 <Descriptions column={2} size="small" bordered className="mb-4">
-                  <Descriptions.Item label="Task ID" span={2}>
+                  <Descriptions.Item label="任务 ID" span={2}>
                     {result.task_id}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Task Status">
+                  <Descriptions.Item label="任务状态">
                     <Tag color={statusColor(result.status)}>{result.status}</Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="Overall">
+                  <Descriptions.Item label="整体结果">
                     <Tag color={statusColor(result.overall_status ?? "")}>
                       {result.overall_status ?? "-"}
                     </Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="Decision Reason" span={2}>
+                  <Descriptions.Item label="决策原因" span={2}>
                     {result.decision_reason ?? "-"}
                   </Descriptions.Item>
                 </Descriptions>
@@ -221,18 +221,18 @@ export default function InspectionPage() {
 
                 {result.camera_results.length > 0 && (
                   <>
-                    <Typography.Title level={5}>Per-Camera Results</Typography.Title>
+                    <Typography.Title level={5}>各相机结果</Typography.Title>
                     <Table
                       columns={[
-                        { title: "Camera ID", dataIndex: "camera_id", width: 120 },
+                        { title: "相机ID", dataIndex: "camera_id", width: 120 },
                         {
-                          title: "Status",
+                          title: "状态",
                           dataIndex: "status",
                           width: 90,
                           render: (s: string) => <Tag color={statusColor(s)}>{s}</Tag>,
                         },
                         {
-                          title: "Anomaly Score",
+                          title: "异常分数",
                           dataIndex: "anomaly_score",
                           width: 120,
                           render: (v: number | null) => (
@@ -251,12 +251,12 @@ export default function InspectionPage() {
                           ),
                         },
                         {
-                          title: "Is Anomaly",
+                          title: "是否异常",
                           dataIndex: "is_anomaly",
                           width: 90,
-                          render: (v: boolean | null) => (v == null ? "-" : <Tag color={v ? "red" : "green"}>{v ? "Yes" : "No"}</Tag>),
+                          render: (v: boolean | null) => (v == null ? "-" : <Tag color={v ? "red" : "green"}>{v ? "是" : "否"}</Tag>),
                         },
-                        { title: "Reason", dataIndex: "decision_reason", ellipsis: true },
+                        { title: "原因", dataIndex: "decision_reason", ellipsis: true },
                       ]}
                       dataSource={result.camera_results.map((r, i) => ({ ...r, key: i }))}
                       pagination={false}
@@ -265,7 +265,7 @@ export default function InspectionPage() {
 
                     {/* 各机位检测叠加图 */}
                     <Typography.Title level={5} className="mt-4">
-                      Detection Images
+                      检测图像
                     </Typography.Title>
                     <div
                       style={{
@@ -308,7 +308,7 @@ export default function InspectionPage() {
               <div className="text-center py-8">
                 <ScanOutlined className="text-4xl text-gray-300 block mb-3" />
                 <Typography.Text type="secondary">
-                  上传图像并点击 Run Inspection 开始检测
+                  上传图像并点击「开始检测」按钮
                 </Typography.Text>
               </div>
             )}

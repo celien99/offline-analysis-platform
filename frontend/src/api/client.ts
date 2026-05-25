@@ -35,7 +35,7 @@ http.interceptors.response.use(
       error.response?.data?.message ??
       error.response?.data?.detail ??
       error.message;
-    message.error(`Request failed: ${detail}`);
+    message.error(`请求失败: ${detail}`);
     return Promise.reject(error);
   },
 );

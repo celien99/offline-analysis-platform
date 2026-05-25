@@ -31,7 +31,7 @@ export default function ReviewModal({
 }: Props) {
   return (
     <Modal
-      title={action === "confirm_defect" ? "Confirm as Real Defect" : "Mark as False Alarm"}
+      title={action === "confirm_defect" ? "确认为真实缺陷" : "标记为误报"}
       open={open}
       onOk={onSubmit}
       onCancel={onClose}
@@ -39,10 +39,10 @@ export default function ReviewModal({
     >
       {action === "confirm_defect" && (
         <div className="mb-4">
-          <Text strong>Defect Type:</Text>
+          <Text strong>缺陷类型:</Text>
           <Select
             className="w-full mt-2"
-            placeholder="Select defect type"
+            placeholder="选择缺陷类型"
             options={DEFECT_TYPES as unknown as { value: string; label: string }[]}
             value={defectType}
             onChange={onDefectTypeChange}
@@ -51,11 +51,11 @@ export default function ReviewModal({
         </div>
       )}
       <div>
-        <Text strong>Comment:</Text>
+        <Text strong>备注:</Text>
         <TextArea
           className="mt-2"
           rows={3}
-          placeholder="Optional review comment..."
+          placeholder="可选备注信息..."
           value={comment}
           onChange={(e) => onCommentChange(e.target.value)}
         />

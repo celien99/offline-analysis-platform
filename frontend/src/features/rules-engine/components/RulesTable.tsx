@@ -14,13 +14,13 @@ interface Props {
 export function useRulesColumns({ onToggle, onDelete }: Props): ColumnsType<Rule> {
   return [
     {
-      title: "Name",
+      title: "名称",
       dataIndex: "name",
       key: "name",
       render: (n: string) => <Text strong>{n}</Text>,
     },
     {
-      title: "Type",
+      title: "类型",
       dataIndex: "rule_type",
       key: "rule_type",
       width: 90,
@@ -29,14 +29,14 @@ export function useRulesColumns({ onToggle, onDelete }: Props): ColumnsType<Rule
       ),
     },
     {
-      title: "Priority",
+      title: "优先级",
       dataIndex: "priority",
       key: "priority",
       width: 70,
       sorter: (a, b) => a.priority - b.priority,
     },
     {
-      title: "Enabled",
+      title: "启用",
       dataIndex: "enabled",
       key: "enabled",
       width: 80,
@@ -45,27 +45,27 @@ export function useRulesColumns({ onToggle, onDelete }: Props): ColumnsType<Rule
       ),
     },
     {
-      title: "Description",
+      title: "描述",
       dataIndex: "description",
       key: "description",
       ellipsis: true,
       render: (d: string | null) => <Text type="secondary">{d || "-"}</Text>,
     },
     {
-      title: "Created",
+      title: "创建时间",
       dataIndex: "created_at",
       key: "created_at",
       width: 170,
       render: (d: string) => new Date(d).toLocaleString(),
     },
     {
-      title: "Actions",
+      title: "操作",
       key: "actions",
       width: 100,
       render: (_: unknown, record: Rule) => (
-        <Popconfirm title="Delete this rule?" onConfirm={() => onDelete(record.rule_id)}>
+        <Popconfirm title="确定要删除此规则吗？" onConfirm={() => onDelete(record.rule_id)}>
           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-            Delete
+            删除
           </Button>
         </Popconfirm>
       ),

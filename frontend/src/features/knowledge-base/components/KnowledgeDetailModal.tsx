@@ -17,45 +17,45 @@ export default function KnowledgeDetailModal({ entry, open, onClose, onGenerateR
 
   return (
     <Modal
-      title="Knowledge Entry Detail"
+      title="知识条目详情"
       open={open}
       onCancel={onClose}
       footer={
         <Space>
-          <Button onClick={() => onGenerateRule(entry)}>Generate Rule</Button>
+          <Button onClick={() => onGenerateRule(entry)}>生成规则</Button>
           <Popconfirm
-            title="Delete this entry?"
+            title="确定要删除此条目吗？"
             onConfirm={() => {
               onDelete(entry.knowledge_id);
               onClose();
             }}
           >
-            <Button danger>Delete</Button>
+            <Button danger>删除</Button>
           </Popconfirm>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>关闭</Button>
         </Space>
       }
       width={700}
     >
       <Descriptions column={2} bordered size="small">
-        <Descriptions.Item label="Title" span={2}>{entry.title}</Descriptions.Item>
-        <Descriptions.Item label="Category">
+        <Descriptions.Item label="标题" span={2}>{entry.title}</Descriptions.Item>
+        <Descriptions.Item label="类别">
           <Tag color={CATEGORY_COLOR_MAP[entry.category]}>
             {entry.category.replace(/_/g, " ")}
           </Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="Action">
+        <Descriptions.Item label="动作">
           <Tag color={entry.action === "ignore" ? "green" : "red"}>{entry.action}</Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="Defect Type">{entry.defect_type || "-"}</Descriptions.Item>
-        <Descriptions.Item label="Cluster">{entry.cluster_id || "-"}</Descriptions.Item>
-        <Descriptions.Item label="Cameras" span={2}>
-          {entry.camera_ids.length > 0 ? entry.camera_ids.join(", ") : "All cameras"}
+        <Descriptions.Item label="缺陷类型">{entry.defect_type || "-"}</Descriptions.Item>
+        <Descriptions.Item label="聚类">{entry.cluster_id || "-"}</Descriptions.Item>
+        <Descriptions.Item label="相机" span={2}>
+          {entry.camera_ids.length > 0 ? entry.camera_ids.join(", ") : "所有相机"}
         </Descriptions.Item>
-        <Descriptions.Item label="Description" span={2}>
-          <Paragraph>{entry.description || "No description"}</Paragraph>
+        <Descriptions.Item label="描述" span={2}>
+          <Paragraph>{entry.description || "无描述"}</Paragraph>
         </Descriptions.Item>
-        <Descriptions.Item label="Created" span={2}>
+        <Descriptions.Item label="创建时间" span={2}>
           {new Date(entry.created_at).toLocaleString()}
         </Descriptions.Item>
       </Descriptions>

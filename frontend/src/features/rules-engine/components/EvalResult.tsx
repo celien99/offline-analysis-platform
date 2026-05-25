@@ -10,9 +10,9 @@ interface Props {
 
 export default function EvalResultDisplay({ result }: Props) {
   return (
-    <Card title="Evaluation Result" size="small" className="mt-4">
+    <Card title="评估结果" size="small" className="mt-4">
       <Descriptions column={2} size="small">
-        <Descriptions.Item label="Final Action">
+        <Descriptions.Item label="最终动作">
           <Tag
             color={result.action === "ignore" ? "green" : result.action === "escalate" ? "red" : "orange"}
             className="text-sm px-2 py-1"
@@ -20,7 +20,7 @@ export default function EvalResultDisplay({ result }: Props) {
             {result.action.toUpperCase()}
           </Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="Rules Matched">
+        <Descriptions.Item label="匹配规则数">
           <Text strong>{result.rule_count}</Text>
         </Descriptions.Item>
       </Descriptions>
@@ -32,14 +32,14 @@ export default function EvalResultDisplay({ result }: Props) {
           size="small"
           pagination={false}
           columns={[
-            { title: "Name", dataIndex: "name", key: "name" },
+            { title: "名称", dataIndex: "name", key: "name" },
             {
-              title: "Type",
+              title: "类型",
               dataIndex: "type",
               key: "type",
               render: (t: string) => <Tag color={RULE_TYPE_COLOR_MAP[t] || "default"}>{t}</Tag>,
             },
-            { title: "Priority", dataIndex: "priority", key: "priority" },
+            { title: "优先级", dataIndex: "priority", key: "priority" },
           ]}
         />
       )}

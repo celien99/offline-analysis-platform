@@ -23,9 +23,9 @@ export default function ClusterScatterPlot({ points }: Props) {
 
   if (points.length === 0) {
     return (
-      <Card title="Cluster Distribution (UMAP 2D Projection)">
+      <Card title="聚类分布 (UMAP 二维投影)">
         <div className="flex items-center justify-center text-gray-400" style={{ height: 450 }}>
-          No cluster data yet. Run clustering to see visualization.
+          暂无聚类数据，请先运行聚类任务
         </div>
       </Card>
     );
@@ -54,7 +54,7 @@ export default function ClusterScatterPlot({ points }: Props) {
       customdata: group.map((p) => p.cluster_id),
       text: group.map(
         (p) =>
-          `<b>${p.name}</b><br>Samples: ${p.sample_count}<br>Type: ${p.possible_type}<br>Defect: ${p.defect_type}<br><i>Click to view detail</i>`,
+          `<b>${p.name}</b><br>样本数: ${p.sample_count}<br>类型: ${p.possible_type}<br>缺陷: ${p.defect_type}<br><i>点击查看详情</i>`,
       ),
       hoverinfo: "text",
       hovertemplate: "%{text}<extra></extra>",

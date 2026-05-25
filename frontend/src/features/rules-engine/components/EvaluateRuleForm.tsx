@@ -13,19 +13,19 @@ interface Props {
 
 export default function EvaluateRuleForm({ form, open, loading, onSubmit, onClose }: Props) {
   return (
-    <Modal title="Evaluate Rules" open={open} onCancel={onClose} footer={null} width={650}>
+    <Modal title="评估规则" open={open} onCancel={onClose} footer={null} width={650}>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Row gutter={16}>
           <Col span={12}>
-            <Form.Item name="camera_id" label="Camera ID" rules={[{ required: true }]}>
+            <Form.Item name="camera_id" label="相机ID" rules={[{ required: true }]}>
               <Input placeholder="e.g. left_top" />
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="defect_type" label="Defect Type">
+            <Form.Item name="defect_type" label="缺陷类型">
               <Select
                 allowClear
-                placeholder="Optional"
+                placeholder="可选"
                 options={DEFECT_TYPES as unknown as { value: string; label: string }[]}
               />
             </Form.Item>
@@ -33,25 +33,25 @@ export default function EvaluateRuleForm({ form, open, loading, onSubmit, onClos
         </Row>
         <Row gutter={16}>
           <Col span={12}>
-            <Form.Item name="anomaly_score" label="Anomaly Score">
+            <Form.Item name="anomaly_score" label="异常分数">
               <InputNumber min={0} max={1} step={0.01} className="w-full" placeholder="0.85" />
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="classifier_prediction" label="Classifier Prediction">
+            <Form.Item name="classifier_prediction" label="分类器预测">
               <Select
                 allowClear
-                placeholder="Optional"
+                placeholder="可选"
                 options={[
-                  { value: "real_defect", label: "Real Defect" },
-                  { value: "false_alarm", label: "False Alarm" },
+                  { value: "real_defect", label: "真实缺陷" },
+                  { value: "false_alarm", label: "误报" },
                 ]}
               />
             </Form.Item>
           </Col>
         </Row>
         <Button type="primary" htmlType="submit" loading={loading} icon={<ThunderboltOutlined />}>
-          Run Evaluation
+          运行评估
         </Button>
       </Form>
     </Modal>

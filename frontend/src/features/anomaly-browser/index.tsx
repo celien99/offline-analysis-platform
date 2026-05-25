@@ -53,26 +53,26 @@ export default function AnomalyBrowser() {
       setSelectedAnomaly(await anomalyApi.detail(anomalyId));
       setDetailVisible(true);
     } catch {
-      message.error("Failed to load anomaly detail");
+      message.error("加载异常详情失败");
     }
   };
 
   const handleReprocess = async (anomalyId: string) => {
     try {
       await reprocessMutation.mutateAsync(anomalyId);
-      message.success("Anomaly queued for reprocessing");
+      message.success("异常已加入重新处理队列");
     } catch {
-      message.error("Reprocess failed");
+      message.error("重新处理失败");
     }
   };
 
   const handleDelete = async (anomalyId: string) => {
     try {
       await anomalyApi.delete(anomalyId);
-      message.success("Anomaly deleted");
+      message.success("异常已删除");
       refetch();
     } catch {
-      message.error("Delete failed");
+      message.error("删除失败");
     }
   };
 
@@ -85,31 +85,31 @@ export default function AnomalyBrowser() {
   return (
     <div>
       <PageHeader
-        title="Anomaly Browser"
+        title="异常浏览"
         extra={
           <Space>
             <Input
-              placeholder="Camera ID"
+              placeholder="相机ID"
               allowClear
               style={{ width: 150 }}
               value={cameraInput}
               onChange={(e) => setCameraInput(e.target.value)}
             />
             <Select
-              placeholder="Status"
+              placeholder="状态"
               allowClear
               style={{ width: 130 }}
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
-                { value: "pending", label: "Pending" },
-                { value: "embedded", label: "Embedded" },
-                { value: "noise", label: "Noise" },
-                { value: "clustered", label: "Clustered" },
-                { value: "reviewed", label: "Reviewed" },
+                { value: "pending", label: "待处理" },
+                { value: "embedded", label: "已嵌入" },
+                { value: "noise", label: "噪音" },
+                { value: "clustered", label: "已聚类" },
+                { value: "reviewed", label: "已审核" },
               ]}
             />
-            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Refresh</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
           </Space>
         }
       />
