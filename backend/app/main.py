@@ -23,6 +23,7 @@ from app.api.taxonomy.router import router as taxonomy_router
 from app.api.graph.router import router as graph_router
 from app.api.mask_refinement.router import router as mask_refinement_router
 from app.api.hot_reload.router import router as hot_reload_router
+from app.api.camera_config.router import router as camera_config_router
 from app.common.logging import get_logger, setup_logging
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -91,4 +92,5 @@ app.include_router(inspection_router)
 app.include_router(taxonomy_router)
 app.include_router(graph_router)
 app.include_router(mask_refinement_router)
+app.include_router(camera_config_router)
 app.include_router(hot_reload_router)
