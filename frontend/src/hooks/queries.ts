@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
-import type { ReviewSubmit, TrainingStartParams, DeployRequest } from "../types";
+import { cameraConfigApi } from "../api/camera-config";
+import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData } from "../types";
 
 // ── Cluster queries ──
 
@@ -235,6 +236,14 @@ export function useDeployments(params: {
   });
 }
 
+export function useDeployTargets() {
+  return useQuery({
+    queryKey: ["model", "deploy-targets"],
+    queryFn: ({ signal }) => modelApi.getDeployTargets(signal),
+    staleTime: Infinity, // 部署目标配置极少变化
+  });
+}
+
 export function useDeployModel() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -313,5 +322,114 @@ export function useInspectionResult(taskId: string | null) {
       query.state.data?.status === "SUCCESS" || query.state.data?.status === "FAILURE"
         ? false
         : 3000,
+  });
+}
+
+// ── Camera Config hooks ──
+
+export function useSeatModelOptions() {
+  return useQuery({
+    queryKey: ["seat-models", "options"],
+    queryFn: cameraConfigApi.listOptions,
+    staleTime: 60_000,
+  });
+}
+
+export function useSeatModels(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ["seat-models", page, pageSize],
+    queryFn: () => cameraConfigApi.listSeatModels({ page, page_size: pageSize }),
+  });
+}
+
+export function useCreateSeatModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: cameraConfigApi.createSeatModel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["seat-models"] });
+    },
+  });
+}
+
+export function useUpdateSeatModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<SeatModelFormData> }) =>
+      cameraConfigApi.updateSeatModel(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["seat-models"] });
+    },
+  });
+}
+
+export function useDeleteSeatModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: cameraConfigApi.deleteSeatModel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["seat-models"] });
+    },
+  });
+}
+
+export function useCameras(seatModelId: string | null) {
+  return useQuery({
+    queryKey: ["cameras", seatModelId],
+    queryFn: () => cameraConfigApi.listCameras(seatModelId!),
+    enabled: !!seatModelId,
+  });
+}
+
+export function useCreateCamera() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      seatModelId,
+      data,
+    }: {
+      seatModelId: string;
+      data: CameraConfigFormData;
+    }) => cameraConfigApi.createCamera(seatModelId, data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["cameras", variables.seatModelId] });
+      queryClient.invalidateQueries({ queryKey: ["seat-models", "options"] });
+    },
+  });
+}
+
+export function useUpdateCamera() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      seatModelId,
+      cameraDbId,
+      data,
+    }: {
+      seatModelId: string;
+      cameraDbId: string;
+      data: Partial<CameraConfigFormData>;
+    }) => cameraConfigApi.updateCamera(seatModelId, cameraDbId, data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["cameras", variables.seatModelId] });
+      queryClient.invalidateQueries({ queryKey: ["seat-models", "options"] });
+    },
+  });
+}
+
+export function useDeleteCamera() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      seatModelId,
+      cameraDbId,
+    }: {
+      seatModelId: string;
+      cameraDbId: string;
+    }) => cameraConfigApi.deleteCamera(seatModelId, cameraDbId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["cameras", variables.seatModelId] });
+      queryClient.invalidateQueries({ queryKey: ["seat-models", "options"] });
+    },
   });
 }
