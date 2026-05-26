@@ -42,7 +42,7 @@ flowchart TB
         BC --> RP["Region Proposal<br/>热力图→连通域→裁剪"]
         RP --> IL["Identity Linking<br/>Kalman+特征匹配"]
         IL --> AP["Align Project<br/>EAD→DINOv2空间"]
-        RP --> FC["Dual-Modal Filter<br/>图像+特征双模态分类"]
+        RP --> FC["Three-Modal Filter<br/>图像+EAD+Unified Emb 三模态"]
         FC --> AG["Proposal Aggregation<br/>加权聚合判定"]
         AG --> RE["规则引擎<br/>后处理"]
         RE --> DECISION{"OK / NG"}
@@ -144,10 +144,12 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Region Proposal</b> → <b>Dual-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Budget Ctrl</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Align Project</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
         <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher 多层特征 + Student-Teacher 差异，保留 anomaly representation 而非仅 score</li>
         <li><b>Region Proposal Refinement</b>：热力图 → 自适应阈值 → 形态学清理 → 连通域 → 区域裁剪，每个 defect patch 独立送入 Filter</li>
-        <li><b>Dual-Modal Filter</b>：MobileNetV3-Small (448²) 图像分支 + EfficientAD 特征分支 → Late Fusion → 二分类，Feature Dropout 保证纯图像 fallback</li>
+        <li><b>Three-Modal Filter</b>：MobileNetV3-Small (448²) 图像分支 + EfficientAD 特征分支 + Unified Embedding (384d) → 768d Fusion → 二分类，Feature Dropout 保证 fallback</li>
+        <li><b>Budget Controller</b>：三态自适应阈值 (Normal/Emergency/Optimization)，延迟 SLA 保证 (target 15ms / hard 20ms)</li>
+        <li><b>Identity Linking</b>：6态生命周期 + Kalman/特征余弦级联匹配 + 4类冲突解决策略，跨帧去重，跨相机关联</li>
         <li><b>Proposal Aggregation</b>：加权聚合 (area^0.5 × score)，Generation 优化 Recall，Aggregation 优化 Precision</li>
         <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
         <li>规则引擎后处理：可配置阈值规则，支持 suppress_to_ok / flag_for_review</li>
@@ -294,6 +296,8 @@ offline-analysis-platform/
 ├── defect_protocol/                   # 共享数据协议包（PatchProposal 统一契约）
 │   ├── defect_protocol/
 │   │   ├── entities.py                 #   PatchProposal, EfficientADFeatures 等 dataclass
+│   │   ├── canonical_proposal.py       #   CanonicalPatchProposal (schema_version + 归一化坐标)
+│   │   ├── embedding_space.py          #   EmbeddingSpaceContract + UnifiedEmbedding
 │   │   ├── serialization.py            #   JSON/dict 序列化
 │   │   └── types.py                    #   类型别名
 │   └── tests/
@@ -390,8 +394,9 @@ seat_defect_core/
 │   └── engine.py                     # DualModalFilter 推理引擎：图像+特征双模态 + 故障安全
 ├── proposal/                         # 🔬 Region Proposal 模块
 │   ├── generator.py                  #   热力图→连通域→区域裁剪
+│   ├── budget.py                     #   BudgetController（三态自适应阈值）
 │   ├── aggregation.py                #   加权聚合 (area × score)
-│   └── config.py                     #   Proposal 超参配置
+│   └── config.py                     #   Proposal + BudgetConfig 配置
 ├── tracking/                         # 🔗 Defect Identity 追踪模块
 │   ├── identity.py                   #   6态生命周期 (BIRTH→DEAD)
 │   ├── tracker.py                    #   DefectTracker 编排器
@@ -674,7 +679,7 @@ mkdir -p sample_images
 }
 ```
 
-> **关键设计**：Dual-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+特征双模态判定，若判定为误报则降级为 OK，绝不将 OK 改为 NG。Feature Dropout 保证纯图像 fallback。推理失败时默认 `is_real_defect=True`（故障安全）。Region Proposal 将 ROI 拆分为独立 defect patch，加权聚合得出最终判定。
+> **关键设计**：Three-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+EAD特征+Unified Embedding 三模态判定，若判定为误报则降级为 OK，绝不将 OK 改为 NG。Feature Dropout 保证 fallback。推理失败时默认 `is_real_defect=True`（故障安全）。Region Proposal 将 ROI 拆分为独立 defect patch，加权聚合得出最终判定。
 
 ---
 
