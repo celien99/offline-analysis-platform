@@ -83,7 +83,8 @@ class Settings(BaseSettings):
     deploy_rules_subdir: str = "rules"
     deploy_on_train_complete: bool = False
     default_deploy_target: str = "production_line_a"
-    deploy_default_strategy: str = "immediate"  # immediate / shadow / canary
+    deploy_default_strategy: str = "immediate"  # immediate / shadow / canary（手动部署默认）
+    deploy_auto_strategy: str = "canary"  # 自动部署默认策略（仅 shadow/canary，不直接 active）
     deploy_canary_watch_seconds: int = 1800  # 金丝雀观察时长（秒）
     deploy_canary_min_samples: int = 100  # 金丝雀评估最小样本数
     deploy_canary_ng_rate_threshold: float = 0.05  # NG 率超此阈值自动回滚

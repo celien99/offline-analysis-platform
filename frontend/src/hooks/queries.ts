@@ -3,6 +3,7 @@ import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, 
 import { cameraConfigApi } from "../api/camera-config";
 import { gateApi } from "../api/gate";
 import { maskRefinementApi } from "../api/mask-refinement";
+import { hotReloadApi, type HotReloadTarget } from "../api/hot-reload";
 import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData, DualTrackComparisonResult } from "../types";
 
 // ── Cluster queries ──
@@ -507,5 +508,16 @@ export function useDualTrackComparison(params: {
     queryFn: ({ signal }) =>
       maskRefinementApi.compare(params, signal) as Promise<DualTrackComparisonResult>,
     enabled: !!(params.seat_model_id || params.camera_id),
+  });
+}
+
+// ── Hot Reload hooks ──
+
+export function useHotReloadTargets() {
+  return useQuery({
+    queryKey: ["hot-reload", "targets"],
+    queryFn: ({ signal }) =>
+      hotReloadApi.listTargets(signal) as Promise<{ total: number; targets: HotReloadTarget[] }>,
+    refetchInterval: 15_000,
   });
 }

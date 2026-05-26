@@ -315,6 +315,7 @@ def train_filter_classifier(
             if settings.deploy_on_train_complete:
                 # chain: gate → deploy (gate 失败则跳过 deploy)
                 default_target = settings.default_deploy_target
+                auto_strategy = settings.deploy_auto_strategy
                 pipeline = chain(
                     evaluate_model_gate.s(
                         model_version_id=model_version.id,
@@ -327,6 +328,7 @@ def train_filter_classifier(
                             "version": model_version.version,
                             "target": default_target,
                             "deployed_by": "system:training_worker",
+                            "strategy": auto_strategy,
                             "require_gate_pass": True,
                         },
                     ),
