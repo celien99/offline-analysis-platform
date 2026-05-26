@@ -10,12 +10,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 from .config import (
     AlignmentConfig,
     CameraConfig,
-    ColorBranchConfig,
     DetectionConfig,
     FilterClassifierConfig,
     FusionConfig,
     InspectionConfig,
-    PatchCoreConfig,
     QualityGuardConfig,
     RegionConfig,
     RoiRefineConfig,
@@ -23,6 +21,7 @@ from .config import (
     RuleEngineConfig,
     SeatModelConfig,
 )
+from .efficientad import EfficientADConfig
 _LOCAL_PATH_SUFFIXES = {
     ".pt",
     ".pth",
@@ -136,9 +135,9 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
 
     return CameraConfig(
         camera_id=_require_string(payload, "camera_id", scope),
-        patchcore_model_path=_resolve_local_path(
+        efficientad_model_path=_resolve_local_path(
             config_dir,
-            _require_string(payload, "patchcore_model_path", scope),
+            _require_string(payload, "efficientad_model_path", scope),
             force=True,
         ),
         source=_resolve_source_path(
@@ -146,7 +145,6 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
             _string_or_default(payload.get("source"), ""),
         ),
         enabled=_bool_or_default(payload.get("enabled"), True),
-        color_insensitive_mode=_bool_or_default(payload.get("color_insensitive_mode"), False),
         quality=_parse_quality_guard_config(
             payload.get("quality"),
             scope=f"{scope}.quality",
@@ -160,14 +158,9 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
             payload.get("roi"),
             scope=f"{scope}.roi",
         ),
-        patchcore=_parse_patchcore_config(
-            payload.get("patchcore"),
-            config_dir,
-            scope=f"{scope}.patchcore",
-        ),
-        color_branch=_parse_color_branch_config(
-            payload.get("color_branch"),
-            scope=f"{scope}.color_branch",
+        efficientad=_parse_efficientad_config(
+            payload.get("efficientad"),
+            scope=f"{scope}.efficientad",
         ),
         filter_classifier=_parse_filter_classifier_config(
             payload.get("filter_classifier"),
@@ -316,128 +309,41 @@ def _parse_detection_config(payload: Any, config_dir: Path, *, scope: str) -> De
     )
 
 
-def _parse_patchcore_config(payload: Any, config_dir: Path, *, scope: str) -> PatchCoreConfig:
-    defaults = PatchCoreConfig()
+def _parse_efficientad_config(payload: Any, *, scope: str) -> EfficientADConfig:
+    defaults = EfficientADConfig()
     if payload is None:
         return defaults
     payload = _expect_dict(payload, scope)
-    _reject_unknown_keys(payload, _field_names(PatchCoreConfig), scope)
-    return PatchCoreConfig(
-        backend=_string_or_default(payload.get("backend"), defaults.backend),
-        image_size=_int_or_default(payload.get("image_size"), defaults.image_size),
-        patch_size=_int_or_default(payload.get("patch_size"), defaults.patch_size),
-        stride=_int_or_default(payload.get("stride"), defaults.stride),
-        max_memory=_int_or_default(payload.get("max_memory"), defaults.max_memory),
-        threshold_quantile=_float_or_default(
-            payload.get("threshold_quantile"),
-            defaults.threshold_quantile,
+    _reject_unknown_keys(payload, _field_names(EfficientADConfig), scope)
+    return EfficientADConfig(
+        model_path=_string_or_default(payload.get("model_path"), defaults.model_path),
+        device=_string_or_default(payload.get("device"), defaults.device),
+        input_size=_int_or_default(payload.get("input_size"), defaults.input_size),
+        teacher_backbone=_string_or_default(
+            payload.get("teacher_backbone"), defaults.teacher_backbone
         ),
-        training_threshold_upper_quantile=_float_or_default(
-            payload.get("training_threshold_upper_quantile"),
-            defaults.training_threshold_upper_quantile,
+        student_backbone=_string_or_default(
+            payload.get("student_backbone"), defaults.student_backbone
         ),
-        texture_input=_string_or_default(payload.get("texture_input"), defaults.texture_input),
-        min_target_coverage=_float_or_default(
-            payload.get("min_target_coverage"),
-            defaults.min_target_coverage,
-        ),
-        max_ignore_overlap=_float_or_default(
-            payload.get("max_ignore_overlap"),
-            defaults.max_ignore_overlap,
-        ),
-        min_valid_patch_ratio=_float_or_default(
-            payload.get("min_valid_patch_ratio"),
-            defaults.min_valid_patch_ratio,
-        ),
-        decision_score_margin=_float_or_default(
-            payload.get("decision_score_margin"),
-            defaults.decision_score_margin,
-        ),
-        strong_patch_score_ratio=_float_or_default(
-            payload.get("strong_patch_score_ratio"),
-            defaults.strong_patch_score_ratio,
-        ),
-        min_strong_patch_count=_int_or_default(
-            payload.get("min_strong_patch_count"),
-            defaults.min_strong_patch_count,
-        ),
-        min_strong_component_count=_int_or_default(
-            payload.get("min_strong_component_count"),
-            defaults.min_strong_component_count,
-        ),
-        min_strong_patch_ratio=_float_or_default(
-            payload.get("min_strong_patch_ratio"),
-            defaults.min_strong_patch_ratio,
-        ),
-        min_strong_component_ratio=_float_or_default(
-            payload.get("min_strong_component_ratio"),
-            defaults.min_strong_component_ratio,
-        ),
-        critical_score_margin=_float_or_default(
-            payload.get("critical_score_margin"),
-            defaults.critical_score_margin,
-        ),
-        critical_peak_score_margin=_float_or_default(
-            payload.get("critical_peak_score_margin"),
-            defaults.critical_peak_score_margin,
-        ),
-        critical_min_component_patch_count=_int_or_default(
-            payload.get("critical_min_component_patch_count"),
-            defaults.critical_min_component_patch_count,
-        ),
-        min_peak_component_patch_count=_int_or_default(
-            payload.get("min_peak_component_patch_count"),
-            defaults.min_peak_component_patch_count,
-        ),
-        backbone_name=_string_or_default(payload.get("backbone_name"), defaults.backbone_name),
-        feature_layers=_string_list(
-            payload.get("feature_layers"),
-            scope=f"{scope}.feature_layers",
-            default=defaults.feature_layers,
-        ),
-        backbone_pretrained=_bool_or_default(
-            payload.get("backbone_pretrained"),
-            defaults.backbone_pretrained,
-        ),
-        backbone_weights_path=_resolve_optional_local_path(
-            config_dir,
-            _optional_string(payload.get("backbone_weights_path")),
-        ),
-        backbone_device=_string_or_default(
-            payload.get("backbone_device"),
-            defaults.backbone_device,
-        ),
-        feature_pool_kernel_size=_int_or_default(
-            payload.get("feature_pool_kernel_size"),
-            defaults.feature_pool_kernel_size,
-        ),
-        coreset_sampling_ratio=_float_or_default(
-            payload.get("coreset_sampling_ratio"),
-            defaults.coreset_sampling_ratio,
-        ),
-    )
-
-
-def _parse_color_branch_config(payload: Any, *, scope: str) -> ColorBranchConfig:
-    defaults = ColorBranchConfig()
-    if payload is None:
-        return defaults
-    payload = _expect_dict(payload, scope)
-    _reject_unknown_keys(payload, _field_names(ColorBranchConfig), scope)
-    return ColorBranchConfig(
-        enabled=_bool_or_default(payload.get("enabled"), defaults.enabled),
-        threshold_quantile=_float_or_default(
-            payload.get("threshold_quantile"),
-            defaults.threshold_quantile,
-        ),
-        threshold=_optional_float(payload.get("threshold")),
         min_valid_pixel_ratio=_float_or_default(
-            payload.get("min_valid_pixel_ratio"),
-            defaults.min_valid_pixel_ratio,
+            payload.get("min_valid_pixel_ratio"), defaults.min_valid_pixel_ratio
         ),
-        training_threshold_upper_quantile=_float_or_default(
-            payload.get("training_threshold_upper_quantile"),
-            defaults.training_threshold_upper_quantile,
+        image_threshold=_float_or_default(
+            payload.get("image_threshold"), defaults.image_threshold
+        ),
+        pixel_threshold=_float_or_default(
+            payload.get("pixel_threshold"), defaults.pixel_threshold
+        ),
+        epochs=_int_or_default(payload.get("epochs"), defaults.epochs),
+        batch_size=_int_or_default(payload.get("batch_size"), defaults.batch_size),
+        learning_rate=_float_or_default(
+            payload.get("learning_rate"), defaults.learning_rate
+        ),
+        validation_split=_float_or_default(
+            payload.get("validation_split"), defaults.validation_split
+        ),
+        early_stopping_patience=_int_or_default(
+            payload.get("early_stopping_patience"), defaults.early_stopping_patience
         ),
     )
 
@@ -538,19 +444,18 @@ def _parse_region_config(
     return RegionConfig(
         region_id=_require_string(payload, "region_id", scope),
         box=_region_box(payload.get("box"), scope=f"{scope}.box"),
-        patchcore_model_path=_resolve_local_path(
+        efficientad_model_path=_resolve_local_path(
             config_dir,
-            _require_string(payload, "patchcore_model_path", scope),
+            _require_string(payload, "efficientad_model_path", scope),
             force=True,
         ),
         enabled=_bool_or_default(payload.get("enabled"), True),
-        patchcore=(
-            _parse_patchcore_config(
-                payload.get("patchcore"),
-                config_dir,
-                scope=f"{scope}.patchcore",
+        efficientad=(
+            _parse_efficientad_config(
+                payload.get("efficientad"),
+                scope=f"{scope}.efficientad",
             )
-            if payload.get("patchcore") is not None
+            if payload.get("efficientad") is not None
             else None
         ),
     )
