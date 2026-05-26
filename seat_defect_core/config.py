@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+from .efficientad import EfficientADConfig
+
 
 @dataclass
 class QualityGuardConfig:
@@ -55,64 +57,6 @@ class DetectionConfig:
     # YOLO 实例 mask 可能在目标内部留下低置信空洞；PatchCore 需要完整前景区域。
     fill_segmentation_holes: bool = True
     segmentation_hole_fill_max_area_ratio: float = 0.08
-
-
-@dataclass
-class PatchCoreConfig:
-    """PatchCore model and decision parameters."""
-
-    # patch 提取和 memory bank。
-    backend: str = "full"
-    image_size: int = 256
-    patch_size: int = 32
-    stride: int = 16
-    max_memory: int = 1024
-    threshold_quantile: float = 0.99
-    texture_input: str = "lab_l"
-
-    # 有效 patch 过滤。
-    min_target_coverage: float = 0.8
-    max_ignore_overlap: float = 0.1
-    min_valid_patch_ratio: float = 0.65
-
-    # 训练时阈值上限分位数（替代 max*1.1 的统计鲁棒上界）。
-    training_threshold_upper_quantile: float = 0.995
-
-    # 图像级与连通域判定。
-    decision_score_margin: float = 1.08
-    strong_patch_score_ratio: float = 0.9
-    min_strong_patch_count: int = 3
-    min_strong_component_count: int = 2
-    min_strong_patch_ratio: float = 0.015
-    min_strong_component_ratio: float = 0.01
-
-    # 小面积高峰值缺陷的快速放行规则。
-    critical_score_margin: float = 1.35
-    critical_peak_score_margin: float = 1.45
-    critical_min_component_patch_count: int = 2
-
-    # 峰值规则（peak_rule）最小连通 patch 数，防止单 patch 噪声误触发。
-    min_peak_component_patch_count: int = 1
-
-    # full 后端的骨干网络参数。
-    backbone_name: str = "wide_resnet50_2"
-    feature_layers: List[str] = field(default_factory=lambda: ["layer2", "layer3"])
-    backbone_pretrained: bool = False
-    backbone_weights_path: Optional[str] = None
-    backbone_device: str = "cpu"
-    feature_pool_kernel_size: int = 3
-    coreset_sampling_ratio: float = 0.1
-
-
-@dataclass
-class ColorBranchConfig:
-    """颜色一致性分支配置。"""
-
-    enabled: bool = False
-    threshold_quantile: float = 0.99
-    threshold: Optional[float] = None
-    min_valid_pixel_ratio: float = 0.4
-    training_threshold_upper_quantile: float = 0.995
 
 
 @dataclass
@@ -203,9 +147,9 @@ class RegionConfig:
     region_id: str
     # 标准 ROI 内的归一化矩形：[x1, y1, x2, y2]，取值范围 0-1。
     box: List[float]
-    patchcore_model_path: str
+    efficientad_model_path: str
     enabled: bool = True
-    patchcore: Optional[PatchCoreConfig] = None
+    efficientad: Optional[EfficientADConfig] = None
 
 
 @dataclass
@@ -213,15 +157,13 @@ class CameraConfig:
     """单机位 runtime 配置。"""
 
     camera_id: str
-    patchcore_model_path: str
+    efficientad_model_path: str
     source: str = ""
     enabled: bool = True
-    color_insensitive_mode: bool = False
     quality: QualityGuardConfig = field(default_factory=QualityGuardConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     roi: RoiRefineConfig = field(default_factory=RoiRefineConfig)
-    patchcore: PatchCoreConfig = field(default_factory=PatchCoreConfig)
-    color_branch: ColorBranchConfig = field(default_factory=ColorBranchConfig)
+    efficientad: EfficientADConfig = field(default_factory=EfficientADConfig)
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
     rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
     regions: List[RegionConfig] = field(default_factory=list)
@@ -267,12 +209,11 @@ class InspectionConfig:
 __all__ = [
     "AlignmentConfig",
     "CameraConfig",
-    "ColorBranchConfig",
     "DetectionConfig",
+    "EfficientADConfig",
     "FilterClassifierConfig",
     "FusionConfig",
     "InspectionConfig",
-    "PatchCoreConfig",
     "QualityGuardConfig",
     "RegionConfig",
     "RoiRefineConfig",
