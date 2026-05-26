@@ -18,6 +18,7 @@ import numpy as np
 import requests
 
 from .core_types import CameraInspectionResult, InspectionResponse
+from defect_protocol import proposals_to_json
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,26 @@ def upload_camera_result(
         heatmap = _extract_heatmap_for_upload(result)
         if heatmap is not None:
             files.append(("heatmap_file", ("heatmap.png", _encode_heatmap(heatmap), "image/png")))
+
+        # Add proposals JSON if present
+        if getattr(result, 'proposals', None):
+            data["proposals_json"] = proposals_to_json(result.proposals)
+
+        # Upload EfficientAD feature files (.npy format)
+        feature_files: list[tuple[str, bytes, str]] = []
+        texture = result.texture_result
+        if texture is not None and texture.features is not None:
+            import io as _io
+            for feat_name, feat_array in texture.features.items():
+                buf = _io.BytesIO()
+                np.save(buf, feat_array)
+                feature_files.append(
+                    (f"{feat_name}.npy", buf.getvalue(), "application/octet-stream")
+                )
+
+        # Add feature files to the multipart upload
+        for fname, fdata, ftype in feature_files:
+            files.append(("feature_files", (fname, fdata, ftype)))
 
     try:
         url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
