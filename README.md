@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>300+ 源文件</b> · <b>55+ API 端点</b> · <b>11 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>39 个测试</b>
+  <b>350+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70 个测试</b>
 </p>
 
 ---
@@ -45,8 +45,10 @@ flowchart TB
 
     subgraph OFFLINE["🔵 离线分析平台（本仓库）"]
         direction TB
-        INGEST["📥 异常样本<br/>收集缓冲"] --> MASK["🧹 Mask Refinement<br/>背景消除/标准化"]
-        MASK --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
+        INGEST["📥 异常样本<br/>收集缓冲"] --> ISOLATION["🔒 数据隔离<br/>seat_model+camera+region"]
+        ISOLATION --> MASK["🧹 Mask Refinement<br/>背景消除/标准化"]
+        MASK --> DUAL["🔀 双轨对比<br/>Raw vs Refined Embedding"]
+        DUAL --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
         EMBED --> CLUSTER["🔬 聚类分析<br/>UMAP + HDBSCAN"]
         CLUSTER --> GRAPH["🕸 相似度图谱<br/>KNN Graph Builder"]
         CLUSTER --> VLM["🤖 多模态解释<br/>Qwen2.5-VL"]
@@ -56,10 +58,11 @@ flowchart TB
         REVIEW --> TAX["🌳 缺陷分类树<br/>层级缺陷分类"]
         KB --> TRAIN["🎯 分类器训练<br/>MobileNetV3"]
         KB --> METRIC["📐 度量学习<br/>ArcFace / Triplet Loss"]
-        TRAIN --> REGISTRY["📦 模型注册<br/>MLflow"]
-        METRIC --> REGISTRY
+        TRAIN --> GATE["🛡 模型门禁<br/>召回率/抑制率/分层评估"]
+        METRIC --> GATE
+        GATE --> REGISTRY["📦 模型注册<br/>MLflow"]
         REGISTRY --> DEPLOY["🚀 原子部署<br/>模型 + 规则"]
-        DEPLOY --> HOT["🔴 在线热重载<br/>A/B 切换 · 信号文件"]
+        DEPLOY --> HOT["🔴 在线热重载<br/>Canary · Checksum · 回滚"]
     end
 
     ONLINE -->|"NG 自动上传<br/>fire-and-forget"| INGEST
@@ -178,23 +181,45 @@ flowchart TB
   </tr>
   <tr>
     <td width="50%">
-      <h3>🧹 Mask Refinement</h3>
+      <h3>🧹 Mask Refinement + 双轨对比</h3>
       <ul>
         <li>GrabCut 前景/背景分离，去除背景噪声</li>
         <li>CLAHE 自适应直方图均衡化，标准化光照</li>
         <li>形态学操作：闭运算填充孔洞 + 开运算去噪</li>
-        <li>标准尺寸输出（224×224）保持宽高比</li>
-        <li>Celery 批量处理 + MinIO refined 图片存储</li>
+        <li><b>双轨 Embedding 对比</b>：Raw vs Refined 聚类质量评估</li>
+        <li>自动推荐最优精化策略，Celery 批量处理</li>
       </ul>
     </td>
     <td width="50%">
       <h3>🔴 在线热重载</h3>
       <ul>
         <li>reload.signal 信号文件机制，在线系统自动检测模型更新</li>
-        <li>A/B 模型版本管理（Active / Shadow），支持 Canary 提升</li>
-        <li>模型清单（manifest.json）追踪切换历史</li>
-        <li>一键回滚到上一版本</li>
-        <li>多部署目标状态总览 API</li>
+        <li>A/B 模型版本管理（Active / Shadow），支持 Canary 灰度提升</li>
+        <li><b>SHA256 Checksum 校验</b>：部署前后完整性验证</li>
+        <li><b>回滚版本绑定</b>：manifest.json 追踪切换历史 + 安全回滚</li>
+        <li><b>训练完成自动 Canary 部署</b>：仅部署至 Shadow，通过后手动 Promote</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🔒 数据隔离</h3>
+      <ul>
+        <li><b>三级隔离键</b>：seat_model_id + camera_id + region_id</li>
+        <li><b>4 级回退策略</b>：model+camera+region → model+camera → model → global</li>
+        <li><b>按操作类型阈值</b>：聚类 ≥3 样本、训练 ≥5 样本才使用当前隔离级</li>
+        <li>隔离键从 anomaly → cluster → training run 全链路传播</li>
+        <li>前端筛选器：支持按 model/camera/region 独立过滤</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🛡 模型上线门禁</h3>
+      <ul>
+        <li><b>自动回归评估</b>：训练完成后自动触发门禁 Celery 任务</li>
+        <li><b>4 项准入标准</b>：召回率 ≥95%、召回下降 ≤2%、抑制率提升 ≥10%、零真实缺陷误杀</li>
+        <li><b>分层评估</b>：按 camera_id 分层的 Stratified 指标</li>
+        <li>Holdout 评估集：从已审核 cluster 自动构建 Ground Truth</li>
+        <li>门禁失败阻断部署，仅通过模型可进入 Canary 阶段</li>
       </ul>
     </td>
   </tr>
@@ -204,7 +229,7 @@ flowchart TB
       <ul>
         <li><b>NG 自动上传</b>：检测完成后 daemon 线程异步 POST 到离线平台，不阻塞主流程</li>
         <li><b>模型自动加载</b>：指向部署目录即可自动发现 <code>model.pt</code>，mtime 缓存自动失效</li>
-        <li><b>训练完成自动部署</b>：Filter Classifier 训练完成后自动触发 Celery 部署任务</li>
+        <li><b>训练完成自动门禁 → 部署</b>：训练 → 门禁评估 → 通过后自动 Canary 部署</li>
         <li><b>原子部署</b>：模型文件先写 <code>.tmp</code> 再 rename，防止在线系统读到不完整文件</li>
         <li><b>部署桥接</b>：<code>DeploymentService</code> 执行实际文件拷贝至配置的部署目标目录</li>
       </ul>
@@ -238,9 +263,9 @@ flowchart TB
 
 ```
 offline-analysis-platform/
-├── backend/                          # Python 后端（125+ 文件）
+├── backend/                          # Python 后端（160+ 文件）
 │   ├── app/
-│   │   ├── api/                      # 13 个 FastAPI 路由，55+ 端点
+│   │   ├── api/                      # 17 个 FastAPI 路由，65+ 端点
 │   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
 │   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
 │   │   │   ├── review/               #   提交复核 · 查询历史
@@ -253,17 +278,23 @@ offline-analysis-platform/
 │   │   │   ├── taxonomy/             #   🌳 缺陷分类树 · 统计 · 自动分类
 │   │   │   ├── graph/                #   🕸 相似度图谱 · 邻居 · 路径 · 子图
 │   │   │   ├── mask_refinement/      #   🧹 背景消除 · 图像标准化
+│   │   │   ├── gate/                 #   🛡 门禁状态 · 评估报告 · 手动触发
 │   │   │   └── hot_reload/           #   🔴 热重载信号 · A/B 切换 · 回滚
 │   │   ├── domain/                   # 8 个领域模型 + Protocol 接口
-│   │   ├── services/                 # 13 个业务服务模块
-│   │   ├── repositories/             # 7 个 Repository（封装所有 DB 访问）
-│   │   ├── models/                   # 12 个 SQLAlchemy ORM 表（含 pgvector）
+│   │   ├── services/                 # 16 个业务服务模块
+│   │   │   ├── gate/                 #   🛡 模型门禁评估（召回率/抑制率/分层）
+│   │   │   ├── mask_refinement/      #   🧹 背景消除 + 🔀 双轨对比
+│   │   │   └── ...
+│   │   ├── repositories/             # 12 个 Repository（封装所有 DB 访问）
+│   │   ├── models/                   # 14 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
-│   │   ├── workers/                  # 11 个 Celery Worker 模块
+│   │   ├── workers/                  # 14 个 Celery Worker 模块
+│   │   │   ├── gate_worker/          #   🛡 门禁评估任务
+│   │   │   └── ...
 │   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
 │   │   ├── core/                     # 配置类 · 异常体系 · 安全工具
-│   │   ├── common/                   # 共享类型 · structlog 结构化日志
-│   │   └── tests/                    # pytest-asyncio（6 个测试套件）
+│   │   ├── common/                   # 共享类型 · structlog 结构化日志 · 🔒 数据隔离工具
+│   │   └── tests/                    # pytest-asyncio（11 个测试套件，70 用例）
 │   ├── alembic/                      # 数据库迁移脚本
 │   ├── docker-compose.yml            # 6 服务编排
 │   ├── Dockerfile                    # API 镜像
@@ -430,6 +461,10 @@ cd seat_defect_core && uv sync && cd ..
                      POST   /api/training/start                    🎯 模型训练
                      GET    /api/training/status/{task_id}
 
+                     GET    /api/gates/status/{model_version_id}  🛡 模型门禁
+                     GET    /api/gates/report/{model_version_id}
+                     POST   /api/gates/evaluate
+
                      GET    /api/model/deploy-targets              📦 模型部署
                      POST   /api/model/deploy
                      POST   /api/model/deploy/{target}/rollback
@@ -470,13 +505,13 @@ cd seat_defect_core && uv sync && cd ..
 | 页面 | 路由 | 功能说明 |
 |:---|:---:|---|
 | **Dashboard** | `/` | Plotly UMAP 散点图 · 复核状态分布柱状图 · 4 个统计指标卡片 |
-| **Cluster Review** | `/clusters` | 聚类列表筛选 · 详情弹窗（代表图 + 成员列表） · 一键复核 |
-| **Anomaly Browser** | `/anomalies` | 相机/状态筛选 · PhotoView 图片浏览（缩放/旋转） · 相似检索 · 重新处理 |
+| **Cluster Review** | `/clusters` | 聚类列表筛选 (seat_model/camera/region) · 详情弹窗 · 双轨对比弹窗 · 一键复核 |
+| **Anomaly Browser** | `/anomalies` | seat_model/camera/region/状态筛选 · PhotoView 图片浏览（缩放/旋转） · 相似检索 |
 | **Anomaly Upload** | `/upload` | JSON 元数据提交 · multipart 文件上传（原图/ROI/热力图/裁剪图） |
 | **Knowledge Base** | `/knowledge` | 条目增删改查 · 全文搜索 · 按分类/缺陷类型筛选 · 一键生成规则 |
 | **Rules Engine** | `/rules` | 规则增删改查 · 启停开关 · 在线评估模拟器 · 从知识库生成规则 |
-| **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） |
-| **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 在线模型安全回滚 |
+| **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） · 🛡 门禁状态 + 详细报告弹窗 |
+| **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 🔴 热重载状态面板 (Checksum/完整性/Canary/回滚) |
 
 ---
 
@@ -529,14 +564,17 @@ mkdir -p sample_images
 9. 分类器训练  → Filter Classifier (MobileNetV3) 二元分类
    度量学习    → ArcFace/Triplet Loss 缺陷嵌入学习 (可选)
                     ↓
-10. 模型注册   → MLflow 模型注册 + 版本管理
+10. 模型门禁   → 🛡 自动回归评估：召回率/抑制率/分层指标
+   → 门禁失败阻断部署，仅通过模型可进入下一步
                     ↓
-11. 自动部署   → Celery 部署任务，原子写入 (.tmp → rename)
+11. 模型注册   → MLflow 模型注册 + 版本管理
                     ↓
-12. 热重载信号 → reload.signal + manifest.json，在线系统自动切换
-   支持 A/B 切换和版本回滚
+12. Canary 部署 → Celery 部署至 Shadow 目标，原子写入 (.tmp → rename)
                     ↓
-13. 在线加载   → seat_defect_core 检测 reload.signal 热加载新模型，
+13. 热重载信号 → reload.signal + manifest.json + SHA256 Checksum
+   支持 Canary Promote 和版本回滚
+                    ↓
+14. 在线加载   → seat_defect_core 检测 reload.signal 热加载新模型，
    Filter Classifier 抑制 PatchCore 误报 → 降低误报率
                     ↓
                    ↺ 循环往复，持续进化
@@ -617,6 +655,13 @@ mkdir -p sample_images
 | `INDUSTRIAL_DEPLOY_TARGETS` | `{"production_line_a":"./deployed_models/line_a"}` | 部署目标映射 |
 | `INDUSTRIAL_DEPLOY_MODEL_SUBDIR` | `filter_classifier` | 模型子目录 |
 | `INDUSTRIAL_DEPLOY_ON_TRAIN_COMPLETE` | `false` | 训练后自动部署 |
+| `INDUSTRIAL_DEPLOY_AUTO_STRATEGY` | `canary` | 自动部署策略 (canary/direct) |
+| `INDUSTRIAL_GATE_ENABLED` | `true` | 启用模型上线门禁 |
+| `INDUSTRIAL_GATE_MIN_RECALL` | `0.95` | 门禁最低召回率 |
+| `INDUSTRIAL_GATE_MAX_RECALL_DROP` | `0.02` | 门禁最大召回下降 |
+| `INDUSTRIAL_GATE_MIN_SUPPRESSION_GAIN` | `0.10` | 门禁最小抑制率提升 |
+| `INDUSTRIAL_ISOLATION_CLUSTERING_MIN_SAMPLES` | `3` | 聚类最小隔离样本数 |
+| `INDUSTRIAL_ISOLATION_TRAINING_MIN_SAMPLES` | `5` | 训练最小隔离样本数 |
 | `INDUSTRIAL_EMBEDDING_DIM` | `384` | Embedding 维度 |
 | `INDUSTRIAL_DEBUG` | `false` | 调试模式 |
 
@@ -626,7 +671,7 @@ mkdir -p sample_images
 
 ```bash
 cd backend
-uv run pytest -v                                  # 全部 39 个测试用例
+uv run pytest -v                                  # 全部 70 个测试用例
 uv run pytest app/tests/ -v --cov=app             # 含覆盖率报告
 uv run pytest app/tests/test_anomaly_service.py -v  # 单独文件
 ```
@@ -640,6 +685,10 @@ uv run pytest app/tests/test_anomaly_service.py -v  # 单独文件
 | `test_rule_engine` | CRUD、优先级评估、启停开关、相机过滤 |
 | `test_anomaly_service` | 创建异常、含文件上传、列表查询过滤、重新处理 |
 | `test_api` | 健康检查、空列表、资源不存在、无结果搜索 |
+| `test_e2e_pipeline` | 异常上传隔离字段、Embedding+聚类全流程、审核+训练数据、门禁指标、隔离键传播 |
+| `test_clustering_stability` | 固定 seed 确定性、分离簇检测、样本不足全噪声、代表样本选取 |
+| `test_hot_reload` | SHA256 checksum 计算/校验、manifest 读写/回滚绑定、信号发送/清除/完整性 |
+| `test_model_loading` | TorchScript 创建/加载/推理、预处理 pipeline、embedding 维度 (DINOv2-S 384)、故障安全 |
 
 ---
 
