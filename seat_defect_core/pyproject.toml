@@ -14,21 +14,13 @@ dependencies = [
     "defect_protocol",
 ]
 
+[tool.uv.sources]
+defect_protocol = { workspace = true }
+
 [build-system]
 requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv.sources]
-defect_protocol = { path = "../defect_protocol", editable = true }
-
-[tool.uv]
-package = false
-
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["seat_defect_core", "seat_defect_core.*"]

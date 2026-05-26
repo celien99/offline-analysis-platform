@@ -3,7 +3,7 @@
 
 前提条件：
   1. 后端 Docker 服务已启动：cd backend && docker compose up -d
-  2. seat_defect_core 已安装：cd seat_defect_core && uv sync
+  2. workspace 依赖已安装：uv sync
 
 用法：
   python scripts/demo_full_loop.py
@@ -68,7 +68,6 @@ def run_inspection(
     seat_model_id: str | None = None,
 ) -> tuple[object, dict]:
     """运行 seat_defect_core 检测。"""
-    sys.path.insert(0, str(REPO_ROOT))
     from seat_defect_core.api import SeatDefectInspector
 
     inspector = SeatDefectInspector(str(config_path))
@@ -85,7 +84,6 @@ def run_inspection(
 
 def upload_results(response, base_url: str) -> list[dict]:
     """将 NG 检测结果上传到离线平台。"""
-    sys.path.insert(0, str(REPO_ROOT))
     from seat_defect_core.anomaly_uploader import upload_inspection_response
 
     print(f"  [上传] 目标: {base_url}")

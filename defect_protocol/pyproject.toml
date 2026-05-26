@@ -5,9 +5,9 @@ description = "Shared data protocol for online inference and offline training"
 requires-python = ">=3.11"
 dependencies = []
 
-[tool.hatch.build.targets.wheel]
-packages = ["defect_protocol"]
-
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["defect_protocol*"]

@@ -31,8 +31,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-defect_protocol = { path = "../defect_protocol", editable = true }
-ml = { path = "../ml", editable = true }
+ml = { workspace = true }
+defect_protocol = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -42,9 +42,6 @@ dev = [
     "ruff>=0.4.0",
     "aiosqlite>=0.22.1",
 ]
-# 各组件独立管理依赖（非 uv workspace）：
-#   cd backend && uv sync
-#   cd ../seat_defect_core && uv sync
 
 [build-system]
 requires = ["setuptools>=75.0"]
@@ -52,16 +49,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.uv]
 package = false
-
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["app/tests"]

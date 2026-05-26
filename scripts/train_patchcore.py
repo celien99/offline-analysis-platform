@@ -2,7 +2,7 @@
 """PatchCore 模型独立训练脚本。
 
 可在任意 Python 3.11+ 环境中运行，不依赖后端/前端服务。
-只需将 seat_defect_core/ 目录复制到与本脚本同级即可使用。
+使用 uv workspace 安装依赖后即可使用。
 
 用法:
   python train_patchcore.py \
@@ -25,11 +25,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-
-# 将本脚本所在目录作为项目根，确保能 import seat_defect_core
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
 
 
 def validate_args(args: argparse.Namespace) -> None:
