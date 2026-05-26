@@ -37,7 +37,7 @@ flowchart TB
     subgraph ONLINE["🔴 在线检测系统 (seat_defect_core)"]
         direction LR
         CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
-        YOLO --> PC["PatchCore<br/>异常评分"]
+        YOLO --> PC["EfficientAD<br/>异常评分"]
         PC --> FC["Filter<br/>分类器"]
         FC --> RE["规则引擎<br/>后处理"]
         RE --> DECISION{"OK / NG"}
@@ -139,11 +139,11 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → PatchCore → <b>Filter Classifier</b> → <b>Rule Engine</b> → Fusion</li>
-        <li>Filter Classifier 推理引擎：TorchScript 模型加载，ImageNet 标准化预处理，抑制 PatchCore 误报</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD → <b>Filter Classifier</b> → <b>Rule Engine</b> → Fusion</li>
+        <li>Filter Classifier 推理引擎：TorchScript 模型加载，ImageNet 标准化预处理，抑制 EfficientAD 误报</li>
         <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
         <li>规则引擎后处理：可配置阈值规则（异常分数/patch 数/patch 比例），支持 suppress_to_ok / flag_for_review</li>
-        <li>多区域 PatchCore 支持，按区域独立判定 + 合并状态逻辑</li>
+        <li>多区域 EfficientAD 支持，按区域独立判定 + 合并状态逻辑</li>
       </ul>
     </td>
     <td width="50%">
@@ -352,7 +352,7 @@ seat_defect_core/
 │   └── ...
 ├── types/                            # 类型定义（FramePacket, CameraInspectionResult 等）
 ├── yolo/                             # YOLO 检测模块
-├── patchcore/                        # PatchCore 异常检测模块
+├── efficientad/                       # EfficientAD 异常检测模块
 ├── cvops/                            # 图像预处理（ROI / 质量 / 区域分割）
 └── artifacts/                        # 调试产物生成
 ```
@@ -575,7 +575,7 @@ mkdir -p sample_images
    支持 Canary Promote 和版本回滚
                     ↓
 14. 在线加载   → seat_defect_core 检测 reload.signal 热加载新模型，
-   Filter Classifier 抑制 PatchCore 误报 → 降低误报率
+   Filter Classifier 抑制 EfficientAD 误报 → 降低误报率
                     ↓
                    ↺ 循环往复，持续进化
 ```
@@ -612,7 +612,7 @@ mkdir -p sample_images
 }
 ```
 
-> **关键设计**：Filter Classifier **只抑制不提升** — 仅在 PatchCore 报 NG 时介入，若判定为误报则降级为 OK，绝不将 OK 改为 NG。推理失败时默认 `is_real_defect=True`（故障安全）。
+> **关键设计**：Filter Classifier **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，若判定为误报则降级为 OK，绝不将 OK 改为 NG。推理失败时默认 `is_real_defect=True`（故障安全）。
 
 ---
 
