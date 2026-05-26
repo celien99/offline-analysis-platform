@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .canonical_proposal import CanonicalPatchProposal
 from .entities import (
     AnomalyContext,
     BoundingBox,
@@ -19,6 +20,7 @@ from .serialization import (
 from .types import FeatureRef, IsolationKeyStr, ProposalId
 
 __all__ = [
+    "CanonicalPatchProposal",
     "AnomalyContext",
     "BoundingBox",
     "EfficientADFeatures",
