@@ -1,8 +1,10 @@
 """EfficientAD 纹理异常检测入口。"""
 
+from __future__ import annotations
+
 from .config import EfficientADConfig
 
-_LAZY_EXPORTS = {
+_LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "EfficientADService": (".engine", "EfficientADService"),
 }
 
