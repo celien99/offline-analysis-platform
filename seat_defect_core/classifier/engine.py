@@ -126,3 +126,69 @@ class FilterClassifierService:
                 class_id=1,
                 diagnostics=diagnostics,
             )
+
+    def predict_dual_modal(
+        self, patch_image: np.ndarray,
+        ead_features: dict[str, np.ndarray] | None = None,
+    ) -> FilterClassifierResult:
+        """Predict with dual-modal input: patch image + EfficientAD features."""
+        import torch
+
+        if self._model is None:
+            return FilterClassifierResult(
+                is_real_defect=True, confidence=0.0,
+                real_defect_score=0.0, false_alarm_score=0.0,
+                class_id=1,
+                diagnostics={"mode": "fallback_no_model", "reason": "model not loaded"},
+            )
+
+        try:
+            # Preprocess image: BGR -> RGB -> resize -> normalize
+            rgb = cv2.cvtColor(patch_image, cv2.COLOR_BGR2RGB)
+            resized = cv2.resize(rgb, (self.config.input_size, self.config.input_size))
+            tensor = torch.from_numpy(resized).permute(2, 0, 1).float() / 255.0
+            tensor = (tensor - torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)) / \
+                     torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+            tensor = tensor.unsqueeze(0).to(self._device)
+
+            # Preprocess EfficientAD features to torch tensors
+            feat_tensors = None
+            if ead_features is not None:
+                feat_tensors = {}
+                for key in ["teacher_l1", "teacher_l2", "teacher_l3", "difference"]:
+                    if key in ead_features:
+                        arr = ead_features[key]
+                        t = torch.from_numpy(arr).float().to(self._device)
+                        if t.dim() == 3:
+                            t = t.permute(2, 0, 1).unsqueeze(0)  # HWC -> 1CHW
+                        elif t.dim() == 4:
+                            t = t.permute(0, 3, 1, 2)  # NHWC -> NCHW
+                        feat_tensors[key] = t
+
+            with torch.no_grad():
+                logits = self._model(tensor, feat_tensors if feat_tensors else None)
+
+            probs = torch.softmax(logits, dim=1)[0]
+            false_alarm_score = float(probs[0].cpu())
+            real_defect_score = float(probs[1].cpu())
+            class_id = int(torch.argmax(probs).cpu())
+            confidence = float(probs[class_id].cpu())
+            is_real_defect = class_id == 1 and confidence >= self.config.confidence_threshold
+
+            return FilterClassifierResult(
+                is_real_defect=is_real_defect,
+                confidence=confidence,
+                real_defect_score=real_defect_score,
+                false_alarm_score=false_alarm_score,
+                class_id=class_id,
+                diagnostics={"mode": "dual_modal"},
+            )
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            return FilterClassifierResult(
+                is_real_defect=True, confidence=0.0,
+                real_defect_score=0.0, false_alarm_score=0.0,
+                class_id=1,
+                diagnostics={"mode": "error_fallback", "reason": "inference failed"},
+            )
