@@ -98,8 +98,8 @@ class Settings(BaseSettings):
     auto_train_batch_size: int = 32
     auto_train_epochs: int = 50
 
-    # PatchCore Training
-    patchcore_models_dir: Path = Path("./models/patchcore")
+    # EfficientAD Training
+    efficientad_models_dir: Path = Path("./models/efficientad")
 
     # Inspection (seat_defect_core 子进程调用，训练与检测共用)
     seat_defect_core_python: str = "../seat_defect_core/.venv/bin/python"
