@@ -20,44 +20,51 @@
 
 ## 安装和交付
 
-推荐用 Python 包方式交付：
+`seat_defect_core` 依赖 `defect_protocol`，两者同属一个 monorepo。安装时需按顺序处理：
+
+### 从源码安装（推荐）
 
 ```bash
-pip install /path/to/seat_defect_core_package
+# 先安装 protocol 包（零依赖纯 Python 协议库）
+pip install ./defect_protocol
+# 再安装 core
+pip install ./seat_defect_core
 ```
 
-LabVIEW 公共机推荐使用独立 Python 3.8.5 CPU 环境：
+### 从预构建 wheel 安装
 
 ```bash
-conda create -n seat-defect-core-py38 python=3.8.5 -y
-conda activate seat-defect-core-py38
-pip install -r requirements-core-py38-cpu.txt
-pip install --no-build-isolation /path/to/seat_defect_core_package
+# 分别在两个目录构建 wheel
+cd defect_protocol && python -m build -w && cd ..
+cd seat_defect_core && python -m build -w && cd ..
+
+# 按顺序安装
+pip install defect_protocol/dist/defect_protocol-*.whl
+pip install seat_defect_core/dist/seat_defect_core-*.whl
 ```
 
-也可以在同一工程中通过源码方式使用，但需要保证：
+### 离线安装
 
-- Python 版本 `>=3.8.5`。
-- 依赖已安装并固定到公共机验证过的版本。CPU 运行时推荐使用 `requirements-core-py38-cpu.txt`。
-- `seat_defect_core` 能被 Python import 到。
-- 配置文件中的模型路径能被当前 Python 环境访问。
-- `output_json_path` 和 `debug_dir` 指向 LabVIEW 进程可写目录。
-
-不建议长期依赖手工复制目录作为正式交付方式。手工复制可以用于临时验证，但容易遗漏依赖、版本和包数据。
-
-离线安装时，先在可联网的 Python 3.8.5 机器上准备 wheel 缓存：
+先在联网机器上准备 wheel：
 
 ```bash
 python -m pip download --only-binary=:all: -r requirements-core-py38-cpu.txt -d wheelhouse
-python -m pip wheel --no-deps --no-build-isolation /path/to/seat_defect_core_package -w wheelhouse
+python -m pip wheel --no-deps ./defect_protocol -w wheelhouse
+python -m pip wheel --no-deps ./seat_defect_core -w wheelhouse
 ```
 
-拷贝 `wheelhouse` 到 LabVIEW 公共机后离线安装：
+拷贝 `wheelhouse` 到目标机器后：
 
 ```bash
 python -m pip install --no-index --find-links wheelhouse -r requirements-core-py38-cpu.txt
-python -m pip install --no-index --find-links wheelhouse seat-defect-core
+python -m pip install --no-index --find-links wheelhouse defect_protocol seat_defect_core
 ```
+
+### 开发时使用（monorepo 内）
+
+在 workspace 内直接 `uv sync --all-packages`，uv 会自动解析 workspace 成员依赖。
+
+不建议长期依赖手工复制目录作为正式交付方式。手工复制可以用于临时验证，但容易遗漏依赖、版本和包数据。
 
 ## 最小调用示例
 
