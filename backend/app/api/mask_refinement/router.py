@@ -42,3 +42,25 @@ async def refine_batch_anomalies(
 ) -> dict:
     result = refine_batch.delay(batch_size=batch_size)
     return {"status": "queued", "batch_task_id": str(result.id)}
+
+
+@router.get("/compare")
+async def compare_raw_vs_refined(
+    seat_model_id: str | None = Query(default=None),
+    camera_id: str | None = Query(default=None),
+    region_id: str | None = Query(default=None),
+) -> dict[str, object]:
+    """对比 raw vs refined embedding 的聚类质量。
+
+    对指定隔离范围内同时存在 raw 和 refined embedding 的 anomaly，
+    分别聚类并比较噪声率、簇数量、簇大小分布等指标。
+    """
+    from app.services.mask_refinement.comparison import DualTrackComparison
+
+    comparison = DualTrackComparison()
+    report = await comparison.compare(
+        seat_model_id=seat_model_id,
+        camera_id=camera_id,
+        region_id=region_id,
+    )
+    return report.to_dict()

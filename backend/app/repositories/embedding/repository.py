@@ -16,9 +16,16 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
     async def get_by_anomaly_id(
         self, anomaly_id: str
     ) -> EmbeddingVector | None:
+        """获取 anomaly 的 raw embedding（向后兼容）。"""
+        return await self.get_by_anomaly_and_type(anomaly_id, "raw")
+
+    async def get_by_anomaly_and_type(
+        self, anomaly_id: str, embedding_type: str = "raw"
+    ) -> EmbeddingVector | None:
         stmt = select(EmbeddingVector).where(
             EmbeddingVector.deleted_at.is_(None),
             EmbeddingVector.anomaly_id == anomaly_id,
+            EmbeddingVector.embedding_type == embedding_type,
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
@@ -93,6 +100,7 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         seat_model_id: str | None = None,
         camera_id: str | None = None,
         region_id: str | None = None,
+        embedding_type: str = "raw",
     ) -> list[tuple[str, list[float]]]:
         """获取所有非 reviewed 状态的 anomaly 的 embedding，用于图谱构建等全量场景。"""
         from app.models.anomaly import AnomalyRecord
@@ -104,6 +112,7 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
                 EmbeddingVector.deleted_at.is_(None),
                 AnomalyRecord.deleted_at.is_(None),
                 AnomalyRecord.status != "reviewed",
+                EmbeddingVector.embedding_type == embedding_type,
             )
         )
         if seat_model_id:
@@ -121,11 +130,13 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         seat_model_id: str | None = None,
         camera_id: str | None = None,
         region_id: str | None = None,
+        embedding_type: str = "raw",
     ) -> list[tuple[str, list[float]]]:
         """获取待聚类的 anomaly embedding：仅包含 embedded（新嵌入）和 noise（未成簇）状态。
 
         已聚类的 anomaly（status='clustered'）不应被重新打散，因此排除在外。
         支持多级隔离：seat_model_id -> camera_id -> region_id。
+        支持 embedding_type 过滤：raw（原始 crop）或 refined（精化 crop）。
         """
         from app.models.anomaly import AnomalyRecord
 
@@ -136,6 +147,7 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
                 EmbeddingVector.deleted_at.is_(None),
                 AnomalyRecord.deleted_at.is_(None),
                 AnomalyRecord.status.in_(["embedded", "noise"]),
+                EmbeddingVector.embedding_type == embedding_type,
             )
         )
         if seat_model_id:

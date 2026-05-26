@@ -51,6 +51,14 @@ def refine_single_anomaly(
                 anomaly.refined_crop_path = refined_path
                 await repo.update(anomaly)
 
+        # 双轨：从 refined crop 提取 embedding 用于对比评估
+        from app.workers.embedding_worker.tasks import extract_embedding_for_anomaly
+        extract_embedding_for_anomaly.delay(
+            anomaly_id=anomaly_id,
+            crop_path=refined_path,
+            embedding_type="refined",
+        )
+
         logger.info("mask_refine_complete", anomaly_id=anomaly_id, refined_path=refined_path)
         return {
             "status": "completed",

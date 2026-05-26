@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, Table, Button, Input, Space, message } from "antd";
+import { Card, Table, Button, Input, Space, Tag, Modal, Descriptions, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
-import type { ClusterSummary } from "../../types";
-import { useClusterList, useClusterDetail, useClusterReview } from "../../hooks/queries";
+import type { ClusterSummary, DualTrackComparisonResult } from "../../types";
+import { useClusterList, useClusterDetail, useClusterReview, useDualTrackComparison } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useClusterColumns } from "./components/ClusterTable";
 import ClusterDetailModal from "./components/ClusterDetailModal";
@@ -23,6 +23,14 @@ export default function ClusterReview() {
   const [seatModelFilter, setSeatModelFilter] = useState<string | undefined>();
   const [cameraFilter, setCameraFilter] = useState<string | undefined>();
   const [regionFilter, setRegionFilter] = useState<string | undefined>();
+  const [compareVisible, setCompareVisible] = useState(false);
+
+  // 双轨对比
+  const { data: compareData, refetch: refetchCompare, isFetching: compareLoading } = useDualTrackComparison({
+    seat_model_id: seatModelFilter,
+    camera_id: cameraFilter,
+    region_id: regionFilter,
+  });
 
   // URL 携带 cluster_id 时自动打开详情
   useEffect(() => {
@@ -100,6 +108,7 @@ export default function ClusterReview() {
               onChange={(e) => setRegionFilter(e.target.value || undefined)}
             />
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
+            <Button onClick={() => { setCompareVisible(true); refetchCompare(); }}>双轨对比</Button>
           </Space>
         }
       />
@@ -134,6 +143,66 @@ export default function ClusterReview() {
         onSubmit={handleSubmitReview}
         onClose={() => setReviewVisible(false)}
       />
+
+      {/* ── 双轨对比 Modal ── */}
+      <Modal
+        title="双轨聚类对比 (Raw vs Refined Embedding)"
+        open={compareVisible}
+        onCancel={() => setCompareVisible(false)}
+        footer={null}
+        width={640}
+      >
+        {compareLoading ? (
+          <p>加载中...</p>
+        ) : compareData ? (
+          <div>
+            <p style={{ fontWeight: "bold", marginBottom: 16 }}>
+              {compareData.recommendation}
+            </p>
+            <Descriptions column={2} size="small" bordered>
+              <Descriptions.Item label="指标"> </Descriptions.Item>
+              <Descriptions.Item label="Raw">
+                <Tag color="blue">原始</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Refined">
+                <Tag color="green">精化</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="样本数">
+                {compareData.raw?.sample_count ?? "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="样本数">
+                {compareData.refined?.sample_count ?? "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="簇数量">
+                {compareData.raw?.cluster_count ?? "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="簇数量">
+                {compareData.refined?.cluster_count ?? "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="噪声率">
+                {compareData.raw ? (compareData.raw.noise_rate * 100).toFixed(1) + "%" : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="噪声率">
+                {compareData.refined ? (compareData.refined.noise_rate * 100).toFixed(1) + "%" : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="最大簇占比">
+                {compareData.raw ? (compareData.raw.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="最大簇占比">
+                {compareData.refined ? (compareData.refined.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="平均簇大小">
+                {compareData.raw?.avg_cluster_size.toFixed(1) ?? "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="平均簇大小">
+                {compareData.refined?.avg_cluster_size.toFixed(1) ?? "-"}
+              </Descriptions.Item>
+            </Descriptions>
+          </div>
+        ) : (
+          <p>选择筛选条件后点击"双轨对比"按钮查看聚类质量对比</p>
+        )}
+      </Modal>
     </div>
   );
 }
