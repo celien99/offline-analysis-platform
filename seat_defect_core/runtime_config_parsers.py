@@ -602,7 +602,7 @@ def _resolve_optional_model_path(config_dir: Path, value: Optional[str]) -> Opti
 
 
 def _resolve_optional_local_path(config_dir: Path, value: Optional[str]) -> Optional[str]:
-    if _is_missing(value):
+    if value is None or value == "":
         return None
     return _resolve_local_path(config_dir, value, force=True)
 

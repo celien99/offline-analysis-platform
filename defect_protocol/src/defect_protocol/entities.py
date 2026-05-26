@@ -80,7 +80,7 @@ class FilterResult:
     real_defect_score: float
     false_alarm_score: float
     class_id: int
-    diagnostics: dict[str, float] = field(default_factory=dict)
+    diagnostics: dict[str, float | str] = field(default_factory=dict)
 
 
 @dataclass

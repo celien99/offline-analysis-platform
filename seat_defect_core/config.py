@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 from .efficientad import EfficientADConfig
+from .proposal import ProposalConfig
+from .tracking import TrackConfig
 
 
 @dataclass

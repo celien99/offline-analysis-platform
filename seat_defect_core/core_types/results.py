@@ -33,6 +33,12 @@ class TextureAnomalyResult:
 
     features: Optional[dict[str, Any]] = None  # EfficientAD intermediate features
 
+    strong_patch_count: int = 0
+    """强异常 patch 数（高于阈值的连通域数量）。"""
+
+    strong_patch_ratio: float = 0.0
+    """强异常 patch 比例（强异常面积 / ROI 总面积）。"""
+
 
 @dataclass
 class InspectionError:
@@ -67,8 +73,8 @@ class FilterClassifierResult:
     class_id: int
     """预测类别ID：1=real_defect, 0=false_alarm。"""
 
-    diagnostics: Dict[str, float] = field(default_factory=dict)
-    """推理诊断指标（延迟、预处理时间等）。"""
+    diagnostics: Dict[str, float | str] = field(default_factory=dict)
+    """推理诊断指标（延迟、预处理时间、模式标签等）。"""
 
 
 @dataclass
@@ -172,6 +178,9 @@ class CameraInspectionResult:
 
     roi_aligned_image: Optional[Any] = field(default=None, repr=False, compare=False)
     """标准 ROI 对齐图像 (BGR)，不含热力图叠加，供上传离线平台使用。"""
+
+    _uploaded_identities: Optional[set[str]] = field(default=None, repr=False, compare=False)
+    """已上传的身份 ID 集合，供 anomaly_uploader 内部使用。"""
 
 
 @dataclass

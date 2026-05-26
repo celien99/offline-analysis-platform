@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from os import PathLike
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import cv2
 
@@ -25,7 +25,7 @@ class SeatDefectInspector:
 
     def inspect(
         self,
-        frames: List[Union[InspectionFrame, Dict[str, Any]]],
+        frames: Sequence[Union[InspectionFrame, Dict[str, Any]]],
         *,
         part_id: Optional[str] = None,
         seat_model_id: Optional[str] = None,

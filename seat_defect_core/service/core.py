@@ -101,6 +101,7 @@ class InspectionService:
         self._pipeline_cache: Dict[str, Dict[str, CameraPipeline]] = {}
         self._model_cache = AnomalyModelCache(self)
         self._anomaly_predictor = EfficientADPredictor()
+        self._trackers: Dict[str, Any] = {}
 
     def resolve_context(self, seat_model_id: Optional[str]) -> ResolvedInspectionContext:
         resolved_seat_model_id, cameras = self._resolve_active_cameras(seat_model_id)
@@ -120,7 +121,7 @@ class InspectionService:
 
     def _resolve_active_cameras(self, seat_model_id: Optional[str]) -> Tuple[Optional[str], List[CameraConfig]]:
         if self.config.seat_models:
-            resolved_seat_model_id = (
+            resolved_seat_model_id: Optional[str] = (
                 seat_model_id
                 or self.config.default_seat_model_id
                 or self.config.seat_models[0].seat_model_id
