@@ -333,28 +333,40 @@ export default function TrainingPage() {
           <Form.Item name="model_type" label="模型架构">
             <Select options={FILTER_MODEL_TYPE_OPTIONS} />
           </Form.Item>
-          <Space size="middle">
-            <Form.Item name="num_classes" label="类别数">
-              <InputNumber min={2} max={10} />
-            </Form.Item>
-            <Form.Item name="batch_size" label="批次大小">
-              <InputNumber min={1} max={256} />
-            </Form.Item>
-            <Form.Item name="epochs" label="训练轮数">
-              <InputNumber min={1} max={500} />
-            </Form.Item>
-          </Space>
-          <Space size="middle">
-            <Form.Item name="learning_rate" label="学习率">
-              <InputNumber min={0.0001} max={0.1} step={0.0001} />
-            </Form.Item>
-            <Form.Item name="validation_split" label="验证集比例">
-              <InputNumber min={0.1} max={0.5} step={0.05} />
-            </Form.Item>
-            <Form.Item name="augmentations" label="数据增强" valuePropName="checked">
-              <Select options={[{ value: true, label: "是" }, { value: false, label: "否" }]} />
-            </Form.Item>
-          </Space>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="num_classes" label="类别数">
+                <InputNumber min={2} max={10} className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="batch_size" label="批次大小">
+                <InputNumber min={1} max={256} className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="epochs" label="训练轮数">
+                <InputNumber min={1} max={500} className="w-full" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="learning_rate" label="学习率">
+                <InputNumber min={0.0001} max={0.1} step={0.0001} className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="validation_split" label="验证集比例">
+                <InputNumber min={0.1} max={0.5} step={0.05} className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="augmentations" label="数据增强" valuePropName="checked">
+                <Select options={[{ value: true, label: "是" }, { value: false, label: "否" }]} />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
 
