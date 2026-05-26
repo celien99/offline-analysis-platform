@@ -91,6 +91,8 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
     async def get_embeddings_excluding_reviewed(
         self,
         seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> list[tuple[str, list[float]]]:
         """获取所有非 reviewed 状态的 anomaly 的 embedding，用于图谱构建等全量场景。"""
         from app.models.anomaly import AnomalyRecord
@@ -106,6 +108,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         )
         if seat_model_id:
             stmt = stmt.where(AnomalyRecord.seat_model_id == seat_model_id)
+        if camera_id:
+            stmt = stmt.where(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            stmt = stmt.where(AnomalyRecord.region_id == region_id)
 
         result = await self._session.execute(stmt)
         return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]
@@ -113,11 +119,13 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
     async def get_embeddings_for_clustering(
         self,
         seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> list[tuple[str, list[float]]]:
         """获取待聚类的 anomaly embedding：仅包含 embedded（新嵌入）和 noise（未成簇）状态。
 
         已聚类的 anomaly（status='clustered'）不应被重新打散，因此排除在外。
-        按 seat_model_id 分区，不同座椅型号的异常不混合聚类。
+        支持多级隔离：seat_model_id -> camera_id -> region_id。
         """
         from app.models.anomaly import AnomalyRecord
 
@@ -132,6 +140,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         )
         if seat_model_id:
             stmt = stmt.where(AnomalyRecord.seat_model_id == seat_model_id)
+        if camera_id:
+            stmt = stmt.where(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            stmt = stmt.where(AnomalyRecord.region_id == region_id)
 
         result = await self._session.execute(stmt)
         return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]

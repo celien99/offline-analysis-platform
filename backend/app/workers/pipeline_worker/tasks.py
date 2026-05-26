@@ -31,79 +31,90 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
             logger.info("pipeline_no_pending_anomalies")
             return {"status": "skipped", "reason": "no_pending"}
 
-        # 按 seat_model_id 分组，不同座椅型号的异常独立聚类
-        groups: dict[str, list[dict[str, str]]] = defaultdict(list)
+        # 按 seat_model_id + camera_id + region_id 三级隔离分组
+        # 分组键格式: "model::camera::region"，None 用 __unknown__ 占位
+        def _build_group_key(a: object) -> str:
+            sm = a.seat_model_id or "__unknown__"
+            cam = a.camera_id or "__unknown__"
+            reg = a.region_id or "__unknown__"
+            return f"{sm}::{cam}::{reg}"
+
+        groups: dict[str, dict[str, object]] = defaultdict(lambda: {
+            "anomalies": [],
+            "seat_model_id": None,
+            "camera_id": None,
+            "region_id": None,
+        })
         for a in pending:
             if a.crop_path:
-                groups[a.seat_model_id or "__unknown__"].append({
+                key = _build_group_key(a)
+                groups[key]["anomalies"].append({
                     "anomaly_id": a.id,
                     "crop_path": a.crop_path,
                 })
+                if a.seat_model_id:
+                    groups[key]["seat_model_id"] = a.seat_model_id
+                if a.camera_id:
+                    groups[key]["camera_id"] = a.camera_id
+                if a.region_id:
+                    groups[key]["region_id"] = a.region_id
 
         if not groups:
             logger.info("pipeline_no_crops")
             return {"status": "skipped", "reason": "no_crop_path"}
 
-        # 若同时存在已知座椅型号和无型号的旧异常，跳过无型号组避免跨型号混合聚类；
-        # 仅全部异常都无型号时才不加过滤地聚类（旧行为兼容）。
-        has_known = any(k != "__unknown__" for k in groups)
-        unknown_batch = groups.pop("__unknown__", [])
+        # 解析分组键，按 seat_model_id 聚合 celery chain
+        # 同一个 seat_model_id 下可能有多个 camera/region 分组
+        from collections import defaultdict as dd
+        sm_groups: dict[str, list[dict[str, object]]] = dd(list)
+        for key, group_data in groups.items():
+            sm = group_data["seat_model_id"] or "__unknown__"
+            sm_groups[sm].append({
+                "key": key,
+                "batch": group_data["anomalies"],
+                "camera_id": group_data["camera_id"],
+                "region_id": group_data["region_id"],
+            })
 
         task_ids: list[str] = []
-        for sm_id, batch in groups.items():
-            pipeline = chain(
-                celery_app.signature(
-                    "embedding.batch_extract",
-                    kwargs={"anomaly_batch": batch},
-                ),
-                celery_app.signature(
-                    "clustering.run",
-                    kwargs={"seat_model_id": sm_id},
-                    immutable=True,
-                ),
-                celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
-            )
-            result = pipeline.delay()
-            task_ids.append(result.id)
-            logger.info(
-                "pipeline_dispatched_per_seat_model",
-                task_id=result.id,
-                seat_model_id=sm_id,
-                anomaly_count=len(batch),
-            )
-
-        if unknown_batch and not has_known:
-            pipeline = chain(
-                celery_app.signature(
-                    "embedding.batch_extract",
-                    kwargs={"anomaly_batch": unknown_batch},
-                ),
-                celery_app.signature(
-                    "clustering.run",
-                    kwargs={},
-                    immutable=True,
-                ),
-                celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
-            )
-            result = pipeline.delay()
-            task_ids.append(result.id)
-            logger.info(
-                "pipeline_dispatched_unknown_seat_model",
-                task_id=result.id,
-                anomaly_count=len(unknown_batch),
-            )
-        elif unknown_batch:
-            logger.warning(
-                "pipeline_skipped_unknown_seat_model",
-                anomaly_count=len(unknown_batch),
-                hint="旧异常缺少 seat_model_id，请先关联到具体座椅型号后再处理",
-            )
+        for sm_id, sub_batches in sm_groups.items():
+            for sub in sub_batches:
+                if not sub["batch"]:
+                    continue
+                pipeline = chain(
+                    celery_app.signature(
+                        "embedding.batch_extract",
+                        kwargs={"anomaly_batch": sub["batch"]},
+                    ),
+                    celery_app.signature(
+                        "clustering.run",
+                        kwargs={
+                            "seat_model_id": sm_id if sm_id != "__unknown__" else None,
+                            "camera_id": sub["camera_id"],
+                            "region_id": sub["region_id"],
+                        },
+                        immutable=True,
+                    ),
+                    celery_app.signature("pipeline.trigger_vlm_on_new_clusters"),
+                )
+                result = pipeline.delay()
+                task_ids.append(result.id)
+                logger.info(
+                    "pipeline_dispatched",
+                    task_id=result.id,
+                    seat_model_id=sm_id,
+                    camera_id=sub["camera_id"],
+                    region_id=sub["region_id"],
+                    anomaly_count=len(sub["batch"]),
+                )
 
         return {
             "status": "dispatched",
             "task_ids": task_ids,
-            "anomaly_count": sum(len(b) for b in groups.values()),
-            "groups": len(groups),
+            "anomaly_count": sum(
+                len(sub["batch"]) for subs in sm_groups.values() for sub in subs
+            ),
+            "groups": len(task_ids),
         }
 
     return run_async(_run())

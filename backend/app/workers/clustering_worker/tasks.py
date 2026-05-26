@@ -38,12 +38,17 @@ async def _run_clustering(
     min_samples: int | None = None,
     anomaly_ids: list[str] | None = None,
     seat_model_id: str | None = None,
+    camera_id: str | None = None,
+    region_id: str | None = None,
 ) -> dict[str, object]:
     async with async_session_factory() as session:
         embedding_repo = EmbeddingRepository(session)
-        # 只聚类 embedded（新嵌入）和 noise（未成簇）的 anomaly，避免将已聚类的 anomaly 重新打散
-        # 按 seat_model_id 分区聚类，不同座椅型号的异常不混合
-        rows = await embedding_repo.get_embeddings_for_clustering(seat_model_id=seat_model_id)
+        # 按 seat_model_id + camera_id + region_id 三级隔离聚类
+        rows = await embedding_repo.get_embeddings_for_clustering(
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
+        )
 
     if anomaly_ids:
         rows = [(aid, vec) for aid, vec in rows if aid in anomaly_ids]
@@ -77,6 +82,8 @@ async def _run_clustering(
             label_map=label_map,
             probability_map=probability_map,
             seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
         )
 
         from app.repositories.anomaly.repository import AnomalyRepository
@@ -110,6 +117,8 @@ def run_clustering(
     min_samples: int | None = None,
     anomaly_ids: list[str] | None = None,
     seat_model_id: str | None = None,
+    camera_id: str | None = None,
+    region_id: str | None = None,
 ) -> dict[str, object]:
     logger.info(
         "clustering_task_started",
@@ -117,9 +126,14 @@ def run_clustering(
         min_samples=min_samples,
         anomaly_count=len(anomaly_ids) if anomaly_ids else "all",
         seat_model_id=seat_model_id,
+        camera_id=camera_id,
+        region_id=region_id,
     )
     try:
-        return run_async(_run_clustering(min_cluster_size, min_samples, anomaly_ids, seat_model_id))
+        return run_async(_run_clustering(
+            min_cluster_size, min_samples, anomaly_ids,
+            seat_model_id, camera_id, region_id,
+        ))
     except Exception as e:
         logger.error("clustering_task_failed", error=str(e))
         return {"status": "failed", "error": str(e)}

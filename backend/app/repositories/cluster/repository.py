@@ -29,9 +29,16 @@ class ClusterRepository(BaseRepository[Cluster]):
         offset: int = 0,
         limit: int = 20,
         seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> Sequence[Cluster]:
         return await self.list_all(
-            status=status, seat_model_id=seat_model_id, offset=offset, limit=limit,
+            status=status,
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
+            offset=offset,
+            limit=limit,
         )
 
     async def get_pending_review(
@@ -87,6 +94,8 @@ class ClusterRepository(BaseRepository[Cluster]):
 
     async def count_reviewed(
         self, seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> int:
         """统计所有已完成审核的 cluster 数。"""
         conditions = [
@@ -96,12 +105,18 @@ class ClusterRepository(BaseRepository[Cluster]):
         ]
         if seat_model_id:
             conditions.append(Cluster.seat_model_id == seat_model_id)
+        if camera_id:
+            conditions.append(Cluster.camera_id == camera_id)
+        if region_id:
+            conditions.append(Cluster.region_id == region_id)
         stmt = select(func.count()).select_from(Cluster).where(*conditions)
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
     async def count_reviewed_since(
         self, since: datetime, seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> int:
         """统计自 since 以来完成审核的 cluster 数。"""
         conditions = [
@@ -112,6 +127,10 @@ class ClusterRepository(BaseRepository[Cluster]):
         ]
         if seat_model_id:
             conditions.append(Cluster.seat_model_id == seat_model_id)
+        if camera_id:
+            conditions.append(Cluster.camera_id == camera_id)
+        if region_id:
+            conditions.append(Cluster.region_id == region_id)
         stmt = select(func.count()).select_from(Cluster).where(*conditions)
         result = await self._session.execute(stmt)
         return result.scalar_one()
@@ -119,6 +138,8 @@ class ClusterRepository(BaseRepository[Cluster]):
     async def get_reviewed_since(
         self, since: datetime, *, offset: int = 0, limit: int = 10000,
         seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> Sequence[Cluster]:
         """获取自 since 以来完成审核的 cluster 列表。"""
         conditions = [
@@ -129,6 +150,10 @@ class ClusterRepository(BaseRepository[Cluster]):
         ]
         if seat_model_id:
             conditions.append(Cluster.seat_model_id == seat_model_id)
+        if camera_id:
+            conditions.append(Cluster.camera_id == camera_id)
+        if region_id:
+            conditions.append(Cluster.region_id == region_id)
         stmt = (
             select(Cluster)
             .where(*conditions)

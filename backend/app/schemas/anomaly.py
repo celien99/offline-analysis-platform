@@ -17,6 +17,8 @@ class AnomalyUploadResponse(BaseModel):
 
 class AnomalyQueryParams(BaseModel):
     camera_id: str | None = None
+    seat_model_id: str | None = None
+    region_id: str | None = None
     source: str | None = None
     status: str | None = None
     date_from: str | None = None
@@ -31,6 +33,7 @@ class AnomalyResponse(BaseModel):
     anomaly_id: str
     camera_id: str
     seat_model_id: str | None = None
+    region_id: str | None = None
     source: str
     anomaly_score: float | None
     date_folder: str
