@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
+import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, efficientadTrainingApi, inspectionApi } from "../api";
 import { cameraConfigApi } from "../api/camera-config";
 import { gateApi } from "../api/gate";
 import { maskRefinementApi } from "../api/mask-refinement";
@@ -311,11 +311,11 @@ export function useVLMAnalyzeAnomaly() {
   });
 }
 
-// ── PatchCore Training hooks ──
+// ── EfficientAD Training hooks ──
 
-export function usePatchCoreTrainingStart() {
+export function useEfficientADTrainingStart() {
   return useMutation({
-    mutationFn: (formData: FormData) => patchcoreTrainingApi.start(formData),
+    mutationFn: (formData: FormData) => efficientadTrainingApi.start(formData),
   });
 }
 
