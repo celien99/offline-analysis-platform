@@ -171,7 +171,7 @@ def upload_inspection_response(
     *,
     date_folder: Optional[str] = None,
     timeout: float = 30.0,
-    include_ok_suppressed: bool = True,
+    include_ok_suppressed: bool = False,
 ) -> List[Dict[str, Any]]:
     """遍历 InspectionResponse 中的所有相机结果，上传异常到离线平台。
 
