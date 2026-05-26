@@ -222,6 +222,8 @@ class _TorchPatchFeatureExtractor:
         self.model = _load_torch_backbone(config)
         self.model.to(self.device)
         self.model.eval()
+        # 冻结所有 backbone 参数，确保特征提取阶段权重不会被更新
+        self.model.requires_grad_(False)
         self.layer_names = [layer.strip() for layer in config.feature_layers if layer.strip()]
         if not self.layer_names:
             raise ValueError("完整 PatchCore 至少需要一个 feature_layers")
