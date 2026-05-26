@@ -10,6 +10,11 @@ from typing import Dict, Tuple, Union
 import cv2
 import numpy as np
 
+try:
+    import faiss
+except ImportError:  # FAISS 不可用时降级为 numpy 暴力搜索
+    faiss = None
+
 from .color_branch import ColorReferenceProfile
 from .features import _PatchBatch, _TorchPatchFeatureExtractor, extract_patch_embeddings
 from .scoring import (
@@ -57,6 +62,7 @@ class PatchCoreService:
         feature_std: np.ndarray | None = None,
         threshold: float | None = None,
         feature_extractor: _TorchPatchFeatureExtractor | None = None,
+        faiss_index: "faiss.Index | None" = None,
     ) -> None:
         self.config = config
         self.memory_bank = memory_bank
@@ -66,6 +72,7 @@ class PatchCoreService:
         self._torch_feature_extractor = feature_extractor
         self._torch_memory_bank = None
         self._torch_memory_bank_device = None
+        self._faiss_index = faiss_index
 
     def predict(
         self,
@@ -202,11 +209,23 @@ class PatchCoreService:
         active_bank = self.memory_bank if memory_bank is None else memory_bank
         if active_bank is None or len(active_bank) == 0:
             raise RuntimeError("PatchCore memory bank is empty")
-        patch_scores = self._score_distances(embeddings, active_bank)
+        # 如果使用外部 memory_bank（非 self.memory_bank），FAISS 索引不匹配，强制走 numpy
+        if memory_bank is not None and memory_bank is not self.memory_bank:
+            patch_scores = min_distance_to_bank(embeddings, memory_bank)
+        else:
+            patch_scores = self._score_distances(embeddings, active_bank)
         image_score = float(np.percentile(patch_scores, 99))
         return image_score, patch_scores
 
     def _score_distances(self, embeddings: np.ndarray, memory_bank: np.ndarray) -> np.ndarray:
+        # FAISS 索引优先：O(log n) 搜索 vs numpy O(n) 暴力搜索
+        if self._faiss_index is not None and embeddings.shape[0] > 0:
+            try:
+                distances, _ = self._faiss_index.search(embeddings.astype(np.float32), k=1)
+                return np.sqrt(distances[:, 0].astype(np.float32))
+            except Exception:
+                pass
+
         extractor = self._torch_feature_extractor
         device = getattr(extractor, "device", None)
         if device is None or self.config.backend.strip().lower() != "full":
@@ -264,12 +283,24 @@ class PatchCoreService:
             coreset_sampling_ratio=float(meta.get("coreset_sampling_ratio", 0.1)),
         )
         config = _apply_runtime_patchcore_overrides(trained_config, runtime_config)
+
+        # 恢复 FAISS 索引（如果有），用于加速推理时的最近邻搜索
+        restored_faiss_index = None
+        if faiss is not None and "faiss_index" in saved.files:
+            faiss_arr = saved["faiss_index"]
+            if faiss_arr.nbytes > 0:
+                try:
+                    restored_faiss_index = faiss.deserialize_index(faiss_arr)
+                except Exception:
+                    restored_faiss_index = None
+
         patchcore = cls(
             config=config,
             memory_bank=saved["memory_bank"].astype(np.float32),
             feature_mean=saved["feature_mean"].astype(np.float32),
             feature_std=saved["feature_std"].astype(np.float32),
             threshold=float(meta["threshold"]),
+            faiss_index=restored_faiss_index,
         )
         color_profile_json = saved["color_profile_json"].item() if "color_profile_json" in saved.files else ""
         color_profile = (

@@ -13,6 +13,11 @@ from typing import List, Optional, Sequence
 import cv2
 import numpy as np
 
+try:
+    import faiss
+except ImportError:  # 回退：FAISS 不可用时降级为 numpy 暴力搜索
+    faiss = None
+
 
 def train_patchcore(
     config: object,
@@ -101,10 +106,45 @@ def train_patchcore(
     feature_std = memory_bank.std(axis=0).astype(np.float32)
     feature_std[feature_std < 1e-6] = 1.0
 
-    # 用训练集自身确定阈值
-    normalized = (memory_bank - feature_mean) / feature_std
-    scores = _compute_min_distances(normalized, normalized)
-    threshold = float(np.quantile(scores, patchcore_cfg.threshold_quantile))
+    # 构建 FAISS 索引，加速推理时的最近邻搜索
+    faiss_index_bytes = b""
+    if faiss is not None:
+        normalized_bank = (memory_bank - feature_mean) / feature_std
+        dim = int(normalized_bank.shape[1])
+        index = faiss.IndexFlatL2(dim)
+        index.add(normalized_bank.astype(np.float32))
+        # 将 FAISS 索引序列化为 bytes，写入 npz
+        try:
+            faiss_index_bytes = faiss.serialize_index(index)
+        except Exception:
+            faiss_index_bytes = b""
+
+    # 用每张正常图像的 image-level score 分布确定阈值
+    # image-level score = 每张图所有有效 patch 距离的 99 分位
+    image_scores: list[float] = []
+    for img_embeddings in all_embeddings:
+        if img_embeddings.shape[0] == 0:
+            continue
+        normalized = ((img_embeddings - feature_mean) / feature_std).astype(np.float32)
+        patch_distances = _compute_min_distances(normalized, normalized)
+        if len(patch_distances) > 0:
+            image_score = float(np.percentile(patch_distances, 99))
+            image_scores.append(image_score)
+
+    if not image_scores:
+        raise RuntimeError("无法计算图像级分数，训练样本不足以确定阈值")
+
+    image_scores_arr = np.asarray(image_scores, dtype=np.float32)
+    threshold = float(np.quantile(image_scores_arr, patchcore_cfg.threshold_quantile))
+    # 鲁棒上界：防止阈值被个别极端正常样本拉高
+    upper_quantile = float(
+        np.clip(getattr(patchcore_cfg, "training_threshold_upper_quantile", 0.999), 0.9, 1.0)
+    )
+    threshold = max(
+        threshold,
+        float(np.quantile(image_scores_arr, upper_quantile)),
+        float(image_scores_arr.mean() + 3.0 * image_scores_arr.std()),
+    )
 
     # 保存 .npz（格式与 PatchCoreService.load_bundle 兼容）
     meta = {
@@ -139,6 +179,10 @@ def train_patchcore(
         "critical_peak_score_margin": float(patchcore_cfg.critical_peak_score_margin),
         "critical_min_component_patch_count": int(patchcore_cfg.critical_min_component_patch_count),
         "min_peak_component_patch_count": int(patchcore_cfg.min_peak_component_patch_count),
+        # 训练诊断信息
+        "train_image_count": int(len(image_scores)),
+        "threshold_image_score_mean": float(image_scores_arr.mean()),
+        "threshold_image_score_std": float(image_scores_arr.std()),
     }
 
     output = Path(output_path)
@@ -149,6 +193,7 @@ def train_patchcore(
         memory_bank=memory_bank,
         feature_mean=feature_mean,
         feature_std=feature_std,
+        faiss_index=np.frombuffer(faiss_index_bytes, dtype=np.uint8),
         color_profile_json=np.array([""], dtype=object),
     )
 
