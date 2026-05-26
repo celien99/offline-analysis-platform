@@ -190,6 +190,18 @@ def inspect_prepared_camera(
                     isolation_key=isolation_key,
                 )
 
+                # --- Identity Linking ---
+                if proposals:
+                    tracker = getattr(service, '_trackers', {})
+                    cam_tracker = tracker.get(camera.camera_id)
+                    if cam_tracker is None and getattr(camera, 'track', None) is not None:
+                        from ..tracking import DefectTracker
+                        cam_tracker = DefectTracker(camera.camera_id, camera.track)
+                        tracker[camera.camera_id] = cam_tracker
+                        service._trackers = tracker
+                    if cam_tracker is not None:
+                        proposals = cam_tracker.update(proposals)
+
                 # Per-patch dual-modal inference
                 if proposals:
                     patch_crops = generator.extract_patch_crops(
