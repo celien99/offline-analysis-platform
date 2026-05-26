@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 from .efficientad import EfficientADConfig
+from .proposal.config import ProposalConfig  # noqa: F401
 
 
 @dataclass
@@ -66,7 +67,7 @@ class FilterClassifierConfig:
     enabled: bool = False
     model_path: Optional[str] = None
     device: str = "cpu"
-    input_size: int = 224
+    input_size: int = 448
     confidence_threshold: float = 0.5
 
 
@@ -166,6 +167,7 @@ class CameraConfig:
     efficientad: EfficientADConfig = field(default_factory=EfficientADConfig)
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
     rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
+    proposal: ProposalConfig | None = None
     regions: List[RegionConfig] = field(default_factory=list)
 
 
