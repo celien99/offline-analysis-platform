@@ -14,6 +14,8 @@ import {
   Progress,
   Spin,
   Select,
+  Steps,
+  Result,
 } from "antd";
 import {
   PlayCircleOutlined,
@@ -22,6 +24,8 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
+import { PhotoProvider, PhotoView } from "react-photo-view";
+import "react-photo-view/dist/react-photo-view.css";
 import { useInspectionRun, useInspectionResult, useSeatModelOptions } from "../../hooks/queries";
 import type { SeatModelOption } from "../../types";
 
@@ -116,6 +120,13 @@ export default function InspectionPage() {
 
   const isRunning = !!taskId && (!result || result.status === "PENDING" || result.status === "STARTED");
 
+  const getCurrentStep = () => {
+    if (!taskId) return 0;
+    if (!result) return 1;
+    if (result.status === "PENDING" || result.status === "STARTED") return 1;
+    return 2;
+  };
+
   return (
     <div>
       <PageHeader
@@ -125,6 +136,17 @@ export default function InspectionPage() {
             重置
           </Button>
         }
+      />
+
+      <Steps
+        current={getCurrentStep()}
+        size="small"
+        className="mb-6"
+        items={[
+          { title: "配置", description: "选择型号与相机" },
+          { title: "上传检测", description: "上传图像并运行" },
+          { title: "结果", description: "查看检测结果" },
+        ]}
       />
 
       <Row gutter={24}>
@@ -240,6 +262,14 @@ export default function InspectionPage() {
                   </Typography.Text>
                 )}
 
+                {result.overall_status && !isRunning && (
+                  <Result
+                    status={result.overall_status === "OK" ? "success" : "error"}
+                    title={result.overall_status === "OK" ? "检测通过" : "检测异常"}
+                    subTitle={result.decision_reason ?? ""}
+                  />
+                )}
+
                 {result.camera_results.length > 0 && (
                   <>
                     <Typography.Title level={5}>各相机结果</Typography.Title>
@@ -285,26 +315,30 @@ export default function InspectionPage() {
                     />
 
                     <Typography.Title level={5} style={{ marginTop: 16 }}>检测图像</Typography.Title>
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      {result.camera_results.map((r) =>
-                        r.overlay_image_base64 ? (
-                          <Card
-                            key={r.camera_id}
-                            size="small"
-                            title={r.camera_id}
-                            extra={<Tag color={statusColor(r.status)}>{r.status}</Tag>}
-                            style={{ width: 420 }}
-                            styles={{ body: { padding: 0 } }}
-                          >
-                            <img
-                              src={`data:image/jpeg;base64,${r.overlay_image_base64}`}
-                              alt={`${r.camera_id} overlay`}
-                              style={{ width: "100%", maxHeight: 400, objectFit: "contain", display: "block" }}
-                            />
-                          </Card>
-                        ) : null,
-                      )}
-                    </div>
+                    <PhotoProvider>
+                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                        {result.camera_results.map((r) =>
+                          r.overlay_image_base64 ? (
+                            <Card
+                              key={r.camera_id}
+                              size="small"
+                              title={r.camera_id}
+                              extra={<Tag color={statusColor(r.status)}>{r.status}</Tag>}
+                              style={{ width: 420 }}
+                              styles={{ body: { padding: 0 } }}
+                            >
+                              <PhotoView src={`data:image/jpeg;base64,${r.overlay_image_base64}`}>
+                                <img
+                                  src={`data:image/jpeg;base64,${r.overlay_image_base64}`}
+                                  alt={`${r.camera_id} overlay`}
+                                  style={{ width: "100%", maxHeight: 400, objectFit: "contain", display: "block", cursor: "zoom-in" }}
+                                />
+                              </PhotoView>
+                            </Card>
+                          ) : null,
+                        )}
+                      </div>
+                    </PhotoProvider>
                   </>
                 )}
               </>
