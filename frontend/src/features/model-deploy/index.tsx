@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Card,
+  Collapse,
   Table,
   Button,
   Tag,
@@ -19,8 +20,10 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
+import DeployTopology from "./components/DeployTopology";
 import { useDeployments, useDeployModel, useDeployTargets, useRollbackModel, useTrainedModels, useHotReloadTargets } from "../../hooks/queries";
 import type { DeploymentRecord, TrainedModel } from "../../types";
+import type { HotReloadTarget } from "../../api/hot-reload";
 import dayjs from "dayjs";
 
 export default function ModelDeployPage() {
@@ -134,6 +137,16 @@ export default function ModelDeployPage() {
         }
       />
 
+      {/* ── Deployment Topology ── */}
+      <DeployTopology
+        targets={hotReloadData?.targets?.map((t: HotReloadTarget) => ({
+          target: String(t.target ?? ""),
+          activeModel: String(t.active_model ?? ""),
+          activeVersion: String(t.active_version ?? ""),
+          hasShadow: Boolean(t.has_shadow),
+        }))}
+      />
+
       <Card>
         <Table
           columns={columns}
@@ -146,7 +159,16 @@ export default function ModelDeployPage() {
 
       {/* ── Hot Reload Status ── */}
       {hotReloadData?.targets && hotReloadData.targets.length > 0 && (
-        <Card title="热重载状态" style={{ marginTop: 16 }}>
+        <Collapse
+          size="small"
+          ghost
+          defaultActiveKey={["hot-reload"]}
+          items={[
+            {
+              key: "hot-reload",
+              label: "热重载状态",
+              children: (
+        <Card>
           <Table
             dataSource={hotReloadData.targets as unknown as Record<string, unknown>[]}
             rowKey="target"
@@ -189,6 +211,11 @@ export default function ModelDeployPage() {
             ]}
           />
         </Card>
+              ),
+            },
+          ]}
+        >
+        </Collapse>
       )}
 
       <Modal
