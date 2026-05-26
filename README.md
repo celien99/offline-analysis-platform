@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>370+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>10 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
+  <b>370+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>11 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
 </p>
 
 ---
@@ -38,7 +38,10 @@ flowchart TB
         direction LR
         CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
         YOLO --> PC["EfficientAD<br/>异常评分 + 特征提取"]
-        PC --> RP["Region Proposal<br/>热力图→连通域→裁剪"]
+        PC --> BC["Budget Ctrl<br/>自适应阈值+延迟SLA"]
+        BC --> RP["Region Proposal<br/>热力图→连通域→裁剪"]
+        RP --> IL["Identity Linking<br/>Kalman+特征匹配"]
+        IL --> AP["Align Project<br/>EAD→DINOv2空间"]
         RP --> FC["Dual-Modal Filter<br/>图像+特征双模态分类"]
         FC --> AG["Proposal Aggregation<br/>加权聚合判定"]
         AG --> RE["规则引擎<br/>后处理"]
@@ -68,7 +71,7 @@ flowchart TB
     end
 
     ONLINE -->|"NG 自动上传<br/>PatchProposal + Features"| INGEST
-    HOT -->|"reload.signal<br/>Dual-Modal Filter 热重载"| FC
+    HOT -->|"reload.signal<br/>三模态 Filter + Projector 热重载"| AP
 ```
 
 ---
@@ -240,6 +243,26 @@ flowchart TB
       </ul>
     </td>
   </tr>
+  <tr>
+    <td width="50%">
+      <h3>🎛 Budget Controller + Identity Linking</h3>
+      <ul>
+        <li><b>三态预算控制</b>：Normal (自适应阈值) / Emergency (硬上限兜底) / Optimization (长期噪声自适应)</li>
+        <li><b>DefectTracker</b>：6态生命周期 (BIRTH→ACTIVE→TENTATIVE→MATURE→LOST→DEAD)，Kalman + 特征余弦级联匹配</li>
+        <li><b>冲突解决</b>：Best Match Wins (1:N) / NMS Merge (N:1) / Feature Tiebreaker (N:M) / Hungarian (Race)</li>
+        <li>MATURE identity (≥5帧) 触发上传，后续帧 PATCH 更新，跨相机 identity 合并去重</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📐 Unified Embedding Space</h3>
+      <ul>
+        <li><b>EmbeddingSpaceContract</b>：协议层 representation standard (384d, L2, cosine, DINOv2 geometry)</li>
+        <li><b>AlignmentProjector</b>：EAD features → Transformer Encoder → 384d L2，InfoNCE 对比学习训练</li>
+        <li><b>三模态 Filter</b>：image + EAD raw + unified_emb → 768d fusion → 二分类</li>
+        <li>离线聚类 (DINOv2) 与在线推理 (EAD projected) 共享同一 embedding geometry</li>
+      </ul>
+    </td>
+  </tr>
 </table>
 
 ---
@@ -341,6 +364,11 @@ offline-analysis-platform/
     │   │   ├── dataset.py            #     图像 + EfficientAD 特征加载
     │   │   └── config.py             #     训练超参
     │   └── metric_learning.py        #   📐 ArcFace + Triplet Loss 度量学习
+    ├── alignment/                    # 📐 Embedding Space 对齐
+    │   ├── projector.py              #   AlignmentProjector (Transformer)
+    │   ├── trainer.py                #   InfoNCE 对比学习训练
+    │   ├── dataset.py                #   EAD+DINOv2 成对数据
+    │   └── config.py                 #   AlignmentConfig
     └── vlm/                          # Qwen2.5-VL 多模态分析器
 ```
 - `seat_defect_core/` 在线检测核心（38 个 Python 文件），详见下方
@@ -364,6 +392,12 @@ seat_defect_core/
 │   ├── generator.py                  #   热力图→连通域→区域裁剪
 │   ├── aggregation.py                #   加权聚合 (area × score)
 │   └── config.py                     #   Proposal 超参配置
+├── tracking/                         # 🔗 Defect Identity 追踪模块
+│   ├── identity.py                   #   6态生命周期 (BIRTH→DEAD)
+│   ├── tracker.py                    #   DefectTracker 编排器
+│   ├── matcher.py                    #   级联匹配 + 冲突解决
+│   ├── kalman_filter.py              #   6-DOF Kalman + Hungarian
+│   └── config.py                     #   TrackConfig
 ├── service/
 │   ├── core.py                       # InspectionService + ModelBundleCache（含分类器缓存/自动加载）
 │   ├── inspection_camera.py          # 单机位检测流程（含分类器推理 + 规则引擎接入）
@@ -664,6 +698,7 @@ mkdir -p sample_images
 | **Repository 模式** | 所有 DB 访问封装在类型安全的 Repository 中，测试可直接用 SQLite 内存库替代 |
 | **零硬编码** | Pydantic Settings 从环境变量读取所有配置，禁止 `DB_HOST = "localhost"` |
 | **结构化日志** | structlog 输出 JSON 行日志，绑定 `trace_id` `cluster_id` `anomaly_id` `model_version` `camera_id` 上下文 |
+| **Embedding 空间统一** | `EmbeddingSpaceContract` 定义 representation standard，在线 (EAD projected) 和离线 (DINOv2) 共享同一 geometry |
 
 ---
 
