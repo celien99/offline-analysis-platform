@@ -13,19 +13,17 @@ from .pipeline import (
 )
 from .results import (
     CameraInspectionResult,
-    ColorAnomalyResult,
     FilterClassifierResult,
     InspectionError,
     InspectionResponse,
     InspectionResult,
-    RegionPatchCoreResult,
+    RegionAnomalyResult,
     TextureAnomalyResult,
 )
 
 __all__ = [
     "BoundingBox",
     "CameraInspectionResult",
-    "ColorAnomalyResult",
     "DetectionObject",
     "DetectionResult",
     "FilterClassifierResult",
@@ -36,7 +34,7 @@ __all__ = [
     "InspectionFrame",
     "InspectionResponse",
     "InspectionResult",
-    "RegionPatchCoreResult",
+    "RegionAnomalyResult",
     "RoiRefineResult",
     "TextureAnomalyResult",
 ]

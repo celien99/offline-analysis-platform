@@ -11,13 +11,13 @@ from .pipeline import DetectionResult, ImageQualityDecision
 
 @dataclass
 class TextureAnomalyResult:
-    """纹理异常分支输出。"""
+    """纹理异常检测分支输出。"""
 
     score: float
-    """图像级异常分数。"""
+    """图像级异常分数 (0-1)。"""
 
     threshold: float
-    """训练阶段得到的基础异常阈值。"""
+    """异常判定阈值。"""
 
     is_anomaly: bool
     """是否判定为异常。"""
@@ -25,64 +25,11 @@ class TextureAnomalyResult:
     heatmap: Any
     """ROI 坐标系下的异常热力图。"""
 
-    valid_patch_ratio: float
-    """有效 patch 占全部 patch 的比例。"""
+    anomaly_map: Any
+    """模型原始输出异常图。"""
 
-    valid_patch_count: int
-    """有效 patch 数量。"""
-
-    total_patch_count: int
-    """全部 patch 数量。"""
-
-    decision_threshold: float = 0.0
-    """最终工业判定使用的阈值。"""
-
-    peak_patch_score: float = 0.0
-    """当前图像最高 patch 异常分数。"""
-
-    strong_patch_count: int = 0
-    """达到强异常阈值的 patch 数量。"""
-
-    largest_component_patch_count: int = 0
-    """最大强异常连通域包含的 patch 数量。"""
-
-    strong_patch_ratio: float = 0.0
-    """强异常 patch 占有效 patch 的比例。"""
-
-    largest_component_patch_ratio: float = 0.0
-    """最大强异常连通域占有效 patch 的比例。"""
-
-    decision_patch_count: int = 0
-    """达到最终判定阈值的 patch 数量。"""
-
-    largest_decision_component_patch_count: int = 0
-    """最大最终判定连通域包含的 patch 数量。"""
-
-    decision_patch_ratio: float = 0.0
-    """达到最终判定阈值的 patch 占比。"""
-
-    largest_decision_component_patch_ratio: float = 0.0
-    """最大最终判定连通域占比。"""
-
-    decision_mode: str = "none"
-    """最终命中的判定模式。"""
-
-
-@dataclass
-class ColorAnomalyResult:
-    """颜色一致性分支输出。"""
-
-    score: float
-    """颜色异常分数。"""
-
-    threshold: float
-    """颜色异常阈值。"""
-
-    is_anomaly: bool
-    """是否判定为颜色异常。"""
-
-    diagnostics: Dict[str, float]
-    """颜色分支诊断指标。"""
+    valid_pixel_ratio: float = 1.0
+    """ROI 内有效像素比例。"""
 
 
 @dataclass
@@ -123,8 +70,8 @@ class FilterClassifierResult:
 
 
 @dataclass
-class RegionPatchCoreResult:
-    """单个局部区域的 PatchCore 输出。"""
+class RegionAnomalyResult:
+    """单个局部区域的异常检测输出。"""
 
     region_id: str
     """区域 ID。"""
@@ -141,8 +88,8 @@ class RegionPatchCoreResult:
     texture_result: Optional[TextureAnomalyResult] = None
     """该区域的纹理异常结果。"""
 
-    patchcore_model_path: Optional[str] = None
-    """该区域使用的 PatchCore 模型路径。"""
+    efficientad_model_path: Optional[str] = None
+    """该区域使用的 EfficientAD 模型路径。"""
 
     artifact_paths: Dict[str, str] = field(default_factory=dict)
     """该区域关联的调试产物路径。"""
@@ -191,11 +138,8 @@ class CameraInspectionResult:
     texture_result: Optional[TextureAnomalyResult] = None
     """完整 ROI 模式下的纹理异常结果。"""
 
-    region_results: List[RegionPatchCoreResult] = field(default_factory=list)
+    region_results: List[RegionAnomalyResult] = field(default_factory=list)
     """regions 模式下的区域检测结果。"""
-
-    color_result: Optional[ColorAnomalyResult] = None
-    """颜色一致性分支结果。"""
 
     filter_result: Optional[FilterClassifierResult] = None
     """过滤器分类器分支结果。"""
@@ -214,15 +158,6 @@ class CameraInspectionResult:
 
     overlay_image: Optional[Any] = field(default=None, repr=False, compare=False)
     """叠加了异常热力图的 BGR 调试图片，供调用方直接消费。"""
-
-    original_image: Optional[Any] = field(default=None, repr=False, compare=False)
-    """本次检测输入的原始 BGR 图像，供 NG 上传链路使用。"""
-
-    roi_image: Optional[Any] = field(default=None, repr=False, compare=False)
-    """原始 ROI 裁剪图像（未缩放到标准画布），供离线平台展示使用。"""
-
-    roi_aligned_image: Optional[Any] = field(default=None, repr=False, compare=False)
-    """标准 ROI 对齐图像 (BGR)，不含热力图叠加，供上传离线平台使用。"""
 
 
 @dataclass
@@ -303,11 +238,10 @@ class InspectionResponse:
 
 __all__ = [
     "CameraInspectionResult",
-    "ColorAnomalyResult",
     "FilterClassifierResult",
     "InspectionError",
     "InspectionResponse",
     "InspectionResult",
-    "RegionPatchCoreResult",
+    "RegionAnomalyResult",
     "TextureAnomalyResult",
 ]
