@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column("evaluated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("evaluated_by", sa.String(64), nullable=False, default="system:auto_gate", comment="评估触发者"),
     )
-    op.create_index("ix_gate_evaluations_model_version_id", "gate_evaluations", ["model_version_id"])
+    op.create_index("ix_gate_evaluations_model_version_id", "gate_evaluations", ["model_version_id"], if_not_exists=True)
 
 
 def downgrade() -> None:
