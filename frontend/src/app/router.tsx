@@ -21,20 +21,23 @@ function LazyFallback() {
   );
 }
 
+function PageWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="page-transition">{children}</div>;
+}
+
 export default function AppRouter() {
   return (
     <Suspense fallback={<LazyFallback />}>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/inspection" element={<Inspection />} />
-        <Route path="/anomalies" element={<AnomalyBrowser />} />
-        <Route path="/clusters" element={<ClusterReview />} />
-
-        <Route path="/knowledge" element={<KnowledgeBase />} />
-        <Route path="/rules" element={<RulesManagement />} />
-        <Route path="/training" element={<Training />} />
-        <Route path="/deploy" element={<ModelDeploy />} />
-        <Route path="/cameras" element={<CameraConfig />} />
+        <Route path="/" element={<PageWrapper><Dashboard /></PageWrapper>} />
+        <Route path="/inspection" element={<PageWrapper><Inspection /></PageWrapper>} />
+        <Route path="/anomalies" element={<PageWrapper><AnomalyBrowser /></PageWrapper>} />
+        <Route path="/clusters" element={<PageWrapper><ClusterReview /></PageWrapper>} />
+        <Route path="/knowledge" element={<PageWrapper><KnowledgeBase /></PageWrapper>} />
+        <Route path="/rules" element={<PageWrapper><RulesManagement /></PageWrapper>} />
+        <Route path="/training" element={<PageWrapper><Training /></PageWrapper>} />
+        <Route path="/deploy" element={<PageWrapper><ModelDeploy /></PageWrapper>} />
+        <Route path="/cameras" element={<PageWrapper><CameraConfig /></PageWrapper>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
