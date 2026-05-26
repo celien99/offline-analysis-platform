@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from time import perf_counter
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..fusion import fuse_camera_results
 from ..core_types import CameraInspectionResult, InspectionError, InspectionFrame, InspectionResult
-from .core import InspectionService
+from .core import CameraPipeline, InspectionService
 from .frames import (
     build_frame_map,
     build_frame_packet,
@@ -144,7 +144,7 @@ def _finish_result_timing(result: InspectionResult, started_at: float) -> None:
 def _inspect_pending_cameras(
     service: InspectionService,
     pending_cameras,
-    pipelines: Dict[str, object],
+    pipelines: Dict[str, CameraPipeline],
     seat_model_id: Optional[str],
 ) -> Dict[int, CameraInspectionResult]:
     if not pending_cameras:
@@ -246,8 +246,8 @@ def _finish_region_plans(
     if not plans:
         return
 
-    all_items = []
-    slices = []
+    all_items: list[Any] = []
+    slices: list[tuple[int, RegionAnomalyPlan, int, int]] = []
     for index, plan in plans:
         start = len(all_items)
         all_items.extend(plan.anomaly_items)

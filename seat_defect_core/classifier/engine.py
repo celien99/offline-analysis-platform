@@ -7,10 +7,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import perf_counter
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    import torch
 
 from ..config import FilterClassifierConfig
 from ..core_types import FilterClassifierResult
@@ -30,6 +33,7 @@ class FilterClassifierService:
     ) -> None:
         self.config = config
         self._model = model
+        self._device: str = config.device
 
     @classmethod
     def load(cls, model_path: Union[str, Path]) -> "FilterClassifierService":
@@ -58,7 +62,7 @@ class FilterClassifierService:
         import torch
 
         started_at = perf_counter()
-        diagnostics: dict[str, float] = {}
+        diagnostics: dict[str, float | str] = {}
 
         try:
             if self._model is None:

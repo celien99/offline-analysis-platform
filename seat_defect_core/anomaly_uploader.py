@@ -74,8 +74,7 @@ def upload_camera_result(
         for p in getattr(result, 'proposals', []):
             identity_id = getattr(p, 'identity_id', None)
             if identity_id:
-                # Include identity metadata in upload
-                if not hasattr(result, '_uploaded_identities'):
+                if result._uploaded_identities is None:
                     result._uploaded_identities = set()
                 if identity_id not in result._uploaded_identities:
                     data.setdefault("identity_ids", []).append(identity_id)
