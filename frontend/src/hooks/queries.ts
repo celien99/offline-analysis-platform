@@ -3,8 +3,8 @@ import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, 
 import { cameraConfigApi } from "../api/camera-config";
 import { gateApi } from "../api/gate";
 import { maskRefinementApi } from "../api/mask-refinement";
-import { hotReloadApi, type HotReloadTarget } from "../api/hot-reload";
-import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData, DualTrackComparisonResult } from "../types";
+import { hotReloadApi } from "../api/hot-reload";
+import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData } from "../types";
 
 // ── Cluster queries ──
 
@@ -503,10 +503,10 @@ export function useDualTrackComparison(params: {
   camera_id?: string;
   region_id?: string;
 }) {
-  return useQuery<DualTrackComparisonResult>({
+  return useQuery({
     queryKey: ["mask-refinement", "compare", params],
     queryFn: ({ signal }) =>
-      maskRefinementApi.compare(params, signal) as Promise<DualTrackComparisonResult>,
+      maskRefinementApi.compare(params, signal),
     enabled: !!(params.seat_model_id || params.camera_id),
   });
 }
@@ -517,7 +517,7 @@ export function useHotReloadTargets() {
   return useQuery({
     queryKey: ["hot-reload", "targets"],
     queryFn: ({ signal }) =>
-      hotReloadApi.listTargets(signal) as Promise<{ total: number; targets: HotReloadTarget[] }>,
+      hotReloadApi.listTargets(signal),
     refetchInterval: 15_000,
   });
 }

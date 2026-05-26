@@ -1,3 +1,10 @@
+/** POST /api/mask-refinement/refine/{id} 响应 */
+export interface MaskRefineResponse {
+  status: string;
+  task_id: string;
+  anomaly_id: string;
+}
+
 export interface TrackMetricsResult {
   embedding_type: string;
   sample_count: number;

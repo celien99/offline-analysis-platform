@@ -26,3 +26,24 @@ export interface AnomalySummary {
   crop_url: string | null;
   detected_at: string | null;
 }
+
+/** POST /api/anomaly/{id}/reprocess 响应 */
+export interface AnomalyReprocessResponse {
+  status: string;
+  anomaly_id: string;
+}
+
+/** DELETE /api/anomaly/{id} 响应 */
+export interface AnomalyDeleteResponse {
+  status: string;
+  anomaly_id: string;
+}
+
+/** GET /api/embedding/search 响应 - 相似 embedding 搜索结果 */
+export interface EmbeddingSimilarResult {
+  anomaly_id: string;
+  similarity: number;
+  camera_id?: string | null;
+  date_folder?: string | null;
+  crop_url?: string | null;
+}
