@@ -298,14 +298,8 @@ export default function TrainingPage() {
         }
       />
 
-      <Row gutter={16}>
-        <Col xs={24} xl={13}>
-          <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
-        </Col>
-        <Col xs={24} xl={11}>
-          <TaskLogPanel />
-        </Col>
-      </Row>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} className="mb-4" />
+      <TaskLogPanel />
 
       {/* ── Filter Classifier Modal ── */}
       <Modal
