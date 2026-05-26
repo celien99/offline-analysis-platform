@@ -14,3 +14,4 @@ export type { DeployRequest, DeploymentRecord } from "./model";
 export type { VLMResult, VLMAnalysisResponse, VLMBatchAnalysisResponse } from "./multimodal";
 export type { InspectionResult, CameraInspectionResult } from "./inspection";
 export * from "./camera-config";
+export type { GateEvaluationReport, GateStatus } from "./gate";
