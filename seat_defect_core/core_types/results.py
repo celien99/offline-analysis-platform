@@ -31,6 +31,8 @@ class TextureAnomalyResult:
     valid_pixel_ratio: float = 1.0
     """ROI 内有效像素比例。"""
 
+    features: Optional[dict[str, Any]] = None  # EfficientAD intermediate features
+
 
 @dataclass
 class InspectionError:
