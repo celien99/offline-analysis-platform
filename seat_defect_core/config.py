@@ -38,7 +38,7 @@ class RoiRefineConfig:
     # 对 YOLO 前景 mask 做保守内缩，剔除座椅轮廓边缘的无效像素。
     mask_erode_pixels: int = 1
 
-    # 屏蔽边缘像素，减少座椅边界和背景混入 PatchCore。
+    # 屏蔽边缘像素，减少座椅边界和背景混入纹理异常检测。
     edge_ignore_pixels: int = 6
     alignment: AlignmentConfig = field(default_factory=AlignmentConfig)
 
@@ -54,14 +54,14 @@ class DetectionConfig:
     iou: float = 0.45
     device: str = "cpu"
     imgsz: int = 960
-    # YOLO 实例 mask 可能在目标内部留下低置信空洞；PatchCore 需要完整前景区域。
+    # YOLO 实例 mask 可能在目标内部留下低置信空洞；纹理异常检测需要完整前景区域。
     fill_segmentation_holes: bool = True
     segmentation_hole_fill_max_area_ratio: float = 0.08
 
 
 @dataclass
 class FilterClassifierConfig:
-    """过滤器分类器配置，用于抑制 PatchCore 误报。"""
+    """过滤器分类器配置，用于抑制纹理异常检测误报。"""
 
     enabled: bool = False
     model_path: Optional[str] = None
@@ -142,7 +142,7 @@ class RuleEngineConfig:
 
 @dataclass
 class RegionConfig:
-    """单机位标准 ROI 内的局部 PatchCore 区域。"""
+    """单机位标准 ROI 内的局部纹理异常检测区域。"""
 
     region_id: str
     # 标准 ROI 内的归一化矩形：[x1, y1, x2, y2]，取值范围 0-1。

@@ -8,7 +8,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple, Union
 import cv2
 import numpy as np
 
-from ..util import build_model_scoped_root, select_patchcore_input, write_image
+from ..util import build_model_scoped_root, select_texture_input, write_image
 
 DEFAULT_DEBUG_ARTIFACT_NAMES: FrozenSet[str] = frozenset(
     {
@@ -97,8 +97,8 @@ def _normalize_artifact_names(
 
 
 def _stitch_region_heatmap(roi, region_results) -> np.ndarray:
-    """Merge region-level PatchCore heatmaps back into full ROI coordinates."""
-    height, width = select_patchcore_input(roi).shape[:2]
+    """Merge region-level texture anomaly heatmaps back into full ROI coordinates."""
+    height, width = select_texture_input(roi).shape[:2]
     stitched = np.zeros((height, width), dtype=np.float32)
     for region_result in region_results or []:
         texture_result = getattr(region_result, "texture_result", None)
@@ -174,7 +174,7 @@ def _restore_heatmap_to_crop(
     heatmap: np.ndarray,
     crop_shape: Tuple[int, int],
 ) -> np.ndarray:
-    canonical_shape = select_patchcore_input(roi).shape[:2]
+    canonical_shape = select_texture_input(roi).shape[:2]
     clipped = np.clip(np.asarray(heatmap, dtype=np.float32), 0.0, 1.0)
     if clipped.shape != canonical_shape:
         clipped = cv2.resize(

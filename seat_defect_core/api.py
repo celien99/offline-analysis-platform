@@ -92,7 +92,7 @@ class SeatDefectInspector:
         )
 
     def warmup(self, *, seat_model_id: Optional[str] = None) -> None:
-        """Preload active runtime models and run a lightweight PatchCore warmup."""
+        """Preload active runtime models and run a lightweight warmup."""
         self._service.warmup(seat_model_id=seat_model_id)
 
 

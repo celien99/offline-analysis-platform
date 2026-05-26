@@ -10,9 +10,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 _INI_SUFFIXES = {".ini", ".cfg"}
 _LIST_KEYS = {"box", "debug_artifact_names", "feature_layers"}
 _BOOL_KEYS = {
-    "backbone_pretrained",
-    "cache",
-    "color_insensitive_mode",
     "debug_artifacts_enabled",
     "defect_overrides_reject",
     "enabled",
@@ -168,7 +165,7 @@ def _apply_camera_rest(
             )
         )
         return
-    if rest[0] in {"quality", "detection", "patchcore", "color_branch", "filter_classifier", "rule_engine"} and len(rest) == 1:
+    if rest[0] in {"quality", "detection", "efficientad", "filter_classifier", "rule_engine"} and len(rest) == 1:
         camera.setdefault(rest[0], {}).update(items)
         return
     if rest[0] == "roi":
@@ -223,8 +220,8 @@ def _apply_region_section(
             )
         )
         return
-    if tail == ["patchcore"]:
-        region.setdefault("patchcore", {}).update(items)
+    if tail == ["efficientad"]:
+        region.setdefault("efficientad", {}).update(items)
         return
     raise ValueError(f"INI region section 不受支持：{config_path}")
 

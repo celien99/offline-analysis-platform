@@ -13,7 +13,7 @@ from ..cvops.regions import RegionRoiSample
 from ..efficientad import EfficientADService
 from ..rule_engine import apply_rules, merge_rules
 from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
-from ..util import select_patchcore_input
+from ..util import select_texture_input
 
 if TYPE_CHECKING:
     from .core import CameraPipeline, InspectionService
@@ -56,12 +56,12 @@ def inspect_one_camera(
     )
     if isinstance(outcome, RegionAnomalyPlan):
         texture_results = service.predict_anomaly_batch(outcome.anomaly_items)
-        patchcore_elapsed_ms = camera_timer.mark("region_anomaly_batch")
+        anomaly_elapsed_ms = camera_timer.mark("region_anomaly_batch")
         return finish_region_anomaly_plan(
             service,
             outcome,
             texture_results,
-            patchcore_elapsed_ms=patchcore_elapsed_ms,
+            anomaly_elapsed_ms=anomaly_elapsed_ms,
         )
     return outcome
 
@@ -123,7 +123,7 @@ def inspect_prepared_camera(
         )
 
     model_bundle = service.load_model_bundle(camera, seat_model_id)
-    texture_input = select_patchcore_input(prepared.roi)
+    texture_input = select_texture_input(prepared.roi)
     texture_result = model_bundle.predict(
         texture_input,
         prepared.roi.target_mask,
@@ -248,11 +248,11 @@ def finish_region_anomaly_plan(
     plan: RegionAnomalyPlan,
     texture_results,
     *,
-    patchcore_elapsed_ms: float,
+    anomaly_elapsed_ms: float,
 ) -> CameraInspectionResult:
     region_results = list(plan.region_results)
-    per_region_patchcore_ms = (
-        patchcore_elapsed_ms / len(texture_results)
+    per_region_anomaly_ms = (
+        anomaly_elapsed_ms / len(texture_results)
         if texture_results
         else 0.0
     )
@@ -286,7 +286,7 @@ def finish_region_anomaly_plan(
                 box=region_sample.box,
                 texture_result=texture_result,
                 efficientad_model_path=region.efficientad_model_path,
-                timings_ms={"anomaly": per_region_patchcore_ms},
+                timings_ms={"anomaly": per_region_anomaly_ms},
                 error=error,
                 sample=region_sample,
             )

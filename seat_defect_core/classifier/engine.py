@@ -52,7 +52,7 @@ class FilterClassifierService:
         """对单张 ROI BGR 图像运行分类推理。
 
         Returns:
-            FilterClassifierResult，其中 is_real_defect=True 表示保留 PatchCore 的 NG 判定，
+            FilterClassifierResult，其中 is_real_defect=True 表示保留纹理异常检测的 NG 判定，
             is_real_defect=False 表示分类器认为这是误报，应抑制为 OK。
         """
         import torch
@@ -119,7 +119,7 @@ class FilterClassifierService:
             diagnostics["total_ms"] = (perf_counter() - started_at) * 1000.0
             diagnostics["error_prediction_failed"] = 1.0
             return FilterClassifierResult(
-                is_real_defect=True,  # 故障安全：不抑制 PatchCore 结果
+                is_real_defect=True,  # 故障安全：不抑制纹理异常检测结果
                 confidence=0.0,
                 real_defect_score=0.0,
                 false_alarm_score=0.0,

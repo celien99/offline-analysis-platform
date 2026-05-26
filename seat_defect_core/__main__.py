@@ -2,7 +2,7 @@
 
 Usage examples:
   python -m seat_defect_core inspect --config config.json --images cam1=img1.jpg
-  python -m seat_defect_core train-patchcore --config config.json --camera-id cam_front --good-images ./good/ --output model.npz
+  python -m seat_defect_core train-efficientad --config config.json --camera-id cam_front --good-images ./good/ --output model.pt
 """
 
 from __future__ import annotations
@@ -25,17 +25,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     inspect_parser = subparsers.add_parser("inspect", help="执行检测")
     _add_inspect_args(inspect_parser)
 
-    # train-patchcore 子命令
-    train_parser = subparsers.add_parser("train-patchcore", help="训练 PatchCore 模型")
+    # train-efficientad 子命令
+    train_parser = subparsers.add_parser("train-efficientad", help="训练 EfficientAD 模型")
     train_parser.add_argument("--config", type=str, required=True, help="检测配置文件路径 (JSON/INI)")
     train_parser.add_argument("--camera-id", type=str, required=True, help="目标相机 ID")
     train_parser.add_argument("--good-images", type=str, required=True, help="正常参考图像目录")
-    train_parser.add_argument("--output", type=str, required=True, help="输出 .npz 文件路径")
+    train_parser.add_argument("--output", type=str, required=True, help="输出 .pt 文件路径")
 
     args = parser.parse_args(argv)
 
-    if args.command == "train-patchcore":
-        return _run_train_patchcore(args)
+    if args.command == "train-efficientad":
+        return _run_train_efficientad(args)
 
     # 默认：inspect（兼容旧的 --config --images 直接调用方式）
     if args.command is None:
@@ -127,7 +127,7 @@ def _run_inspect_legacy(argv: Optional[List[str]]) -> int:
     return _run_inspect(args)
 
 
-def _run_train_patchcore(args) -> int:
+def _run_train_efficientad(args) -> int:
     img_dir = Path(args.good_images)
     if not img_dir.is_dir():
         print(f"错误：图像目录不存在: {args.good_images}", file=sys.stderr)
@@ -141,14 +141,8 @@ def _run_train_patchcore(args) -> int:
         return 1
 
     try:
-        from seat_defect_core.training.patchcore import train_patchcore
-        result = train_patchcore(
-            config=args.config,
-            camera_id=args.camera_id,
-            good_image_paths=image_paths,
-            output_path=args.output,
-        )
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        from seat_defect_core.training.efficientad import train_efficientad_cli
+        train_efficientad_cli()
         return 0
     except Exception as exc:
         print(f"训练失败：{exc}", file=sys.stderr)

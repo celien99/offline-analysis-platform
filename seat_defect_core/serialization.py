@@ -46,7 +46,7 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
                 "status": item.status,
                 "reason": item.reason,
                 "box": box_to_dict(item.box),
-                "patchcore_model_path": item.patchcore_model_path,
+                "efficientad_model_path": item.efficientad_model_path,
                 "texture_result": texture_result_to_dict(item.texture_result),
                 "artifact_paths": dict(item.artifact_paths),
                 "timings_ms": dict(item.timings_ms),
@@ -54,7 +54,6 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
             }
             for item in result.region_results
         ],
-        "color_result": color_result_to_dict(result.color_result),
         "filter_result": filter_result_to_dict(result.filter_result),
         "artifact_paths": dict(result.artifact_paths),
     }
@@ -83,36 +82,8 @@ def texture_result_to_dict(texture_result) -> Optional[Dict[str, Any]]:
     return {
         "score": texture_result.score,
         "threshold": texture_result.threshold,
-        "decision_threshold": texture_result.decision_threshold,
         "is_anomaly": texture_result.is_anomaly,
-        "valid_patch_ratio": texture_result.valid_patch_ratio,
-        "valid_patch_count": texture_result.valid_patch_count,
-        "total_patch_count": texture_result.total_patch_count,
-        "peak_patch_score": texture_result.peak_patch_score,
-        "strong_patch_count": texture_result.strong_patch_count,
-        "largest_component_patch_count": texture_result.largest_component_patch_count,
-        "strong_patch_ratio": texture_result.strong_patch_ratio,
-        "largest_component_patch_ratio": texture_result.largest_component_patch_ratio,
-        "decision_patch_count": texture_result.decision_patch_count,
-        "largest_decision_component_patch_count": (
-            texture_result.largest_decision_component_patch_count
-        ),
-        "decision_patch_ratio": texture_result.decision_patch_ratio,
-        "largest_decision_component_patch_ratio": (
-            texture_result.largest_decision_component_patch_ratio
-        ),
-        "decision_mode": texture_result.decision_mode,
-    }
-
-
-def color_result_to_dict(color_result) -> Optional[Dict[str, Any]]:
-    if color_result is None:
-        return None
-    return {
-        "score": color_result.score,
-        "threshold": color_result.threshold,
-        "is_anomaly": color_result.is_anomaly,
-        "diagnostics": dict(color_result.diagnostics),
+        "valid_pixel_ratio": texture_result.valid_pixel_ratio,
     }
 
 
@@ -160,7 +131,6 @@ def resolve_target_box(result: CameraInspectionResult) -> Optional[Dict[str, flo
 __all__ = [
     "box_to_dict",
     "camera_result_to_dict",
-    "color_result_to_dict",
     "filter_result_to_dict",
     "error_to_dict",
     "inspection_result_to_dict",

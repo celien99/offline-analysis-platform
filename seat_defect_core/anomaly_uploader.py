@@ -61,7 +61,7 @@ def upload_camera_result(
     files: list[tuple[str, tuple]] = []
     data: Dict[str, Any] = {
         "camera_id": result.camera_id,
-        "source": "patchcore",
+        "source": "efficientad",
         "date_folder": date_folder,
         "detected_at": datetime.now(tz=timezone.utc).isoformat(),
         "decision_reason": result.reason,
@@ -130,7 +130,7 @@ def upload_camera_result(
         )))
 
     # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
-    # PatchCore 的热力图统一映射回原图坐标系。
+    # 纹理异常检测的热力图统一映射回原图坐标系。
     if result.overlay_image is not None:
         files.append(("heatmap_file", (
             "heatmap.jpg",
@@ -265,7 +265,7 @@ def _crop_by_heatmap(
 ) -> list[np.ndarray]:
     """按热力图高响应连通域裁剪图像，支持多异常区域。
 
-    PatchCore 热力图通常是高度局部化的尖锐热点，阈值取 max*0.2 保留
+    纹理异常检测热力图通常是高度局部化的尖锐热点，阈值取 max*0.2 保留
     高响应区域，配合 10% 外扩兼顾精度与 embedding 模型所需的上下文。
 
     Args:

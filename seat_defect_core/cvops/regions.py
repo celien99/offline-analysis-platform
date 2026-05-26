@@ -1,4 +1,4 @@
-"""标准 ROI 内的局部 PatchCore 区域切分。"""
+"""标准 ROI 内的局部纹理异常检测区域切分。"""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ import numpy as np
 
 from ..config import RegionConfig
 from ..core_types import BoundingBox, RoiRefineResult
-from ..util import select_patchcore_input
+from ..util import select_texture_input
 
 
 @dataclass
 class RegionRoiSample:
-    """单个局部区域送入 PatchCore 的图像和掩膜。"""
+    """单个局部区域送入纹理异常检测模型的图像和掩膜。"""
 
     region_id: str
     box: BoundingBox
@@ -44,7 +44,7 @@ def build_region_roi_sample(
     roi: RoiRefineResult,
     region: RegionConfig,
 ) -> Optional[RegionRoiSample]:
-    """从一个标准 ROI 中切出一个局部 PatchCore 样本。"""
+    """从一个标准 ROI 中切出一个局部纹理异常检测样本。"""
     return build_region_roi_sample_from_box(
         roi,
         region_id=region.region_id,
@@ -58,14 +58,14 @@ def build_region_roi_sample_from_box(
     region_id: str,
     box: List[float],
 ) -> Optional[RegionRoiSample]:
-    """按区域 ID 和归一化框从标准 ROI 中切出一个 PatchCore 样本。"""
-    patchcore_input = select_patchcore_input(roi)
-    height, width = patchcore_input.shape[:2]
+    """按区域 ID 和归一化框从标准 ROI 中切出一个纹理异常检测样本。"""
+    texture_input = select_texture_input(roi)
+    height, width = texture_input.shape[:2]
     x1, y1, x2, y2 = _normalized_box_to_pixels(box, width, height)
     if x2 <= x1 or y2 <= y1:
         return None
 
-    image = patchcore_input[y1:y2, x1:x2].copy()
+    image = texture_input[y1:y2, x1:x2].copy()
     aligned_roi_image = roi.aligned_roi_image[y1:y2, x1:x2].copy()
     target_mask = (roi.target_mask[y1:y2, x1:x2] > 0).astype(np.uint8)
     valid_mask = (roi.valid_mask[y1:y2, x1:x2] > 0).astype(np.uint8)
