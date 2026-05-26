@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>350+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>9 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70 个测试</b>
+  <b>370+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>10 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
 </p>
 
 ---
@@ -37,9 +37,11 @@ flowchart TB
     subgraph ONLINE["🔴 在线检测系统 (seat_defect_core)"]
         direction LR
         CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
-        YOLO --> PC["EfficientAD<br/>异常评分"]
-        PC --> FC["Filter<br/>分类器"]
-        FC --> RE["规则引擎<br/>后处理"]
+        YOLO --> PC["EfficientAD<br/>异常评分 + 特征提取"]
+        PC --> RP["Region Proposal<br/>热力图→连通域→裁剪"]
+        RP --> FC["Dual-Modal Filter<br/>图像+特征双模态分类"]
+        FC --> AG["Proposal Aggregation<br/>加权聚合判定"]
+        AG --> RE["规则引擎<br/>后处理"]
         RE --> DECISION{"OK / NG"}
     end
 
@@ -65,8 +67,8 @@ flowchart TB
         DEPLOY --> HOT["🔴 在线热重载<br/>Canary · Checksum · 回滚"]
     end
 
-    ONLINE -->|"NG 自动上传<br/>fire-and-forget"| INGEST
-    HOT -->|"reload.signal<br/>模型自动切换"| FC
+    ONLINE -->|"NG 自动上传<br/>PatchProposal + Features"| INGEST
+    HOT -->|"reload.signal<br/>Dual-Modal Filter 热重载"| FC
 ```
 
 ---
@@ -139,10 +141,13 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD → <b>Filter Classifier</b> → <b>Rule Engine</b> → Fusion</li>
-        <li>Filter Classifier 推理引擎：TorchScript 模型加载，ImageNet 标准化预处理，抑制 EfficientAD 误报</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Region Proposal</b> → <b>Dual-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher 多层特征 + Student-Teacher 差异，保留 anomaly representation 而非仅 score</li>
+        <li><b>Region Proposal Refinement</b>：热力图 → 自适应阈值 → 形态学清理 → 连通域 → 区域裁剪，每个 defect patch 独立送入 Filter</li>
+        <li><b>Dual-Modal Filter</b>：MobileNetV3-Small (448²) 图像分支 + EfficientAD 特征分支 → Late Fusion → 二分类，Feature Dropout 保证纯图像 fallback</li>
+        <li><b>Proposal Aggregation</b>：加权聚合 (area^0.5 × score)，Generation 优化 Recall，Aggregation 优化 Precision</li>
         <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
-        <li>规则引擎后处理：可配置阈值规则（异常分数/patch 数/patch 比例），支持 suppress_to_ok / flag_for_review</li>
+        <li>规则引擎后处理：可配置阈值规则，支持 suppress_to_ok / flag_for_review</li>
         <li>多区域 EfficientAD 支持，按区域独立判定 + 合并状态逻辑</li>
       </ul>
     </td>
@@ -263,6 +268,12 @@ flowchart TB
 
 ```
 offline-analysis-platform/
+├── defect_protocol/                   # 共享数据协议包（PatchProposal 统一契约）
+│   ├── defect_protocol/
+│   │   ├── entities.py                 #   PatchProposal, EfficientADFeatures 等 dataclass
+│   │   ├── serialization.py            #   JSON/dict 序列化
+│   │   └── types.py                    #   类型别名
+│   └── tests/
 ├── backend/                          # Python 后端（160+ 文件）
 │   ├── app/
 │   │   ├── api/                      # 17 个 FastAPI 路由，65+ 端点
@@ -320,11 +331,15 @@ offline-analysis-platform/
 │       ├── hooks/                    # useApi 通用 hook
 │       ├── components/ui/            # PageHeader 等共享 UI 组件
 │       └── lib/                      # constants 等共享常量
-└── ml/                               # ML 模块（14 文件）
+└── ml/                               # ML 模块（18 文件）
     ├── embedding/                    # DINOv2-S 提取器（384 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
-    ├── classifier/                   # Filter Classifier 训练器
-    │   ├── trainer.py                #   MobileNetV3/EfficientNet/ResNet 二元分类
+    ├── classifier/                   # Filter Classifier
+    │   ├── dual_modal/               #   Dual-Modal Filter（图像+特征双模态）
+    │   │   ├── model.py              #     MobileNetV3 + EfficientAD Feature → Late Fusion
+    │   │   ├── trainer.py            #     FocalLoss + 双学习率 + Feature Dropout
+    │   │   ├── dataset.py            #     图像 + EfficientAD 特征加载
+    │   │   └── config.py             #     训练超参
     │   └── metric_learning.py        #   📐 ArcFace + Triplet Loss 度量学习
     └── vlm/                          # Qwen2.5-VL 多模态分析器
 ```
@@ -344,7 +359,11 @@ seat_defect_core/
 ├── api.py                            # SeatDefectInspector 入口，含自动上传调度
 ├── classifier/
 │   ├── __init__.py
-│   └── engine.py                     # FilterClassifierService：TorchScript 推理 + 故障安全
+│   └── engine.py                     # DualModalFilter 推理引擎：图像+特征双模态 + 故障安全
+├── proposal/                         # 🔬 Region Proposal 模块
+│   ├── generator.py                  #   热力图→连通域→区域裁剪
+│   ├── aggregation.py                #   加权聚合 (area × score)
+│   └── config.py                     #   Proposal 超参配置
 ├── service/
 │   ├── core.py                       # InspectionService + ModelBundleCache（含分类器缓存/自动加载）
 │   ├── inspection_camera.py          # 单机位检测流程（含分类器推理 + 规则引擎接入）
@@ -544,7 +563,7 @@ mkdir -p sample_images
 
 ```
 1. 在线 NG → seat_defect_core 检测到 NG 后，daemon 线程异步上传
-   ROI 图片 + 元数据到 POST /api/anomaly/upload-with-files
+   ROI 图片 + PatchProposals + EfficientAD 特征到 POST /api/anomaly/upload-with-files
                     ↓
 2. Mask Refine → GrabCut 背景消除 + CLAHE 光照标准化
                     ↓
@@ -594,7 +613,16 @@ mkdir -p sample_images
         "enabled": true,
         "model_path": "./deployed_models/line_a/filter_classifier/",
         "device": "cuda",
+        "input_size": 448,
         "confidence_threshold": 0.5
+      },
+      "proposal": {
+        "heatmap_threshold_mode": "adaptive",
+        "heatmap_adaptive_std_multiplier": 1.5,
+        "min_component_area": 16,
+        "max_proposals": 20,
+        "context_padding_ratio": 0.10,
+        "aggregation_method": "weighted_confidence"
       },
       "rule_engine": {
         "enabled": true,
@@ -612,7 +640,7 @@ mkdir -p sample_images
 }
 ```
 
-> **关键设计**：Filter Classifier **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，若判定为误报则降级为 OK，绝不将 OK 改为 NG。推理失败时默认 `is_real_defect=True`（故障安全）。
+> **关键设计**：Dual-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+特征双模态判定，若判定为误报则降级为 OK，绝不将 OK 改为 NG。Feature Dropout 保证纯图像 fallback。推理失败时默认 `is_real_defect=True`（故障安全）。Region Proposal 将 ROI 拆分为独立 defect patch，加权聚合得出最终判定。
 
 ---
 
@@ -629,6 +657,7 @@ mkdir -p sample_images
 
 | 原则 | 实践 |
 |---|---|
+| **统一数据协议** | `defect_protocol/` 定义 `PatchProposal` 统一数据契约，在线推理和离线训练共享同一套数据结构 |
 | **严格分层架构** | API 层只处理 HTTP，零数据库访问、零业务逻辑 |
 | **Protocol 接口抽象** | `EmbeddingExtractor` 和 `VLMAnalyzer` 采用 Protocol 定义，替换模型无需改动业务代码 |
 | **全链路异步** | Async FastAPI + async SQLAlchemy + async MinIO，CPU/GPU 密集型任务全部交 Celery Worker 异步执行 |
