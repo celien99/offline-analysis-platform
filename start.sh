@@ -114,12 +114,12 @@ log_info "Docker 已运行"
 # 2. Python
 log_step "检查 Python..."
 PYTHON_BIN=""
-if [ -f backend/.venv/bin/python ]; then
-    PYTHON_BIN="backend/.venv/bin/python"
-    log_info "使用 backend/.venv/bin/python"
+if [ -f .venv/bin/python ]; then
+    PYTHON_BIN=".venv/bin/python"
+    log_info "使用 .venv/bin/python"
 elif command -v python3 &>/dev/null; then
     PYTHON_BIN="python3"
-    log_warn "未找到 backend/.venv，使用系统 python3"
+    log_warn "未找到 .venv，使用系统 python3"
 else
     log_error "Python 3.11+ 未安装"
     exit 1
@@ -127,13 +127,9 @@ fi
 
 # 3. 依赖检查
 log_step "检查依赖安装..."
-if [ ! -f backend/.venv/bin/python ]; then
-    log_warn "后端 .venv 不存在，正在安装..."
-    (cd backend && uv sync) || { log_error "后端依赖安装失败"; exit 1; }
-fi
-if [ ! -f seat_defect_core/.venv/bin/python ]; then
-    log_warn "seat_defect_core .venv 不存在，正在安装..."
-    (cd seat_defect_core && uv sync) || log_warn "seat_defect_core 依赖安装失败（可稍后手动安装）"
+if [ ! -f .venv/bin/python ]; then
+    log_warn "workspace .venv 不存在，正在安装..."
+    uv sync --all-packages || { log_error "依赖安装失败"; exit 1; }
 fi
 
 # ---- 启动 Docker 基础设施 ----
@@ -158,7 +154,7 @@ log_info "Redis 就绪"
 
 # ---- 数据库迁移 ----
 log_step "运行数据库迁移..."
-(cd backend && .venv/bin/python -m alembic upgrade head) || log_warn "数据库迁移失败（可能已是最新）"
+(cd backend && ../.venv/bin/python -m alembic upgrade head) || log_warn "数据库迁移失败（可能已是最新）"
 
 # ---- 启动后端 API ----
 # 先停掉可能已在 Docker 中运行的 API 容器（避免端口 8000 冲突）
@@ -176,7 +172,7 @@ if [ -n "$EXISTING_8000" ]; then
 fi
 
 log_step "启动后端 API (port 8000)..."
-(cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
+(cd backend && ../.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000) &
 API_PID=$!
 sleep 2
 
@@ -191,7 +187,7 @@ fi
 
 # ---- 启动 Celery Worker ----
 log_step "启动 Celery Worker（本地开发模式）..."
-(cd backend && .venv/bin/celery -A app.infrastructure.queue.celery_app worker -l info -c 2) &
+(cd backend && ../.venv/bin/celery -A app.infrastructure.queue.celery_app worker -l info -c 2) &
 WORKER_PID=$!
 sleep 2
 
@@ -242,7 +238,7 @@ echo "  MinIO 控制台: http://localhost:9001 (minioadmin/minioadmin)"
 echo "  MLflow:       http://localhost:5001"
 echo ""
 echo "  在线检测命令:"
-echo "    ./seat_defect_core/.venv/bin/python -m seat_defect_core \\"
+echo "    uv run python -m seat_defect_core \\"
 echo "      --config seat_defect_core/config.example.json \\"
 echo "      --images \"cam_front=sample.jpg\""
 echo ""

@@ -126,25 +126,6 @@ services:
     command: mlflow server --host 0.0.0.0 --port 5001
     restart: unless-stopped
 
-  # 在线检测核心（可选，仅 --profile demo 时启动）
-  inspector:
-    build:
-      context: ..
-      dockerfile: seat_defect_core/Dockerfile
-    profiles:
-      - demo
-    environment:
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ../seat_defect_core/config.example.json:/app/config.json:ro
-      - ../sample_images:/data/images:ro
-      - deployed_models:/data/models:ro
-    depends_on:
-      api:
-        condition: service_started
-    command: ["--config", "/app/config.json", "--upload", "http://api:8000"]
-    restart: "no"
-
 volumes:
   pgdata:
   redisdata:

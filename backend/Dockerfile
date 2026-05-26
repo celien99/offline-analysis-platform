@@ -10,15 +10,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 先复制依赖描述文件（利用 Docker 层缓存：依赖未变时跳过重装）
-COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen
+# Copy workspace dependency manifests (layer caching)
+COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml ./backend/
+COPY ml/pyproject.toml ./ml/
+COPY defect_protocol/pyproject.toml ./defect_protocol/
 
-# 复制应用代码
-COPY backend/app/ ./app/
-COPY backend/alembic.ini .
-COPY backend/alembic/ ./alembic/
+# Install dependencies (cached unless pyproject.toml/uv.lock changes)
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-workspace
+
+# Copy source code
+COPY backend/app/ ./backend/app/
+COPY backend/alembic.ini ./backend/
+COPY backend/alembic/ ./backend/alembic/
 COPY ml/ ./ml/
+COPY defect_protocol/ ./defect_protocol/
+
+# Install workspace members as editable
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000

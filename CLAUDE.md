@@ -5,31 +5,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 Package manager is **uv** for Python (not pip). Python version: **3.11**.
-此仓库包含 3 个独立组件，各自管理依赖：
+仓库采用 **uv workspace monorepo** 架构，根目录统一管理所有 Python 包依赖。
 
 ```bash
+# ===================== 首次安装依赖 =====================
+uv sync --all-packages                                # 一次性安装 workspace 所有包 + 创建 .venv
+
 # ===================== 基础设施（Docker） =====================
 docker compose -f backend/docker-compose.yml up -d   # 启动 db/redis/minio/mlflow/worker
 
 # ===================== 后端 API =====================
-cd backend
-cp .env.example .env                                  # 首次：创建环境变量文件
-uv sync                                               # 安装依赖 + 创建 .venv
-uv run alembic upgrade head                           # 运行数据库迁移
-uv run uvicorn app.main:app --reload --port 8000      # 开发服务器 (http://localhost:8000)
+cp backend/.env.example backend/.env                  # 首次：创建环境变量文件
+uv run --directory backend alembic upgrade head       # 运行数据库迁移
+uv run --directory backend uvicorn app.main:app --reload --port 8000  # 开发服务器 (http://localhost:8000)
 
 # Worker（本地开发用，start.sh 已自动启动）
-uv run celery -A app.infrastructure.queue.celery_app worker -l info -c 2
+uv run --directory backend celery -A app.infrastructure.queue.celery_app worker -l info -c 2
 
 # 测试 & 检查
-uv run pytest -v                                      # 全部测试
-uv run pytest app/tests/test_api.py -v                # 单个测试文件
-uv run ruff check app                                 # lint
-uv run mypy app                                       # type check (mypy strict)
+uv run --directory backend pytest -v                  # 全部测试
+uv run --directory backend pytest app/tests/test_api.py -v  # 单个测试文件
+uv run ruff check backend/app                         # lint
+uv run mypy backend/app                               # type check (mypy strict)
 
 # ===================== 在线检测核心 =====================
-cd seat_defect_core
-uv sync                                               # 安装依赖 (torch, cv2, ultralytics, etc.)
 uv run python -m seat_defect_core --help
 uv run python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
@@ -42,7 +41,7 @@ pnpm run build                                        # typecheck + build
 
 # ===================== 端到端 Demo =====================
 # 准备测试图片：mkdir -p sample_images，放入 {camera_id}.jpg 格式图片
-./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
+uv run python scripts/demo_full_loop.py \
   --backend http://localhost:8000 --images ./sample_images
 ```
 
@@ -101,6 +100,9 @@ These conventions are enforced in the existing code and must be followed for any
 ## Project Structure (Target)
 
 ```
+pyproject.toml    # uv workspace 根配置
+uv.lock           # workspace 统一 lockfile
+
 backend/
   app/
     api/           # FastAPI routers by domain (anomaly/, cluster/, review/, training/, registry/)
@@ -115,8 +117,11 @@ backend/
     common/        # Shared utilities
     tests/
   scripts/
-  docker/
-  deployment/
+  pyproject.toml
+
+defect_protocol/
+  defect_protocol/  # Shared protocol types (BoundingBox, PatchProposal, etc.)
+  tests/
   pyproject.toml
 
 frontend/
@@ -130,6 +135,11 @@ ml/
   classifier/
   clustering/
   vlm/
+  alignment/
+  pyproject.toml
+
+seat_defect_core/
+  pyproject.toml
 ```
 
 ## Implementation Order

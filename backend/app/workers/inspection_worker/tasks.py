@@ -45,7 +45,7 @@ def run_inspection_task(
         # 仓库根目录：从当前文件位置推算（避免 venv symlink 干扰）
         # tasks.py -> inspection_worker -> workers -> app -> backend -> repo_root
         repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
-        python_bin = str(repo_root / "seat_defect_core" / ".venv" / "bin" / "python")
+        python_bin = str(repo_root / ".venv" / "bin" / "python")
 
         cmd = [
             python_bin, "-m", "seat_defect_core", "inspect",
