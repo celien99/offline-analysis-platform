@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -213,23 +214,37 @@ def train_filter_classifier(
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        train_ds = _ImageDataset(train_imgs, train_lbls, transform)
-        val_ds = _ImageDataset(val_imgs, val_lbls, transform)
+        from ml.classifier.dual_modal.dataset import DualModalDataset
+
+        train_dataset = DualModalDataset(
+            images=train_imgs, labels=train_lbls,
+            image_size=448, augment=augmentations,
+        )
+        val_dataset = DualModalDataset(
+            images=val_imgs, labels=val_lbls,
+            image_size=448, augment=False,
+        )
 
         output_dir = settings.model_dir / f"training_{generate_uuid()[:8]}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        from ml.classifier.trainer import FilterClassifierTrainer
+        from ml.classifier.dual_modal import DualModalTrainer, DualModalConfig
 
         import torch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        trainer = FilterClassifierTrainer(
-            model_type=model_type,
+        config = DualModalConfig(
             num_classes=num_classes,
-            device=device,
+            image_size=448,
             learning_rate=learning_rate,
+            image_branch_lr=learning_rate * 0.1,
+            batch_size=batch_size,
+            epochs=epochs,
+            early_stopping_patience=10,
+            class_names=class_names or ["false_alarm", "real_defect"],
+            output_dir=output_dir,
         )
+        trainer = DualModalTrainer(config=config, device=device)
 
         with mlflow.start_run() as run:
             mlflow_run_id = run.info.run_id
@@ -246,33 +261,14 @@ def train_filter_classifier(
                 "train_type": "fine_tune" if fine_tune else "full",
             })
 
-            if fine_tune and checkpoint_path:
-                metrics = trainer.fine_tune(
-                    checkpoint_path=checkpoint_path,
-                    train_dataset=train_ds,
-                    val_dataset=val_ds,
-                    batch_size=batch_size,
-                    epochs=epochs,
-                    class_names=class_names,
-                    output_dir=output_dir,
-                )
-            else:
-                metrics = trainer.train(
-                    train_dataset=train_ds,
-                    val_dataset=val_ds,
-                    batch_size=batch_size,
-                    epochs=epochs,
-                    class_names=class_names,
-                    output_dir=output_dir,
-                )
+            metrics = trainer.train(train_dataset, val_dataset, output_dir=output_dir)
 
             numeric_metrics = {
                 k: v for k, v in metrics.items() if isinstance(v, (float, int))
             }
             mlflow.log_metrics(numeric_metrics)
 
-            torchscript_path = output_dir / "model.pt"
-            trainer.export_torchscript(torchscript_path)
+            torchscript_path = trainer.export_torchscript(os.path.join(str(output_dir), "model.pt"))
 
             mlflow.log_artifact(str(torchscript_path), artifact_path="model")
             # 模型注册 API 在旧版 MLflow 中可能不可用，失败不阻塞训练
@@ -288,7 +284,7 @@ def train_filter_classifier(
         model_version = run_async(_create_model_version(
             model_name=f"filter_classifier_{model_type}",
             model_type=model_type,
-            artifact_path=str(torchscript_path.resolve()),
+            artifact_path=str(Path(torchscript_path).resolve()),
             metrics=numeric_metrics,
             mlflow_run_id=mlflow_run_id,
         ))
