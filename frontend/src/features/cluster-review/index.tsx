@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, Table, Button, Input, Space, Tag, Modal, Descriptions, message } from "antd";
+import { Card, Table, Button, Input, Space, Modal, Descriptions, Tag, message, Row, Col } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
-import type { ClusterSummary, DualTrackComparisonResult } from "../../types";
+import type { ClusterSummary } from "../../types";
 import { useClusterList, useClusterDetail, useClusterReview, useDualTrackComparison } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useClusterColumns } from "./components/ClusterTable";
-import ClusterDetailModal from "./components/ClusterDetailModal";
+import ClusterDetailPanel from "./components/ClusterDetailPanel";
 import ReviewModal from "./components/ReviewModal";
+import { TableSkeleton } from "../../components/ui/StateSkeleton";
 
 export default function ClusterReview() {
   const [searchParams] = useSearchParams();
   const urlClusterId = searchParams.get("cluster_id");
 
   const [page, setPage] = useState(1);
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
-  const [detailVisible, setDetailVisible] = useState(false);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(urlClusterId ?? null);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [reviewAction, setReviewAction] = useState<"confirm_defect" | "mark_false_alarm">("confirm_defect");
   const [defectType, setDefectType] = useState<string | undefined>();
@@ -25,20 +25,11 @@ export default function ClusterReview() {
   const [regionFilter, setRegionFilter] = useState<string | undefined>();
   const [compareVisible, setCompareVisible] = useState(false);
 
-  // 双轨对比
   const { data: compareData, refetch: refetchCompare, isFetching: compareLoading } = useDualTrackComparison({
     seat_model_id: seatModelFilter,
     camera_id: cameraFilter,
     region_id: regionFilter,
   });
-
-  // URL 携带 cluster_id 时自动打开详情
-  useEffect(() => {
-    if (urlClusterId) {
-      setSelectedClusterId(urlClusterId);
-      setDetailVisible(true);
-    }
-  }, [urlClusterId]);
 
   const { data: listData, isLoading, refetch } = useClusterList(page, {
     seatModelId: seatModelFilter,
@@ -50,11 +41,9 @@ export default function ClusterReview() {
 
   const handleViewDetail = (clusterId: string) => {
     setSelectedClusterId(clusterId);
-    setDetailVisible(true);
   };
 
   const handleReview = (cluster: ClusterSummary, action: "confirm_defect" | "mark_false_alarm") => {
-    setSelectedClusterId(cluster.cluster_id);
     setReviewAction(action);
     setDefectType(undefined);
     setComment("");
@@ -78,7 +67,11 @@ export default function ClusterReview() {
     }
   };
 
-  const columns = useClusterColumns({ clusters: listData?.clusters ?? [], onViewDetail: handleViewDetail, onReview: handleReview });
+  const columns = useClusterColumns({
+    clusters: listData?.clusters ?? [],
+    onViewDetail: handleViewDetail,
+    onReview: handleReview,
+  });
 
   return (
     <div>
@@ -113,23 +106,43 @@ export default function ClusterReview() {
         }
       />
 
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={listData?.clusters ?? []}
-          rowKey="cluster_id"
-          loading={isLoading}
-          pagination={{
-            current: page,
-            total: listData?.total ?? 0,
-            pageSize: 20,
-            onChange: setPage,
-            showTotal: (t) => `共 ${t} 个聚类`,
-          }}
-        />
-      </Card>
-
-      <ClusterDetailModal cluster={selectedCluster ?? null} open={detailVisible} onClose={() => setDetailVisible(false)} />
+      <Row gutter={16}>
+        <Col xs={24} lg={10}>
+          <Card className="industrial-card">
+            {isLoading ? (
+              <TableSkeleton />
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={listData?.clusters ?? []}
+                rowKey="cluster_id"
+                size="small"
+                pagination={{
+                  current: page,
+                  total: listData?.total ?? 0,
+                  pageSize: 20,
+                  onChange: setPage,
+                  showTotal: (t) => `共 ${t} 个聚类`,
+                  size: "small",
+                }}
+                onRow={(record) => ({
+                  onClick: () => handleViewDetail(record.cluster_id),
+                  style: {
+                    cursor: "pointer",
+                    background: selectedClusterId === record.cluster_id ? "#e6f4ff" : undefined,
+                  },
+                })}
+              />
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={14}>
+          <ClusterDetailPanel
+            cluster={selectedCluster ?? null}
+            onReview={handleReview}
+          />
+        </Col>
+      </Row>
 
       <ReviewModal
         cluster={selectedCluster ?? null}
@@ -144,7 +157,6 @@ export default function ClusterReview() {
         onClose={() => setReviewVisible(false)}
       />
 
-      {/* ── 双轨对比 Modal ── */}
       <Modal
         title="双轨聚类对比 (Raw vs Refined Embedding)"
         open={compareVisible}
@@ -161,42 +173,18 @@ export default function ClusterReview() {
             </p>
             <Descriptions column={2} size="small" bordered>
               <Descriptions.Item label="指标"> </Descriptions.Item>
-              <Descriptions.Item label="Raw">
-                <Tag color="blue">原始</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Refined">
-                <Tag color="green">精化</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="样本数">
-                {compareData.raw?.sample_count ?? "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="样本数">
-                {compareData.refined?.sample_count ?? "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="簇数量">
-                {compareData.raw?.cluster_count ?? "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="簇数量">
-                {compareData.refined?.cluster_count ?? "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="噪声率">
-                {compareData.raw ? (compareData.raw.noise_rate * 100).toFixed(1) + "%" : "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="噪声率">
-                {compareData.refined ? (compareData.refined.noise_rate * 100).toFixed(1) + "%" : "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="最大簇占比">
-                {compareData.raw ? (compareData.raw.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="最大簇占比">
-                {compareData.refined ? (compareData.refined.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="平均簇大小">
-                {compareData.raw?.avg_cluster_size.toFixed(1) ?? "-"}
-              </Descriptions.Item>
-              <Descriptions.Item label="平均簇大小">
-                {compareData.refined?.avg_cluster_size.toFixed(1) ?? "-"}
-              </Descriptions.Item>
+              <Descriptions.Item label={<Tag color="blue">原始</Tag>}> </Descriptions.Item>
+              <Descriptions.Item label={<Tag color="green">精化</Tag>}> </Descriptions.Item>
+              <Descriptions.Item label="样本数">{compareData.raw?.sample_count ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="样本数">{compareData.refined?.sample_count ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="簇数量">{compareData.raw?.cluster_count ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="簇数量">{compareData.refined?.cluster_count ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="噪声率">{compareData.raw ? (compareData.raw.noise_rate * 100).toFixed(1) + "%" : "-"}</Descriptions.Item>
+              <Descriptions.Item label="噪声率">{compareData.refined ? (compareData.refined.noise_rate * 100).toFixed(1) + "%" : "-"}</Descriptions.Item>
+              <Descriptions.Item label="最大簇占比">{compareData.raw ? (compareData.raw.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}</Descriptions.Item>
+              <Descriptions.Item label="最大簇占比">{compareData.refined ? (compareData.refined.max_cluster_ratio * 100).toFixed(1) + "%" : "-"}</Descriptions.Item>
+              <Descriptions.Item label="平均簇大小">{compareData.raw?.avg_cluster_size.toFixed(1) ?? "-"}</Descriptions.Item>
+              <Descriptions.Item label="平均簇大小">{compareData.refined?.avg_cluster_size.toFixed(1) ?? "-"}</Descriptions.Item>
             </Descriptions>
           </div>
         ) : (
