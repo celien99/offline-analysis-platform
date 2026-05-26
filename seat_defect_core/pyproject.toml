@@ -11,11 +11,15 @@ dependencies = [
     "torchvision>=0.18.0",
     "ultralytics>=8.2.0",
     "requests>=2.31.0",
+    "defect_protocol",
 ]
 
 [build-system]
 requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+defect_protocol = { path = "../defect_protocol", editable = true }
 
 [tool.uv]
 package = false
