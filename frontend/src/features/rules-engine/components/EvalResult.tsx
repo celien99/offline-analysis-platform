@@ -1,6 +1,6 @@
-import { Card, Descriptions, Tag, Table, Typography } from "antd";
+import { Card, Statistic, Tag, Typography, Row, Col, Empty } from "antd";
+import { CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import type { EvalResult } from "../../../types";
-import { RULE_TYPE_COLOR_MAP } from "../../../lib/constants";
 
 const { Text } = Typography;
 
@@ -9,39 +9,39 @@ interface Props {
 }
 
 export default function EvalResultDisplay({ result }: Props) {
+  const isIgnore = result.action === "ignore";
+  const isEscalate = result.action === "escalate";
+
   return (
-    <Card title="评估结果" size="small" className="mt-4">
-      <Descriptions column={2} size="small">
-        <Descriptions.Item label="最终动作">
-          <Tag
-            color={result.action === "ignore" ? "green" : result.action === "escalate" ? "red" : "orange"}
-            className="text-sm px-2 py-1"
-          >
-            {result.action.toUpperCase()}
-          </Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="匹配规则数">
-          <Text strong>{result.rule_count}</Text>
-        </Descriptions.Item>
-      </Descriptions>
-      {result.matched_rules.length > 0 && (
-        <Table
-          className="mt-3"
-          dataSource={result.matched_rules}
-          rowKey="rule_id"
-          size="small"
-          pagination={false}
-          columns={[
-            { title: "名称", dataIndex: "name", key: "name" },
-            {
-              title: "类型",
-              dataIndex: "type",
-              key: "type",
-              render: (t: string) => <Tag color={RULE_TYPE_COLOR_MAP[t] || "default"}>{t}</Tag>,
-            },
-            { title: "优先级", dataIndex: "priority", key: "priority" },
-          ]}
-        />
+    <Card title="评估结果" className="mt-4 industrial-card">
+      <Row gutter={[24, 16]}>
+        <Col span={8}>
+          <Statistic
+            title="最终动作"
+            value={result.action.toUpperCase()}
+            valueStyle={{ color: isEscalate ? "var(--color-defect)" : isIgnore ? "var(--color-false-alarm)" : "var(--color-pending)" }}
+            prefix={isIgnore ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          />
+        </Col>
+        <Col span={8}>
+          <Statistic title="匹配规则数" value={result.rule_count} />
+        </Col>
+        <Col span={8}>
+          <Statistic title="匹配样本数" value={result.matched_rules?.length ?? 0} />
+        </Col>
+      </Row>
+
+      {result.matched_rules && result.matched_rules.length > 0 ? (
+        <div className="mt-4">
+          <Text strong className="block mb-2">命中规则</Text>
+          {result.matched_rules.map((rule) => (
+            <Tag key={rule.rule_id} color="green" className="mb-1">
+              {rule.name} (优先级: {rule.priority})
+            </Tag>
+          ))}
+        </div>
+      ) : (
+        <Empty description="无匹配规则" className="mt-4" />
       )}
     </Card>
   );
