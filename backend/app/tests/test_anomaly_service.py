@@ -28,7 +28,7 @@ async def test_create_anomaly_with_files_basic(
 
     anomalies = await service.create_anomaly_with_files(
         camera_id="cam_01",
-        source="patchcore",
+        source="efficientad",
         anomaly_score=0.87,
         date_folder="2025-06-15",
         detected_at=detected,

@@ -31,7 +31,7 @@ class AnomalyService:
         camera_id: str,
         seat_model_id: str | None = None,
         region_id: str | None = None,
-        source: str = "patchcore",
+        source: str = "efficientad",
         anomaly_score: float | None = None,
         date_folder: str,
         detected_at: datetime,

@@ -33,9 +33,9 @@ class CameraConfig(BaseModel):
     )
 
     # 模型引用 → model_versions.id
-    patchcore_model_version_id: Mapped[str | None] = mapped_column(
+    efficientad_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="整体 PatchCore 模型版本 ID",
+        nullable=True, comment="整体 EfficientAD 模型版本 ID",
     )
     yolo_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
@@ -45,11 +45,11 @@ class CameraConfig(BaseModel):
     detection_confidence: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.25, comment="YOLO 置信度阈值",
     )
-    patchcore_image_size: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=256, comment="PatchCore 输入图像尺寸",
+    efficientad_image_size: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=256, comment="EfficientAD 输入图像尺寸",
     )
-    patchcore_threshold: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.99, comment="PatchCore 异常阈值分位数",
+    efficientad_threshold: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.99, comment="EfficientAD 异常阈值分位数",
     )
     region_mode_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, comment="是否启用三分区模式",
@@ -64,13 +64,13 @@ class CameraConfig(BaseModel):
     # 三分区模型引用
     region_upper_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="upper 区域 PatchCore 模型版本 ID",
+        nullable=True, comment="upper 区域 EfficientAD 模型版本 ID",
     )
     region_middle_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="middle 区域 PatchCore 模型版本 ID",
+        nullable=True, comment="middle 区域 EfficientAD 模型版本 ID",
     )
     region_lower_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="lower 区域 PatchCore 模型版本 ID",
+        nullable=True, comment="lower 区域 EfficientAD 模型版本 ID",
     )

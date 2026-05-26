@@ -31,7 +31,7 @@ async def upload_anomaly_with_files(
     seat_model_id: str | None = Form(default=None, max_length=128),
     region_id: str | None = Form(default=None, max_length=64),
     source: str = Form(
-        default="patchcore", pattern=r"^(patchcore|filter_classifier|rule_engine)$"
+        default="efficientad", pattern=r"^(efficientad|filter_classifier|rule_engine)$"
     ),
     anomaly_score: float | None = Form(default=None, ge=0.0),
     date_folder: str = Form(..., max_length=16),

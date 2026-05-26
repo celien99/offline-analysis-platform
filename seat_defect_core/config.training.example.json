@@ -1,5 +1,5 @@
 {
-  "$comment": "PatchCore 训练专用最小配置。训练仅用到 cameras 列表，不需要 seat_models、fusion 等推理字段。",
+  "$comment": "EfficientAD 训练专用最小配置。训练仅用到 cameras 列表，不需要 seat_models、fusion 等推理字段。",
   "seat_defect_inspection": {
     "cameras": [
       {

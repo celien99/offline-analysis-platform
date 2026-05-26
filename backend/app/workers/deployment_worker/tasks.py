@@ -107,7 +107,7 @@ def watch_canary_metrics(
             ng_stmt = sa_select(func.count()).select_from(AnomalyRecord).where(
                 AnomalyRecord.deleted_at.is_(None),
                 AnomalyRecord.detected_at >= deployment.deployed_at,
-                AnomalyRecord.source == "patchcore",
+                AnomalyRecord.source == "efficientad",
             )
             ng_result = await session.execute(ng_stmt)
             ng_count = ng_result.scalar_one()

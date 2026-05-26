@@ -57,7 +57,7 @@ async def run_inspection_with_files(
     model_version_ids: set[str] = set()
     for c in cameras:
         for mv_id in (
-            c.patchcore_model_version_id,
+            c.efficientad_model_version_id,
             c.yolo_model_version_id,
             c.filter_classifier_model_version_id,
             c.region_upper_model_version_id,

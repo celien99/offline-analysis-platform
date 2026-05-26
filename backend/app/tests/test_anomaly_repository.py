@@ -15,7 +15,7 @@ async def test_create_anomaly(db_session: AsyncSession) -> None:
     anomaly = AnomalyRecord(
         id="test001",
         camera_id="cam_left_top",
-        source="patchcore",
+        source="efficientad",
         anomaly_score=0.85,
         date_folder="2026-05-20",
         detected_at=datetime.now(tz=timezone.utc),
@@ -58,7 +58,7 @@ async def test_update_status(db_session: AsyncSession) -> None:
     anomaly = AnomalyRecord(
         id="test003",
         camera_id="cam_front",
-        source="patchcore",
+        source="efficientad",
         anomaly_score=0.75,
         date_folder="2026-05-20",
         detected_at=datetime.now(tz=timezone.utc),
