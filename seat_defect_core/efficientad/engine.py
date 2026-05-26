@@ -5,77 +5,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import cv2
 import numpy as np
 
 try:
     import torch
-    import torch.nn.functional as F
 except ImportError:
     torch = None
-    F = None
 
 from .config import EfficientADConfig
 from ..core_types import TextureAnomalyResult
 
 IMAGENET_MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
-
-
-class _FeatureHookManager:
-    """Registers forward hooks on model layers to capture intermediate features."""
-
-    def __init__(self) -> None:
-        self._features: dict[str, torch.Tensor] = {}
-        self._handles: list[torch.utils.hooks.RemovableHandle] = []
-
-    def register(
-        self, model: torch.nn.Module, teacher_blocks: list[str], student_blocks: list[str]
-    ) -> None:
-        for name, module in model.named_modules():
-            for block_name in teacher_blocks:
-                if name.endswith(block_name):
-                    h = module.register_forward_hook(self._make_hook(f"teacher_{block_name}"))
-                    self._handles.append(h)
-            for block_name in student_blocks:
-                if name.endswith(block_name):
-                    h = module.register_forward_hook(self._make_hook(f"student_{block_name}"))
-                    self._handles.append(h)
-
-    def _make_hook(self, name: str) -> Callable:
-        def hook(module: Any, input: Any, output: Any) -> None:
-            self._features[name] = output.detach() if isinstance(output, torch.Tensor) else output[0].detach()
-
-        return hook
-
-    def get_features(self) -> dict[str, torch.Tensor]:
-        return dict(self._features)
-
-    def compute_difference(self) -> torch.Tensor | None:
-        """Compute |student - teacher| difference from captured features."""
-        student_keys = [k for k in self._features if k.startswith("student_")]
-        teacher_keys = [k for k in self._features if k.startswith("teacher_")]
-        if not student_keys or not teacher_keys:
-            return None
-        diffs: list[torch.Tensor] = []
-        for sk, tk in zip(sorted(student_keys), sorted(teacher_keys)):
-            s = self._features[sk]
-            t = self._features[tk]
-            if s.shape == t.shape:
-                diffs.append(torch.abs(s - t).mean(dim=1, keepdim=True))
-        if not diffs:
-            return None
-        return torch.cat(diffs, dim=1)
-
-    def remove(self) -> None:
-        for h in self._handles:
-            h.remove()
-        self._handles.clear()
-        self._features.clear()
 
 
 class EfficientADService:
@@ -88,8 +33,6 @@ class EfficientADService:
         self.device = _resolve_device(config.device)
         self.model: Optional[torch.jit.ScriptModule] = None
         self._image_threshold = config.image_threshold
-        self._feature_hooks: _FeatureHookManager | None = None
-        self._teacher_block_names = ["block1", "block2", "block3"]
         if config.model_path:
             self._load_model(config.model_path)
 
@@ -169,74 +112,6 @@ class EfficientADService:
             anomaly_map=anomaly_map,
             valid_pixel_ratio=valid_pixel_ratio,
         )
-
-    def predict_with_features(
-        self, image: np.ndarray, target_mask: np.ndarray, ignore_mask: np.ndarray
-    ) -> tuple[TextureAnomalyResult, dict[str, np.ndarray] | None]:
-        """Predict anomaly score AND harvest intermediate features."""
-        if self.model is None:
-            raise RuntimeError("EfficientAD model not loaded")
-
-        original_h, original_w = image.shape[:2]
-        valid_pixel_ratio = _compute_valid_pixel_ratio(target_mask, ignore_mask, image.shape[:2])
-
-        if valid_pixel_ratio < self.config.min_valid_pixel_ratio:
-            result = TextureAnomalyResult(
-                score=0.0, threshold=self._image_threshold, is_anomaly=False,
-                heatmap=np.zeros((original_h, original_w), dtype=np.float32),
-                anomaly_map=np.zeros((original_h, original_w), dtype=np.float32),
-                valid_pixel_ratio=valid_pixel_ratio,
-            )
-            return result, None
-
-        input_tensor = _prepare_input(image, self.config.input_size).to(self.device)
-
-        # Register feature hooks
-        hooks = _FeatureHookManager()
-        hooks.register(self.model, self._teacher_block_names, [])
-
-        with torch.inference_mode():
-            output = self.model(input_tensor)
-
-        hooks.remove()
-
-        # Parse anomaly output (same logic as predict())
-        if isinstance(output, (tuple, list)):
-            anomaly_map_tensor = output[0]
-            anomaly_score = float(output[1].item()) if len(output) > 1 else 0.0
-        elif torch.is_tensor(output):
-            anomaly_map_tensor = output
-            anomaly_score = float(anomaly_map_tensor.mean().item())
-        else:
-            anomaly_map_tensor = output
-            anomaly_score = 0.0
-
-        anomaly_map = _resize_anomaly_map(anomaly_map_tensor, original_h, original_w)
-
-        if ignore_mask is not None and ignore_mask.any():
-            ignore_binary = _to_binary_mask(ignore_mask, (original_h, original_w))
-            anomaly_map[ignore_binary > 0] = 0.0
-
-        heatmap = anomaly_map.copy()
-        is_anomaly = anomaly_score > self._image_threshold
-
-        result = TextureAnomalyResult(
-            score=anomaly_score, threshold=self._image_threshold,
-            is_anomaly=is_anomaly, heatmap=heatmap, anomaly_map=anomaly_map,
-            valid_pixel_ratio=valid_pixel_ratio,
-        )
-
-        # Extract feature arrays
-        raw_features = hooks.get_features()
-        features: dict[str, np.ndarray] = {}
-        for name, tensor in raw_features.items():
-            if tensor.dim() == 4:
-                features[name] = tensor.cpu().numpy()
-        diff = hooks.compute_difference()
-        if diff is not None:
-            features["difference"] = diff.cpu().numpy()
-
-        return result, features if features else None
 
     def predict_batch(
         self,
