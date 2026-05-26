@@ -18,6 +18,7 @@ interface Props {
 export default function CreateKnowledgeForm({ form, open, submitting, initialClusterId, onSubmit, onClose }: Props) {
   const { data: clusterData, isLoading: clustersLoading } = useClusterList(
     1,
+    undefined,
     open, // 只在弹窗打开时请求
   );
 

@@ -20,6 +20,9 @@ class TrainingStartRequest(BaseModel):
     )
     augmentations: bool = True
     anomaly_ids: list[str] | None = None
+    seat_model_id: str | None = None
+    camera_id: str | None = None
+    region_id: str | None = None
 
 
 class MetricTrainingStartRequest(BaseModel):
@@ -34,6 +37,9 @@ class MetricTrainingStartRequest(BaseModel):
     learning_rate: float = Field(default=0.001, gt=0.0, le=0.1)
     validation_split: float = Field(default=0.2, gt=0.0, lt=1.0)
     anomaly_ids: list[str] | None = None
+    seat_model_id: str | None = None
+    camera_id: str | None = None
+    region_id: str | None = None
 
 
 class TrainingStatusResponse(BaseModel):

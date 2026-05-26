@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, Table, Button, message } from "antd";
+import { Card, Table, Button, Input, Space, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import type { ClusterSummary } from "../../types";
 import { useClusterList, useClusterDetail, useClusterReview } from "../../hooks/queries";
@@ -20,6 +20,9 @@ export default function ClusterReview() {
   const [reviewAction, setReviewAction] = useState<"confirm_defect" | "mark_false_alarm">("confirm_defect");
   const [defectType, setDefectType] = useState<string | undefined>();
   const [comment, setComment] = useState("");
+  const [seatModelFilter, setSeatModelFilter] = useState<string | undefined>();
+  const [cameraFilter, setCameraFilter] = useState<string | undefined>();
+  const [regionFilter, setRegionFilter] = useState<string | undefined>();
 
   // URL 携带 cluster_id 时自动打开详情
   useEffect(() => {
@@ -29,7 +32,11 @@ export default function ClusterReview() {
     }
   }, [urlClusterId]);
 
-  const { data: listData, isLoading, refetch } = useClusterList(page);
+  const { data: listData, isLoading, refetch } = useClusterList(page, {
+    seatModelId: seatModelFilter,
+    cameraId: cameraFilter,
+    regionId: regionFilter,
+  });
   const { data: selectedCluster } = useClusterDetail(selectedClusterId);
   const reviewMutation = useClusterReview();
 
@@ -69,7 +76,32 @@ export default function ClusterReview() {
     <div>
       <PageHeader
         title="聚类审核"
-        extra={<Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>}
+        extra={
+          <Space>
+            <Input
+              placeholder="座椅型号ID"
+              allowClear
+              style={{ width: 150 }}
+              value={seatModelFilter}
+              onChange={(e) => setSeatModelFilter(e.target.value || undefined)}
+            />
+            <Input
+              placeholder="相机ID"
+              allowClear
+              style={{ width: 120 }}
+              value={cameraFilter}
+              onChange={(e) => setCameraFilter(e.target.value || undefined)}
+            />
+            <Input
+              placeholder="区域ID"
+              allowClear
+              style={{ width: 120 }}
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value || undefined)}
+            />
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
+          </Space>
+        }
       />
 
       <Card>

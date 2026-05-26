@@ -42,12 +42,19 @@ class NoiseReviewService:
     async def list_noise_anomalies(
         self, *, offset: int = 0, limit: int = 100,
         seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> tuple[list[AnomalyRecord], int]:
         records = await self._anomaly_repo.get_noise_anomalies(
-            offset=offset, limit=limit, seat_model_id=seat_model_id,
+            offset=offset, limit=limit,
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
         )
         total = await self._anomaly_repo.count_noise_anomalies(
             seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
         )
         return list(records), total
 

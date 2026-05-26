@@ -29,3 +29,6 @@ class TrainingResult:
     class_names: list[str] = field(default_factory=lambda: ["real_defect", "false_alarm"])
     trained_at: datetime | None = None
     status: str = "registered"
+    seat_model_id: str | None = None
+    camera_id: str | None = None
+    region_id: str | None = None

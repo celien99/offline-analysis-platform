@@ -19,6 +19,8 @@ class AnomalySample:
     status: str = "pending"
     detected_at: Timestamp | None = None
     metadata: dict[str, object] = field(default_factory=dict)
+    seat_model_id: str | None = None
+    region_id: str | None = None
 
 
 @dataclass

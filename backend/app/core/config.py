@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     umap_n_components: int = 2
     umap_n_neighbors: int = 15
 
+    # 数据隔离：各操作的最低样本量阈值，低于阈值自动回退到更粗粒度的隔离层级
+    isolation_clustering_min_samples: int = 50  # 聚类最少样本数
+    isolation_training_min_samples: int = 200    # 训练最少样本数
+
     # VLM（支持任意 OpenAI 兼容的视觉模型 API）
     vlm_model: str = "qwen2.5-vl"
     vlm_endpoint: str = "http://localhost:8001/v1"
