@@ -322,32 +322,32 @@ export default function CameraConfigPage() {
             {selectedSeatModel && (
               <Table
                 columns={[
-                  { title: "相机ID", dataIndex: "camera_id", width: 120 },
+                  { title: "相机ID", dataIndex: "camera_id", width: 100, ellipsis: true },
                   {
                     title: "YOLO 模型",
                     dataIndex: "yolo_model_version_id",
-                    width: 200,
+                    width: 160,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
                     title: "PatchCore 模型",
                     dataIndex: "patchcore_model_version_id",
-                    width: 200,
+                    width: 160,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
                     title: "Filter Classifier",
                     dataIndex: "filter_classifier_model_version_id",
-                    width: 180,
+                    width: 150,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
                     title: "Region 模式",
                     dataIndex: "region_mode_enabled",
-                    width: 100,
+                    width: 90,
                     render: (v: boolean) => (
                       <Tag color={v ? "blue" : "default"}>
                         {v ? "三分区" : "整体"}
@@ -356,9 +356,9 @@ export default function CameraConfigPage() {
                   },
                   {
                     title: "操作",
-                    width: 120,
+                    width: 100,
                     render: (_: unknown, record: CameraConfig) => (
-                      <Space>
+                      <Space size="small">
                         <Button
                           size="small"
                           icon={<EditOutlined />}
@@ -379,6 +379,7 @@ export default function CameraConfigPage() {
                 loading={camerasLoading}
                 pagination={false}
                 size="small"
+                scroll={{ x: 760 }}
               />
             )}
           </Card>
