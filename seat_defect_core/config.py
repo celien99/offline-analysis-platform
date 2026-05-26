@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Union
 
 from .efficientad import EfficientADConfig
 from .proposal.config import ProposalConfig  # noqa: F401
+from .tracking.config import TrackConfig  # noqa: F401
 
 
 @dataclass
@@ -168,6 +169,7 @@ class CameraConfig:
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
     rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
     proposal: ProposalConfig | None = None
+    track: TrackConfig | None = None
     regions: List[RegionConfig] = field(default_factory=list)
 
 

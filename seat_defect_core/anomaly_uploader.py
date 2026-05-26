@@ -70,6 +70,17 @@ def upload_camera_result(
     if result.seat_model_id:
         data["seat_model_id"] = result.seat_model_id
 
+        # Mark best-frame proposals from MATURE identities
+        for p in getattr(result, 'proposals', []):
+            identity_id = getattr(p, 'identity_id', None)
+            if identity_id:
+                # Include identity metadata in upload
+                if not hasattr(result, '_uploaded_identities'):
+                    result._uploaded_identities = set()
+                if identity_id not in result._uploaded_identities:
+                    data.setdefault("identity_ids", []).append(identity_id)
+                    result._uploaded_identities.add(identity_id)
+
     # 传递过滤器分类器决策元数据
     if result.filter_result is not None:
         fr = result.filter_result
