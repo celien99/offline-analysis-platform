@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import numpy as np
+import torch
 from PIL import Image
 
 from app.common.logging import get_logger
@@ -135,3 +137,95 @@ def batch_extract_embeddings(
         }
 
     return run_async(_batch())
+
+
+@celery_app.task(name="embedding.train_alignment")
+def train_alignment_projector(
+    anomaly_ids: list[str] | None = None,
+    epochs: int = 30,
+    batch_size: int = 64,
+    learning_rate: float = 1e-4,
+    seat_model_id: str | None = None,
+    output_dir: str | None = None,
+) -> dict[str, object]:
+    """Train alignment projector: EAD features into DINOv2 embedding space."""
+    logger.info("alignment_training_started", anomaly_count=len(anomaly_ids) if anomaly_ids else 0)
+
+    try:
+        from ml.alignment import AlignmentTrainer, AlignmentConfig
+        from ml.alignment.dataset import AlignmentDataset
+
+        # Load paired training data
+        ead_paths, dino_embs = run_async(
+            _load_alignment_pairs(anomaly_ids, seat_model_id)
+        )
+
+        if len(ead_paths) < 10:
+            return {"status": "skipped", "reason": "insufficient_pairs",
+                    "pair_count": len(ead_paths)}
+
+        # Train/val split
+        split = int(len(ead_paths) * 0.8)
+        train_ds = AlignmentDataset(ead_paths[:split], dino_embs[:split])
+        val_ds = AlignmentDataset(ead_paths[split:], dino_embs[split:])
+
+        default_output = str(Path(settings.model_artifact_dir) / "alignment")
+        config = AlignmentConfig(
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+            epochs=epochs,
+            output_dir=output_dir or default_output,
+        )
+        trainer = AlignmentTrainer(
+            config=config,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+        metrics = trainer.train(train_ds, val_ds)
+
+        ts_path = trainer.export_torchscript(
+            str(Path(config.output_dir) / "alignment_projector.pt"))
+
+        return {"status": "completed", "best_val_loss": metrics["best_val_loss"],
+                "torchscript_path": ts_path}
+    except Exception as e:
+        logger.exception("alignment_training_failed", error=str(e))
+        return {"status": "failed", "error": str(e)}
+
+
+async def _load_alignment_pairs(
+    anomaly_ids: list[str] | None,
+    seat_model_id: str | None,
+) -> tuple[list[str], list[list[float]]]:
+    """Load paired (EAD feature_path, DINOv2 embedding) from reviewed anomalies."""
+    from app.repositories.anomaly.repository import AnomalyRepository
+    from app.repositories.embedding.repository import EmbeddingRepository
+    from app.infrastructure.storage.minio import get_minio_client
+
+    repo = AnomalyRepository(db.session)
+    emb_repo = EmbeddingRepository(db.session)
+    minio = get_minio_client()
+
+    ead_paths: list[str] = []
+    dino_embs: list[list[float]] = []
+
+    # Query anomalies that have both EAD features (feature_ref) and DINOv2 embeddings
+    # For now, iterate reviewed anomalies and check both exist
+    anomalies = await repo.list_all(limit=10000)
+
+    for anomaly in anomalies:
+        if seat_model_id and anomaly.seat_model_id != seat_model_id:
+            continue
+        # Check if this anomaly has an embedding (DINOv2)
+        embedding = await emb_repo.get_by_anomaly_id(anomaly.id)
+        if embedding is None:
+            continue
+        # Check if EAD features exist (feature_ref stored in proposals JSON or as field)
+        # The feature_ref is stored per-proposal in the proposals.json
+        feature_ref = getattr(anomaly, 'feature_ref', None)
+        if feature_ref:
+            # Construct local path from MinIO key
+            # In production this would download from MinIO
+            ead_paths.append(feature_ref)
+            dino_embs.append(embedding.embedding.tolist() if hasattr(embedding.embedding, 'tolist') else list(embedding.embedding))
+
+    return ead_paths, dino_embs
