@@ -36,7 +36,6 @@ class EfficientADService:
         self.device = _resolve_device(config.device)
         self.model: Optional[torch.jit.ScriptModule] = None
         self._image_threshold = config.image_threshold
-        self._pixel_threshold = config.pixel_threshold
         if config.model_path:
             self._load_model(config.model_path)
 
@@ -53,7 +52,6 @@ class EfficientADService:
             import json
             meta = json.loads(meta_path.read_text("utf-8"))
             self._image_threshold = float(meta.get("image_threshold", self._image_threshold))
-            self._pixel_threshold = float(meta.get("pixel_threshold", self._pixel_threshold))
 
     def predict(
         self,
@@ -143,8 +141,10 @@ def _resolve_device(requested: str) -> torch.device:
 
 
 def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
-    """BGR → RGB → resize → normalize → tensor。"""
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if image.ndim == 3 and image.shape[2] == 3 else image
+    """BGR 或 RGBA → RGB → resize → normalize → tensor。"""
+    if image.ndim == 3 and image.shape[2] == 4:
+        image = image[:, :, :3]
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     resized = cv2.resize(rgb, (input_size, input_size), interpolation=cv2.INTER_AREA)
     normalized = (resized.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
     tensor = torch.from_numpy(np.transpose(normalized, (2, 0, 1))).unsqueeze(0).float()
