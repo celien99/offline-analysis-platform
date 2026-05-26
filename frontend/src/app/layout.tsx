@@ -77,14 +77,14 @@ export default function AppLayout({ children }: Props) {
   };
 
   return (
-    <Layout className="min-h-screen">
+    <Layout style={{ height: "100vh" }}>
       <Sider
         collapsible
         collapsed={collapsed}
         onCollapse={handleCollapse}
         width={220}
         collapsedWidth={64}
-        style={{ background: "var(--sider-bg)" }}
+        style={{ background: "var(--sider-bg)", overflow: "auto" }}
       >
         <div className="sider-logo h-12 mx-4 flex items-center justify-center text-white font-bold text-base truncate">
           {collapsed ? "AI" : "AI 进化平台"}
@@ -109,7 +109,7 @@ export default function AppLayout({ children }: Props) {
       </Sider>
       <Layout>
         <Header
-          className="bg-white px-6 flex items-center justify-between sticky top-0 z-10 border-b border-gray-100"
+          className="bg-white px-6 flex items-center justify-between border-b border-gray-100"
         >
           <div className="flex items-center gap-2 text-sm text-gray-500">
             {breadcrumbs.map((item, i) => (
@@ -128,7 +128,7 @@ export default function AppLayout({ children }: Props) {
             </div>
           </div>
         </Header>
-        <Content className="m-6 min-h-[280px]">{children}</Content>
+        <Content style={{ overflowY: "auto" }} className="m-6">{children}</Content>
       </Layout>
     </Layout>
   );
