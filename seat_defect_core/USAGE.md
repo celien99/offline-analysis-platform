@@ -7,9 +7,9 @@
 `seat_defect_core` 支持的能力：
 
 - 加载检测配置文件。
-- 加载训练好的 YOLO 分割模型和 PatchCore 模型。
+- 加载训练好的 YOLO 分割模型和 EfficientAD 模型。
 - 接收外部项目传入的多机位图像。
-- 执行 YOLO、ROI 对齐、PatchCore、region PatchCore、颜色分支和多机位融合。
+- 执行 YOLO、ROI 对齐、EfficientAD、region EfficientAD、颜色分支和多机位融合。
 - 返回结构化检测结果、错误码、耗时和报告路径。
 
 `seat_defect_core` 不负责的能力：
@@ -137,7 +137,7 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
 - `[seat_defect_inspection]`：顶层路径、开关、默认工件等字段
 - `[fusion]`：整件融合策略
 - `[camera.<camera_id>]`：顶层单机位
-- `[camera.<camera_id>.detection]`、`roi`、`roi.alignment`、`patchcore`、`color_branch`
+- `[camera.<camera_id>.detection]`、`roi`、`roi.alignment`、`efficientad`、`color_branch`
 - `[camera.<camera_id>.region.<region_id>]`：单机位局部区域
 - `[seat_model.<seat_model_id>]` 和 `[seat_model.<seat_model_id>.camera.<camera_id>]`：多型号配置
 
@@ -163,7 +163,7 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
         "cameras": [
           {
             "camera_id": "cam_front",
-            "patchcore_model_path": "../models/seat_model_a/cam_front_patchcore.npz",
+            "efficientad_model_path": "../models/seat_model_a/cam_front_efficientad.pt",
             "color_insensitive_mode": true,
             "detection": {
               "model_path": "../models/yolo/seat_model_a_best.pt",
@@ -181,13 +181,12 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
                 "output_height": 256
               }
             },
-            "patchcore": {
-              "backend": "full",
-              "backbone_name": "wide_resnet50_2",
-              "feature_layers": ["layer2", "layer3"],
-              "backbone_pretrained": true,
-              "backbone_device": "cpu",
-              "texture_input": "lab_l",
+            "efficientad": {
+              "teacher_backbone": "tf_efficientnet_b5",
+              "student_backbone": "tf_efficientnet_b5",
+              "autoencoder": true,
+              "device": "cpu",
+              "image_size": 256,
               "min_target_coverage": 0.6,
               "min_valid_patch_ratio": 0.4
             },
@@ -195,7 +194,7 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
               {
                 "region_id": "upper",
                 "box": [0.03, 0.03, 0.97, 0.42],
-                "patchcore_model_path": "../models/seat_model_a/cam_front_upper_patchcore.npz"
+                "efficientad_model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt"
               }
             ]
           }
@@ -293,7 +292,7 @@ dict frame 可选字段：
       "timings_ms": {
         "prepare": 30.0,
         "split_regions": 1.0,
-        "region_patchcore_batch": 80.0,
+        "region_efficientad_batch": 80.0,
         "debug_artifacts": 0.0,
         "total": 111.0
       },
@@ -304,9 +303,9 @@ dict frame 可选字段：
           "region_id": "upper",
           "status": "OK",
           "reason": "all_checks_passed",
-          "patchcore_model_path": "../models/seat_model_a/cam_front_upper_patchcore.npz",
+          "efficientad_model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt",
           "timings_ms": {
-            "patchcore": 80.0
+            "efficientad": 80.0
           },
           "error": null,
           "artifact_paths": {}
@@ -356,8 +355,8 @@ dict frame 可选字段：
 1. YOLO 检测目标座椅。
 2. 根据分割 mask 做 ROI 裁剪和对齐。
 3. 做图像质量检查。
-4. 如果未配置 regions，执行完整 ROI PatchCore。
-5. 如果配置了 regions，切分标准 ROI 并执行 region PatchCore。
+4. 如果未配置 regions，执行完整 ROI EfficientAD。
+5. 如果配置了 regions，切分标准 ROI 并执行 region EfficientAD。
 6. 可选执行颜色一致性分支。
 7. 汇总单机位结果。
 
@@ -370,10 +369,10 @@ dict frame 可选字段：
 
 ## region 模式性能注意事项
 
-region 模式会对一个机位内多个局部区域分别运行 PatchCore，因此天然比完整 ROI 单模型更慢。当前 core 已做以下优化：
+region 模式会对一个机位内多个局部区域分别运行 EfficientAD，因此天然比完整 ROI 单模型更慢。当前 core 已做以下优化：
 
-- 相同 full-backend 配置共享 torch feature extractor。
-- 相同 full-backend 配置的多个 region 使用 batch backbone 前向。
+- 相同配置共享 torch feature extractor。
+- 相同配置的多个 region 使用 batch 前向。
 - 调试产物可通过 `debug_artifacts_enabled=false` 关闭。
 - region 调试产物复用运行时已有 region sample，避免重复切图。
 
@@ -381,14 +380,14 @@ region 模式会对一个机位内多个局部区域分别运行 PatchCore，因
 
 ## 模型和配置一致性
 
-PatchCore 模型中保存了训练时的上游 pipeline signature。运行时如果修改了会影响 ROI 或特征输入的关键配置，core 会拒绝使用旧模型，并提示重新训练。
+EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时如果修改了会影响 ROI 或特征输入的关键配置，core 会拒绝使用旧模型，并提示重新训练。
 
-常见需要重新训练 PatchCore 的改动：
+常见需要重新训练 EfficientAD 的改动：
 
 - YOLO 模型路径或目标类别发生变化。
 - ROI 裁剪、mask、alignment 配置变化。
 - region box 变化。
-- PatchCore backend、image_size、texture_input、backbone 或 feature_layers 变化。
+- EfficientAD 的 backbone、image_size、teacher/student 或 feature_layers 变化。
 
 运行时可以调整部分判定阈值类配置，但不能用配置去掩盖训练数据不足的问题。
 
@@ -405,7 +404,7 @@ PatchCore 模型中保存了训练时的上游 pipeline signature。运行时如
 当速度偏慢时，优先检查：
 
 1. `debug_artifacts_enabled` 是否为 `false`。
-2. `timings_ms.cameras` 和单机位 `timings_ms.region_patchcore_batch`。
+2. `timings_ms.cameras` 和单机位 `timings_ms.region_efficientad_batch`。
 3. region 数量是否过多。
 4. `backbone_device` 是否符合现场硬件。
 5. 是否每次请求都重新创建 `SeatDefectInspector`。
@@ -417,7 +416,7 @@ PatchCore 模型中保存了训练时的上游 pipeline signature。运行时如
 - `seat-defect-core` 包版本。
 - 配置文件版本。
 - YOLO 模型文件。
-- PatchCore 模型文件。
+- EfficientAD 模型文件。
 - Python、torch、torchvision、ultralytics 版本。
 
 LabVIEW 公共机建议固定 Python `3.8.5`，使用 CPU 版依赖，并在配置中设置 `backbone_device = cpu`。如果后续改用 GPU/CUDA，需要单独验证对应的 torch、torchvision 和驱动版本。
