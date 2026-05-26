@@ -17,6 +17,7 @@ import {
   List,
   Tag,
   Popconfirm,
+  Collapse,
 } from "antd";
 import {
   PlusOutlined,
@@ -25,6 +26,8 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
+import CameraTopology from "./components/CameraTopology";
+import ModelSelect from "./components/ModelSelect";
 import {
   useSeatModels,
   useCreateSeatModel,
@@ -208,46 +211,21 @@ export default function CameraConfigPage() {
 
   const regionModeEnabled = Form.useWatch("region_mode_enabled", cameraForm);
 
-  // 模型选择器通用 props
-  const yoloSelectProps = {
-    showSearch: true,
-    optionFilterProp: "label" as const,
-    placeholder: "选择 YOLO 模型",
-    allowClear: true,
-    loading: !yoloModels,
-    options: (yoloModels ?? []).map((m) => ({
-      label: `${m.model_name} (${m.version})`,
-      value: m.model_id,
-    })),
-  };
-
-  const patchcoreSelectProps = {
-    showSearch: true,
-    optionFilterProp: "label" as const,
-    placeholder: "选择 PatchCore 模型",
-    allowClear: true,
-    loading: !patchcoreModels,
-    options: (patchcoreModels ?? []).map((m) => ({
-      label: `${m.model_name} (${m.version})`,
-      value: m.model_id,
-    })),
-  };
-
-  const filterClassifierSelectProps = {
-    showSearch: true,
-    optionFilterProp: "label" as const,
-    placeholder: "选择 Filter Classifier 模型（可选）",
-    allowClear: true,
-    loading: !filterClassifierModels,
-    options: (filterClassifierModels ?? []).map((m) => ({
-      label: `${m.model_name} (${m.version})`,
-      value: m.model_id,
-    })),
-  };
-
   return (
     <div>
       <PageHeader title="相机配置" />
+
+      <CameraTopology
+        seatModelId={selectedSeatModel ?? ""}
+        cameras={(cameras ?? []).map((c) => ({
+          cameraId: c.camera_id,
+          yoloModel: modelLabel(c.yolo_model_version_id, allModels),
+          patchcoreModel: modelLabel(c.patchcore_model_version_id, allModels),
+          filterModel: c.filter_classifier_model_version_id
+            ? modelLabel(c.filter_classifier_model_version_id, allModels)
+            : undefined,
+        }))}
+      />
 
       <Row gutter={24}>
         {/* 左侧：座椅型号列表 */}
@@ -457,20 +435,20 @@ export default function CameraConfigPage() {
             label="YOLO 检测模型"
             rules={[{ required: true, message: "请选择 YOLO 模型" }]}
           >
-            <Select {...yoloSelectProps} />
+            <ModelSelect models={yoloModels} />
           </Form.Item>
           <Form.Item
             name="patchcore_model_version_id"
             label="PatchCore 模型"
             rules={[{ required: true, message: "请选择 PatchCore 模型" }]}
           >
-            <Select {...patchcoreSelectProps} />
+            <ModelSelect models={patchcoreModels} />
           </Form.Item>
           <Form.Item
             name="filter_classifier_model_version_id"
             label="Filter Classifier 模型"
           >
-            <Select {...filterClassifierSelectProps} />
+            <ModelSelect models={filterClassifierModels} />
           </Form.Item>
 
           <Typography.Title level={5}>高级参数</Typography.Title>
@@ -500,31 +478,38 @@ export default function CameraConfigPage() {
             <Switch />
           </Form.Item>
 
-          {regionModeEnabled && (
-            <>
-              <Form.Item
-                name="region_upper_model_version_id"
-                label="Upper 区域模型"
-                rules={[{ required: true, message: "请选择 upper 区域模型" }]}
-              >
-                <Select {...patchcoreSelectProps} placeholder="选择 upper 区域 PatchCore 模型" />
-              </Form.Item>
-              <Form.Item
-                name="region_middle_model_version_id"
-                label="Middle 区域模型"
-                rules={[{ required: true, message: "请选择 middle 区域模型" }]}
-              >
-                <Select {...patchcoreSelectProps} placeholder="选择 middle 区域 PatchCore 模型" />
-              </Form.Item>
-              <Form.Item
-                name="region_lower_model_version_id"
-                label="Lower 区域模型"
-                rules={[{ required: true, message: "请选择 lower 区域模型" }]}
-              >
-                <Select {...patchcoreSelectProps} placeholder="选择 lower 区域 PatchCore 模型" />
-              </Form.Item>
-            </>
-          )}
+          <Collapse
+            activeKey={regionModeEnabled ? ["region"] : []}
+            items={[{
+              key: "region",
+              label: "Region 分区配置",
+              children: (
+                <>
+                  <Form.Item
+                    name="region_upper_model_version_id"
+                    label="Upper 区域模型"
+                    rules={[{ required: true, message: "请选择 upper 区域模型" }]}
+                  >
+                    <ModelSelect models={patchcoreModels} placeholder="选择 upper 区域 PatchCore 模型" />
+                  </Form.Item>
+                  <Form.Item
+                    name="region_middle_model_version_id"
+                    label="Middle 区域模型"
+                    rules={[{ required: true, message: "请选择 middle 区域模型" }]}
+                  >
+                    <ModelSelect models={patchcoreModels} placeholder="选择 middle 区域 PatchCore 模型" />
+                  </Form.Item>
+                  <Form.Item
+                    name="region_lower_model_version_id"
+                    label="Lower 区域模型"
+                    rules={[{ required: true, message: "请选择 lower 区域模型" }]}
+                  >
+                    <ModelSelect models={patchcoreModels} placeholder="选择 lower 区域 PatchCore 模型" />
+                  </Form.Item>
+                </>
+              ),
+            }]}
+          />
         </Form>
       </Modal>
 
