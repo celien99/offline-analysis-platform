@@ -10,9 +10,9 @@ from ..artifacts import generate_overlay_image, save_debug_artifacts
 from ..config import CameraConfig
 from ..cvops import split_roi_regions
 from ..cvops.regions import RegionRoiSample
-from ..patchcore import ColorConsistencyService
+from ..efficientad import EfficientADService
 from ..rule_engine import apply_rules, merge_rules
-from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionPatchCoreResult
+from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
 from ..util import select_patchcore_input
 
 if TYPE_CHECKING:
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class RegionPatchCorePlan:
-    """Deferred region PatchCore work for cross-camera batching."""
+class RegionAnomalyPlan:
+    """Deferred region anomaly work for cross-camera batching."""
 
     frame_packet: FramePacket
     camera: CameraConfig
@@ -30,9 +30,9 @@ class RegionPatchCorePlan:
     shared_result_fields: dict
     quality_rejected: bool
     camera_timer: "_StageTimer"
-    region_results: List[RegionPatchCoreResult]
-    patchcore_items: List[Tuple[Any, Any, Any, Any]]
-    runnable_regions: List[Tuple[Any, RegionRoiSample, Any]]
+    region_results: List[RegionAnomalyResult]
+    anomaly_items: List[Tuple[EfficientADService, Any, Any, Any]]
+    runnable_regions: List[Tuple[Any, RegionRoiSample]]
 
 
 def inspect_one_camera(
@@ -42,7 +42,7 @@ def inspect_one_camera(
     pipeline: "CameraPipeline",
     seat_model_id: Optional[str],
 ) -> CameraInspectionResult:
-    """Run one camera through detection, ROI, PatchCore and artifacts."""
+    """Run one camera through detection, ROI, anomaly detection and artifacts."""
     camera_timer = _StageTimer()
     prepared = pipeline.prepare_image(frame_packet.image)
     camera_timer.mark("prepare")
@@ -54,10 +54,10 @@ def inspect_one_camera(
         seat_model_id,
         camera_timer,
     )
-    if isinstance(outcome, RegionPatchCorePlan):
-        texture_results = service.predict_patchcore_batch(outcome.patchcore_items)
-        patchcore_elapsed_ms = camera_timer.mark("region_patchcore_batch")
-        return finish_region_patchcore_plan(
+    if isinstance(outcome, RegionAnomalyPlan):
+        texture_results = service.predict_anomaly_batch(outcome.anomaly_items)
+        patchcore_elapsed_ms = camera_timer.mark("region_anomaly_batch")
+        return finish_region_anomaly_plan(
             service,
             outcome,
             texture_results,
@@ -73,8 +73,8 @@ def inspect_prepared_camera(
     prepared,
     seat_model_id: Optional[str],
     camera_timer: "_StageTimer",
-) -> Union[CameraInspectionResult, RegionPatchCorePlan]:
-    """Finish one camera after prepare, optionally deferring region PatchCore."""
+) -> Union[CameraInspectionResult, RegionAnomalyPlan]:
+    """Finish one camera after prepare, optionally deferring region anomaly."""
     shared_result_fields = {
         "camera_id": frame_packet.camera_id,
         "frame_id": frame_packet.frame_id,
@@ -111,7 +111,7 @@ def inspect_prepared_camera(
 
     active_regions = [region for region in camera.regions if region.enabled]
     if active_regions:
-        return build_region_patchcore_plan(
+        return build_region_anomaly_plan(
             service,
             frame_packet,
             camera,
@@ -123,21 +123,20 @@ def inspect_prepared_camera(
         )
 
     model_bundle = service.load_model_bundle(camera, seat_model_id)
-    service.prepare_patchcore_for_predict(model_bundle.patchcore)
     texture_input = select_patchcore_input(prepared.roi)
-    texture_result = model_bundle.patchcore.predict(
+    texture_result = model_bundle.predict(
         texture_input,
         prepared.roi.target_mask,
         prepared.roi.ignore_mask,
     )
-    camera_timer.mark("patchcore")
-    if texture_result.valid_patch_ratio < camera.patchcore.min_valid_patch_ratio:
+    camera_timer.mark("anomaly")
+    if texture_result.valid_pixel_ratio < camera.efficientad.min_valid_pixel_ratio:
         result = CameraInspectionResult(
             status="REJECT",
-            reason="low_valid_patch_ratio",
+            reason="low_valid_pixel_ratio",
             texture_result=texture_result,
             crop_box=prepared.roi.crop_box,
-            error=_error_from_reason("low_valid_patch_ratio", stage="patchcore"),
+            error=_error_from_reason("low_valid_pixel_ratio", stage="anomaly"),
             **shared_result_fields,
         )
         return _finish_camera_result(
@@ -150,33 +149,9 @@ def inspect_prepared_camera(
             texture_result,
         )
 
-    color_result = _predict_color_branch(camera, model_bundle, prepared)
-    camera_timer.mark("color")
-
-    filter_result = _predict_filter_classifier(service, camera, prepared, seat_model_id)
-    camera_timer.mark("filter_classifier")
-
-    if texture_result.is_anomaly and filter_result is not None and not filter_result.is_real_defect:
-        # 分类器抑制 PatchCore 误报
-        status = "OK"
-        reason = (
-            "filter_classifier_suppressed_quality_override"
-            if quality_rejected
-            else "filter_classifier_suppressed"
-        )
-    elif texture_result.is_anomaly and color_result is not None and color_result.is_anomaly:
-        status = "NG"
-        reason = (
-            "texture_and_color_anomaly_quality_override"
-            if quality_rejected
-            else "texture_and_color_anomaly"
-        )
-    elif texture_result.is_anomaly:
+    if texture_result.is_anomaly:
         status = "NG"
         reason = "texture_anomaly_quality_override" if quality_rejected else "texture_anomaly"
-    elif color_result is not None and color_result.is_anomaly:
-        status = "NG"
-        reason = "color_anomaly_quality_override" if quality_rejected else "color_anomaly"
     elif quality_rejected:
         status = "REJECT"
         reason = prepared.rejection_reason or "quality_reject"
@@ -188,8 +163,6 @@ def inspect_prepared_camera(
         status=status,
         reason=reason,
         texture_result=texture_result,
-        color_result=color_result,
-        filter_result=filter_result,
         crop_box=prepared.roi.crop_box,
         **shared_result_fields,
     )
@@ -209,7 +182,7 @@ def inspect_prepared_camera(
     )
 
 
-def build_region_patchcore_plan(
+def build_region_anomaly_plan(
     service: "InspectionService",
     frame_packet: FramePacket,
     camera: CameraConfig,
@@ -218,14 +191,14 @@ def build_region_patchcore_plan(
     shared_result_fields: dict,
     quality_rejected: bool,
     camera_timer: "_StageTimer",
-) -> RegionPatchCorePlan:
+) -> RegionAnomalyPlan:
     region_samples: Dict[str, RegionRoiSample] = {
         sample.region_id: sample
         for sample in split_roi_regions(prepared.roi, camera.regions)
     }
     camera_timer.mark("split_regions")
-    region_results: List[RegionPatchCoreResult] = []
-    patchcore_items = []
+    region_results: List[RegionAnomalyResult] = []
+    anomaly_items = []
     runnable_regions = []
     for region in camera.regions:
         if not region.enabled:
@@ -233,12 +206,12 @@ def build_region_patchcore_plan(
         region_sample = region_samples.get(region.region_id)
         if region_sample is None:
             region_results.append(
-                RegionPatchCoreResult(
+                RegionAnomalyResult(
                     region_id=region.region_id,
                     status="REJECT",
                     reason="region_empty",
                     box=_region_config_box_to_roi_box(region.box, prepared.roi.aligned_roi_image.shape[:2]),
-                    patchcore_model_path=region.patchcore_model_path,
+                    efficientad_model_path=region.efficientad_model_path,
                     timings_ms={},
                     error=_error_from_reason("region_empty", stage="region_prepare"),
                 )
@@ -246,18 +219,17 @@ def build_region_patchcore_plan(
             continue
 
         model_bundle = service.load_region_model_bundle(camera, region, seat_model_id)
-        patchcore_config = service.resolve_patchcore_config(camera, region)
-        patchcore_items.append(
+        anomaly_items.append(
             (
-                model_bundle.patchcore,
+                model_bundle,
                 region_sample.image,
                 region_sample.target_mask,
                 region_sample.ignore_mask,
             )
         )
-        runnable_regions.append((region, region_sample, patchcore_config))
+        runnable_regions.append((region, region_sample))
 
-    return RegionPatchCorePlan(
+    return RegionAnomalyPlan(
         frame_packet=frame_packet,
         camera=camera,
         prepared=prepared,
@@ -266,14 +238,14 @@ def build_region_patchcore_plan(
         quality_rejected=quality_rejected,
         camera_timer=camera_timer,
         region_results=region_results,
-        patchcore_items=patchcore_items,
+        anomaly_items=anomaly_items,
         runnable_regions=runnable_regions,
     )
 
 
-def finish_region_patchcore_plan(
+def finish_region_anomaly_plan(
     service: "InspectionService",
-    plan: RegionPatchCorePlan,
+    plan: RegionAnomalyPlan,
     texture_results,
     *,
     patchcore_elapsed_ms: float,
@@ -284,11 +256,16 @@ def finish_region_patchcore_plan(
         if texture_results
         else 0.0
     )
-    for (region, region_sample, patchcore_config), texture_result in zip(plan.runnable_regions, texture_results):
-        if texture_result.valid_patch_ratio < patchcore_config.min_valid_patch_ratio:
+    for (region, region_sample), texture_result in zip(plan.runnable_regions, texture_results):
+        min_valid_pixel_ratio = (
+            region.efficientad.min_valid_pixel_ratio
+            if region.efficientad is not None
+            else plan.camera.efficientad.min_valid_pixel_ratio
+        )
+        if texture_result.valid_pixel_ratio < min_valid_pixel_ratio:
             status = "REJECT"
-            reason = "low_valid_patch_ratio"
-            error = _error_from_reason(reason, stage="patchcore")
+            reason = "low_valid_pixel_ratio"
+            error = _error_from_reason(reason, stage="anomaly")
         elif texture_result.is_anomaly:
             status = "NG"
             reason = (
@@ -302,14 +279,14 @@ def finish_region_patchcore_plan(
             reason = "all_checks_passed"
             error = None
         region_results.append(
-            RegionPatchCoreResult(
+            RegionAnomalyResult(
                 region_id=region.region_id,
                 status=status,
                 reason=reason,
                 box=region_sample.box,
                 texture_result=texture_result,
-                patchcore_model_path=region.patchcore_model_path,
-                timings_ms={"patchcore": per_region_patchcore_ms},
+                efficientad_model_path=region.efficientad_model_path,
+                timings_ms={"anomaly": per_region_patchcore_ms},
                 error=error,
                 sample=region_sample,
             )
@@ -332,28 +309,15 @@ def finish_region_patchcore_plan(
             plan.camera_timer,
         )
 
-    color_model_bundle = None
-    if plan.camera.color_branch.enabled and not plan.camera.color_insensitive_mode:
-        color_model_bundle = service.load_model_bundle(plan.camera, plan.seat_model_id)
-    color_result = _predict_color_branch(plan.camera, color_model_bundle, plan.prepared)
-    plan.camera_timer.mark("color")
-
-    filter_result = _predict_filter_classifier(service, plan.camera, plan.prepared, plan.seat_model_id)
-    plan.camera_timer.mark("filter_classifier")
-
     status, reason = _merge_region_status(
         region_results,
-        color_result,
         plan.quality_rejected,
         plan.prepared,
-        filter_result=filter_result,
     )
     result = CameraInspectionResult(
         status=status,
         reason=reason,
         region_results=region_results,
-        color_result=color_result,
-        filter_result=filter_result,
         crop_box=plan.prepared.roi.crop_box,
         **plan.shared_result_fields,
     )
@@ -402,104 +366,26 @@ class _StageTimer:
 
 
 def _merge_region_status(
-    region_results: List[RegionPatchCoreResult],
-    color_result,
+    region_results: List[RegionAnomalyResult],
     quality_rejected: bool,
     prepared,
-    filter_result=None,
 ) -> Tuple[str, str]:
     ng_regions = [item for item in region_results if item.status == "NG"]
     reject_regions = [item for item in region_results if item.status == "REJECT"]
-    if ng_regions and filter_result is not None and not filter_result.is_real_defect:
-        # 分类器抑制区域级 PatchCore 误报
-        return (
-            "OK",
-            "filter_classifier_suppressed_quality_override"
-            if quality_rejected
-            else "filter_classifier_suppressed",
-        )
-    if ng_regions and color_result is not None and color_result.is_anomaly:
-        reason = (
-            "region_texture_and_color_anomaly_quality_override"
-            if quality_rejected
-            else "region_texture_and_color_anomaly"
-        )
-        if reject_regions:
-            reject_ids = ",".join(item.region_id for item in reject_regions)
-            reason += f"_with_reject:{reject_ids}"
-        return "NG", reason
+
     if ng_regions:
         region_ids = ",".join(item.region_id for item in ng_regions)
-        prefix = (
-            "region_texture_anomaly_quality_override"
-            if quality_rejected
-            else "region_texture_anomaly"
-        )
+        prefix = "region_texture_anomaly_quality_override" if quality_rejected else "region_texture_anomaly"
         reason = f"{prefix}:{region_ids}"
         if reject_regions:
             reject_ids = ",".join(item.region_id for item in reject_regions)
             reason += f"_with_reject:{reject_ids}"
         return "NG", reason
-    if color_result is not None and color_result.is_anomaly:
-        return (
-            "NG",
-            "color_anomaly_quality_override" if quality_rejected else "color_anomaly",
-        )
     if reject_regions:
         return "REJECT", f"region_reject:{reject_regions[0].region_id}:{reject_regions[0].reason}"
     if quality_rejected:
         return "REJECT", prepared.rejection_reason or "quality_reject"
     return "OK", "all_regions_passed"
-
-
-def _predict_color_branch(
-    camera: CameraConfig,
-    model_bundle,
-    prepared,
-):
-    if (
-        model_bundle is None
-        or not camera.color_branch.enabled
-        or camera.color_insensitive_mode
-        or model_bundle.color_profile is None
-    ):
-        return None
-    color_service = ColorConsistencyService(
-        camera.color_branch,
-        profile=model_bundle.color_profile,
-    )
-    return color_service.predict(
-        prepared.roi.aligned_roi_image,
-        prepared.roi.valid_mask,
-    )
-
-
-def _predict_filter_classifier(
-    service: "InspectionService",
-    camera: CameraConfig,
-    prepared,
-    seat_model_id: Optional[str],
-):
-    """运行过滤器分类器推理，用于抑制 PatchCore 误报。"""
-    if not camera.filter_classifier.enabled:
-        return None
-    svc = service.load_filter_classifier(camera, seat_model_id)
-    if svc is None:
-        return None
-    try:
-        return svc.predict(prepared.roi.aligned_roi_image)
-    except Exception:
-        # 故障安全：推理失败时 is_real_defect=True，不抑制 PatchCore 结果
-        from ..core_types import FilterClassifierResult
-
-        return FilterClassifierResult(
-            is_real_defect=True,
-            confidence=0.0,
-            real_defect_score=0.0,
-            false_alarm_score=0.0,
-            class_id=1,
-            diagnostics={"prediction_failed": 1.0},
-        )
 
 
 def _region_config_box_to_roi_box(
