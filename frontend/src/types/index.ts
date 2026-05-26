@@ -15,3 +15,4 @@ export type { VLMResult, VLMAnalysisResponse, VLMBatchAnalysisResponse } from ".
 export type { InspectionResult, CameraInspectionResult } from "./inspection";
 export * from "./camera-config";
 export type { GateEvaluationReport, GateStatus } from "./gate";
+export type { DualTrackComparisonResult, TrackMetricsResult } from "./mask-refinement";

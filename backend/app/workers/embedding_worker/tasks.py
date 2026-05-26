@@ -34,7 +34,12 @@ def _get_extractor():
     return _extractor
 
 
-async def _process_embedding(anomaly_id: str, crop_path: str) -> dict[str, object]:
+async def _process_embedding(
+    anomaly_id: str,
+    crop_path: str,
+    *,
+    embedding_type: str = "raw",
+) -> dict[str, object]:
     raw = await minio_client.download(crop_path)
     image = np.array(Image.open(BytesIO(raw)).convert("RGB"))
 
@@ -43,14 +48,15 @@ async def _process_embedding(anomaly_id: str, crop_path: str) -> dict[str, objec
 
     async with async_session_factory() as session:
         embedding_repo = EmbeddingRepository(session)
-        existing = await embedding_repo.get_by_anomaly_id(anomaly_id)
+        existing = await embedding_repo.get_by_anomaly_and_type(anomaly_id, embedding_type)
         if existing is not None:
-            logger.info("embedding_exists", anomaly_id=anomaly_id)
-            return {"status": "skipped", "anomaly_id": anomaly_id}
+            logger.info("embedding_exists", anomaly_id=anomaly_id, embedding_type=embedding_type)
+            return {"status": "skipped", "anomaly_id": anomaly_id, "embedding_type": embedding_type}
 
         embedding = EmbeddingVector(
             id=generate_uuid(),
             anomaly_id=anomaly_id,
+            embedding_type=embedding_type,
             embedding=vector.tolist(),
             model_name=extractor.model_name,
             model_version=settings.app_version,
@@ -58,23 +64,37 @@ async def _process_embedding(anomaly_id: str, crop_path: str) -> dict[str, objec
         )
         await embedding_repo.create(embedding)
 
+        # refined embedding 不影响 anomaly 状态（raw embedding 已将其置为 embedded）
         anomaly_repo = AnomalyRepository(session)
-        await anomaly_repo.update_status(anomaly_id, "embedded")
+        anomaly = await anomaly_repo.get_by_id(anomaly_id)
+        if anomaly is not None and anomaly.status == "pending":
+            await anomaly_repo.update_status(anomaly_id, "embedded")
 
         await session.commit()
 
-    logger.info("embedding_task_complete", anomaly_id=anomaly_id)
-    return {"status": "completed", "anomaly_id": anomaly_id}
+    logger.info(
+        "embedding_task_complete",
+        anomaly_id=anomaly_id,
+        embedding_type=embedding_type,
+    )
+    return {"status": "completed", "anomaly_id": anomaly_id, "embedding_type": embedding_type}
 
 
 @celery_app.task(name="embedding.extract_for_anomaly")
 def extract_embedding_for_anomaly(
     anomaly_id: str,
     crop_path: str,
+    *,
+    embedding_type: str = "raw",
 ) -> dict[str, object]:
-    logger.info("embedding_task_started", anomaly_id=anomaly_id, crop_path=crop_path)
+    logger.info(
+        "embedding_task_started",
+        anomaly_id=anomaly_id,
+        crop_path=crop_path,
+        embedding_type=embedding_type,
+    )
     try:
-        return run_async(_process_embedding(anomaly_id, crop_path))
+        return run_async(_process_embedding(anomaly_id, crop_path, embedding_type=embedding_type))
     except Exception as e:
         logger.error("embedding_task_failed", anomaly_id=anomaly_id, error=str(e))
         return {"status": "failed", "anomaly_id": anomaly_id, "error": str(e)}

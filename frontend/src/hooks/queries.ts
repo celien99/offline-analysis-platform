@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
 import { cameraConfigApi } from "../api/camera-config";
 import { gateApi } from "../api/gate";
-import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData } from "../types";
+import { maskRefinementApi } from "../api/mask-refinement";
+import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData, DualTrackComparisonResult } from "../types";
 
 // ── Cluster queries ──
 
@@ -491,5 +492,20 @@ export function useGateEvaluate() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gates"] });
     },
+  });
+}
+
+// ── Mask Refinement hooks ──
+
+export function useDualTrackComparison(params: {
+  seat_model_id?: string;
+  camera_id?: string;
+  region_id?: string;
+}) {
+  return useQuery<DualTrackComparisonResult>({
+    queryKey: ["mask-refinement", "compare", params],
+    queryFn: ({ signal }) =>
+      maskRefinementApi.compare(params, signal) as Promise<DualTrackComparisonResult>,
+    enabled: !!(params.seat_model_id || params.camera_id),
   });
 }
