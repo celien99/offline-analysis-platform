@@ -130,6 +130,7 @@ class FilterClassifierService:
     def predict_dual_modal(
         self, patch_image: np.ndarray,
         ead_features: dict[str, np.ndarray] | None = None,
+        unified_emb: list[float] | None = None,
     ) -> FilterClassifierResult:
         """Predict with dual-modal input: patch image + EfficientAD features."""
         import torch
@@ -165,8 +166,13 @@ class FilterClassifierService:
                             t = t.permute(0, 3, 1, 2)  # NHWC -> NCHW
                         feat_tensors[key] = t
 
+            # Preprocess unified embedding
+            uni_tensor = None
+            if unified_emb is not None:
+                uni_tensor = torch.tensor(unified_emb, dtype=torch.float32).unsqueeze(0).to(self._device)
+
             with torch.no_grad():
-                logits = self._model(tensor, feat_tensors if feat_tensors else None)
+                logits = self._model(tensor, feat_tensors if feat_tensors else None, uni_tensor)
 
             probs = torch.softmax(logits, dim=1)[0]
             false_alarm_score = float(probs[0].cpu())
@@ -181,7 +187,7 @@ class FilterClassifierService:
                 real_defect_score=real_defect_score,
                 false_alarm_score=false_alarm_score,
                 class_id=class_id,
-                diagnostics={"mode": "dual_modal"},
+                diagnostics={"mode": "three_modal" if unified_emb is not None else "dual_modal"},
             )
         except Exception:
             import traceback

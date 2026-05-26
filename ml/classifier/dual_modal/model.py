@@ -66,9 +66,15 @@ class DualModalFilter(nn.Module):
             nn.ReLU(inplace=True),
         )
 
+        # Unified embedding projection (384d → 256d, from EmbeddingSpaceContract)
+        self.uni_proj = nn.Sequential(
+            nn.Linear(384, 256),
+            nn.ReLU(inplace=True),
+        )
+
         # Fusion head
         self.fusion = nn.Sequential(
-            nn.Linear(512, 128),
+            nn.Linear(768, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(128, 64),
@@ -83,6 +89,7 @@ class DualModalFilter(nn.Module):
         self,
         patch_image: torch.Tensor,
         ead_features: dict[str, torch.Tensor] | None = None,
+        unified_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Image branch
         img_feat = self.image_backbone(patch_image)
@@ -105,8 +112,14 @@ class DualModalFilter(nn.Module):
         else:
             f_ead = torch.zeros_like(f_img)
 
-        # Late fusion
-        fused = torch.cat([f_img, f_ead], dim=1)
+        # Unified embedding (DINOv2-aligned, from EmbeddingSpaceContract)
+        if unified_emb is not None:
+            f_uni = self.uni_proj(unified_emb)
+        else:
+            f_uni = torch.zeros(f_img.size(0), 256, device=f_img.device)
+
+        # Late fusion (three modalities: image + EAD + unified_emb)
+        fused = torch.cat([f_img, f_ead, f_uni], dim=1)
         return self.fusion(fused)
 
     def to_torchscript(self, output_path: str) -> None:
