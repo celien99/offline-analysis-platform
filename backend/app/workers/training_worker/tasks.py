@@ -501,16 +501,16 @@ def export_model(
 ) -> dict[str, object]:
     logger.info("export_started", model_path=model_path, format=export_format)
     try:
-        from ml.classifier.trainer import FilterClassifierTrainer
+        from ml.classifier.dual_modal import DualModalTrainer
 
-        trainer = FilterClassifierTrainer(model_type="resnet18", device="cpu")
+        trainer = DualModalTrainer(device="cpu")
         trainer.load_checkpoint(model_path)
 
         output_path = Path(model_path).with_suffix(f".{export_format}")
         if export_format == "torchscript":
             trainer.export_torchscript(output_path)
         elif export_format == "onnx":
-            trainer.export_onnx(output_path)
+            return {"status": "failed", "error": "ONNX export not yet supported for DualModalFilter"}
         else:
             return {"status": "failed", "error": f"Unsupported format: {export_format}"}
 
