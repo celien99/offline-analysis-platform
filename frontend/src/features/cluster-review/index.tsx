@@ -82,21 +82,21 @@ export default function ClusterReview() {
             <Input
               placeholder="座椅型号ID"
               allowClear
-              style={{ width: 150 }}
+              className="w-[150px]"
               value={seatModelFilter}
               onChange={(e) => setSeatModelFilter(e.target.value || undefined)}
             />
             <Input
               placeholder="相机ID"
               allowClear
-              style={{ width: 120 }}
+              className="w-[120px]"
               value={cameraFilter}
               onChange={(e) => setCameraFilter(e.target.value || undefined)}
             />
             <Input
               placeholder="区域ID"
               allowClear
-              style={{ width: 120 }}
+              className="w-[120px]"
               value={regionFilter}
               onChange={(e) => setRegionFilter(e.target.value || undefined)}
             />
@@ -168,7 +168,7 @@ export default function ClusterReview() {
           <p>加载中...</p>
         ) : compareData ? (
           <div>
-            <p style={{ fontWeight: "bold", marginBottom: 16 }}>
+            <p className="font-bold mb-4">
               {compareData.recommendation}
             </p>
             <Descriptions column={2} size="small" bordered>

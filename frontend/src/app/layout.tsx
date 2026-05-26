@@ -104,14 +104,12 @@ export default function AppLayout({ children }: Props) {
             ),
           }))}
           onClick={({ key }) => navigate(key)}
-          style={{ background: "transparent" }}
-          className="mt-1"
+          className="bg-transparent mt-1"
         />
       </Sider>
       <Layout>
         <Header
-          className="bg-white px-6 flex items-center justify-between sticky top-0 z-10"
-          style={{ borderBottom: "1px solid #f0f0f0" }}
+          className="bg-white px-6 flex items-center justify-between sticky top-0 z-10 border-b border-gray-100"
         >
           <div className="flex items-center gap-2 text-sm text-gray-500">
             {breadcrumbs.map((item, i) => (

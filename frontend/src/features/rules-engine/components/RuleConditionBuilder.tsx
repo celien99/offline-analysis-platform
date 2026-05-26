@@ -73,21 +73,21 @@ export default function RuleConditionBuilder({ value, onChange }: Props) {
               value={cond.field}
               onChange={(v) => updateCondition(i, { field: v, operator: "=" })}
               options={FIELD_OPTIONS}
-              style={{ width: 140 }}
+              className="w-[140px]"
               size="small"
             />
             <Select
               value={cond.operator}
               onChange={(v) => updateCondition(i, { operator: v })}
               options={OPERATOR_OPTIONS[cond.field] || OPERATOR_OPTIONS.default}
-              style={{ width: 100 }}
+              className="w-[100px]"
               size="small"
             />
             <Input
               value={cond.value}
               onChange={(e) => updateCondition(i, { value: e.target.value })}
               placeholder="值"
-              style={{ width: 200 }}
+              className="w-[200px]"
               size="small"
             />
             {conditions.length > 1 && (

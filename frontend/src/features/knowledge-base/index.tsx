@@ -80,7 +80,7 @@ export default function KnowledgeBase() {
             <Input.Search
               placeholder="搜索知识..."
               allowClear
-              style={{ width: 250 }}
+              className="w-[250px]"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               onSearch={(v) => setSearchKeyword(v)}
