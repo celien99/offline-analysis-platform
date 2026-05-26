@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── 全局面板布局：body 不滚动，由内容区控制滚动 ── */
+body {
+  overflow: hidden;
+}
+#root {
+  height: 100vh;
+}
+
 /* ── Global CSS Variables ── */
 :root {
   --color-primary: #1677ff;
