@@ -24,7 +24,7 @@ MIN_COMPONENT_AREA_PIXELS = 200
 
 
 class RoiRefineEngine:
-    """把 YOLO 分割结果整理成 PatchCore 可直接消费的 ROI。"""
+    """把 YOLO 分割结果整理成纹理异常检测模型可直接消费的 ROI。"""
 
     def __init__(self, config: RoiRefineConfig) -> None:
         self.config = config
@@ -136,7 +136,7 @@ class RoiRefineEngine:
         return cleaned
 
     def _erode_target_mask(self, target_mask: np.ndarray) -> np.ndarray:
-        """按配置把 YOLO 前景 mask 向内收缩，避免边缘噪声进入 PatchCore。"""
+        """按配置把 YOLO 前景 mask 向内收缩，避免边缘噪声进入纹理异常检测。"""
         erode_pixels = int(max(0, self.config.mask_erode_pixels))
         if erode_pixels <= 0:
             return target_mask
@@ -188,7 +188,7 @@ class RoiRefineEngine:
 
 
 def _apply_mask(image: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
-    """Build a BGRA PatchCore input whose mask background is transparent."""
+    """Build a BGRA texture anomaly detection input whose mask background is transparent."""
     if image.ndim == 2:
         base = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     elif image.shape[2] == 4:
@@ -242,7 +242,7 @@ def _letterbox_bundle(
     output_width: int,
     output_height: int,
 ) -> Tuple[np.ndarray, np.ndarray, bool]:
-    """Preserve ROI aspect ratio when mapping to the canonical PatchCore canvas."""
+    """Preserve ROI aspect ratio when mapping to the canonical texture anomaly detection canvas."""
     src_height, src_width = roi_image.shape[:2]
     scale = min(float(output_width) / float(src_width), float(output_height) / float(src_height))
     resized_width = max(1, int(round(src_width * scale)))

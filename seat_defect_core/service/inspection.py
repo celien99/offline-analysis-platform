@@ -18,8 +18,8 @@ from .frames import (
 )
 from .inspection_camera import (
     _StageTimer,
-    RegionPatchCorePlan,
-    finish_region_patchcore_plan,
+    RegionAnomalyPlan,
+    finish_region_anomaly_plan,
     inspect_prepared_camera,
 )
 from .response import (
@@ -195,7 +195,7 @@ def _inspect_pending_cameras(
                     )
 
     ordered_outputs: Dict[int, CameraInspectionResult] = dict(prepared_errors)
-    plans: List[Tuple[int, RegionPatchCorePlan]] = []
+    plans: List[Tuple[int, RegionAnomalyPlan]] = []
     for index, (frame_packet, camera, prepared, camera_timer) in prepared_by_index.items():
         try:
             output = inspect_prepared_camera(
@@ -206,7 +206,7 @@ def _inspect_pending_cameras(
                 seat_model_id,
                 camera_timer,
             )
-            if isinstance(output, RegionPatchCorePlan):
+            if isinstance(output, RegionAnomalyPlan):
                 plans.append((index, output))
             else:
                 ordered_outputs[index] = output
@@ -240,7 +240,7 @@ def _group_pending_by_detection(pending_cameras, pipelines) -> Dict[tuple, List[
 
 def _finish_region_plans(
     service: InspectionService,
-    plans: List[Tuple[int, RegionPatchCorePlan]],
+    plans: List[Tuple[int, RegionAnomalyPlan]],
     ordered_outputs: Dict[int, CameraInspectionResult],
 ) -> None:
     if not plans:
@@ -250,13 +250,13 @@ def _finish_region_plans(
     slices = []
     for index, plan in plans:
         start = len(all_items)
-        all_items.extend(plan.patchcore_items)
+        all_items.extend(plan.anomaly_items)
         end = len(all_items)
         slices.append((index, plan, start, end))
 
     batch_started_at = perf_counter()
     try:
-        texture_results = service.predict_patchcore_batch(all_items)
+        texture_results = service.predict_anomaly_batch(all_items)
     except Exception as exc:
         for index, plan in plans:
             ordered_outputs[index] = _pipeline_failed_result(
@@ -270,13 +270,13 @@ def _finish_region_plans(
     per_item_ms = batch_elapsed_ms / max(1, len(texture_results))
     for index, plan, start, end in slices:
         plan_results = texture_results[start:end]
-        plan.camera_timer.record("region_patchcore_batch", per_item_ms * len(plan_results))
+        plan.camera_timer.record("region_anomaly_batch", per_item_ms * len(plan_results))
         try:
-            ordered_outputs[index] = finish_region_patchcore_plan(
+            ordered_outputs[index] = finish_region_anomaly_plan(
                 service,
                 plan,
                 plan_results,
-                patchcore_elapsed_ms=per_item_ms * len(plan_results),
+                anomaly_elapsed_ms=per_item_ms * len(plan_results),
             )
         except Exception as exc:
             ordered_outputs[index] = _pipeline_failed_result(

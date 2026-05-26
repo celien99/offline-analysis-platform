@@ -17,8 +17,8 @@ def build_model_scoped_root(base_dir: Path, seat_model_id: Optional[str]) -> Pat
     return base_dir / seat_model_id
 
 
-def select_patchcore_input(roi) -> Any:
-    """统一返回 PatchCore 真正消费的图像，避免训练、推理、调试图脱节。"""
+def select_texture_input(roi) -> Any:
+    """统一返回纹理异常检测模型真正消费的图像，避免训练、推理、调试图脱节。"""
     return (
         roi.texture_ready_image
         if roi.texture_ready_image is not None
