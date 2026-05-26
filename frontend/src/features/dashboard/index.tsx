@@ -1,16 +1,21 @@
-import { Row, Col, Spin, Result, Button } from "antd";
+import { Row, Col, Result, Button } from "antd";
 import { useClusterVisualization } from "../../hooks/queries";
 import SummaryStats from "./components/SummaryStats";
 import ClusterScatterPlot from "./components/ClusterScatterPlot";
 import ReviewBarChart from "./components/ReviewBarChart";
+import { StatsSkeleton, TableSkeleton } from "../../components/ui/StateSkeleton";
 
 export default function Dashboard() {
   const { data: vizData, isLoading, isError, refetch } = useClusterVisualization();
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spin size="large" />
+      <div>
+        <StatsSkeleton />
+        <Row gutter={[16, 16]} className="mt-6">
+          <Col span={14}><TableSkeleton /></Col>
+          <Col span={10}><TableSkeleton /></Col>
+        </Row>
       </div>
     );
   }
@@ -38,10 +43,10 @@ export default function Dashboard() {
     <div>
       <SummaryStats summary={summary} />
       <Row gutter={[16, 16]} className="mt-6">
-        <Col span={14}>
+        <Col xs={24} lg={14}>
           <ClusterScatterPlot points={vizData?.scatter_data ?? []} />
         </Col>
-        <Col span={10}>
+        <Col xs={24} lg={10}>
           <ReviewBarChart summary={summary} />
         </Col>
       </Row>
