@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, Table, Button, Space, Input, Select, message } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { Card, Table, Button, Space, Input, Select, Segmented, message } from "antd";
+import { ReloadOutlined, AppstoreOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { AnomalyRecord } from "../../types";
 import { anomalyApi } from "../../api";
 import { useAnomalyList, useAnomalyReprocess } from "../../hooks/queries";
 import PageHeader from "../../components/ui/PageHeader";
 import { useAnomalyColumns } from "./components/AnomalyTable";
+import AnomalyCardGrid from "./components/AnomalyCardGrid";
 import AnomalyDetailModal from "./components/AnomalyDetailModal";
+import { TableSkeleton, CardGridSkeleton } from "../../components/ui/StateSkeleton";
 
 export default function AnomalyBrowser() {
   const [searchParams] = useSearchParams();
@@ -21,6 +23,7 @@ export default function AnomalyBrowser() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyRecord | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
   // URL 携带 anomaly_id 时自动加载详情
   useEffect(() => {
@@ -34,16 +37,12 @@ export default function AnomalyBrowser() {
   }, [urlAnomalyId]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setCameraFilter(cameraInput || undefined);
-    }, 400);
+    const timer = setTimeout(() => setCameraFilter(cameraInput || undefined), 400);
     return () => clearTimeout(timer);
   }, [cameraInput]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setRegionFilter(regionInput || undefined);
-    }, 400);
+    const timer = setTimeout(() => setRegionFilter(regionInput || undefined), 400);
     return () => clearTimeout(timer);
   }, [regionInput]);
 
@@ -126,22 +125,57 @@ export default function AnomalyBrowser() {
                 { value: "reviewed", label: "已审核" },
               ]}
             />
-            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
+            <Segmented
+              options={[
+                { value: "grid", icon: <AppstoreOutlined /> },
+                { value: "table", icon: <UnorderedListOutlined /> },
+              ]}
+              value={viewMode}
+              onChange={(v) => setViewMode(v as "grid" | "table")}
+            />
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
+              刷新
+            </Button>
           </Space>
         }
       />
 
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={anomalies}
-          rowKey="anomaly_id"
-          loading={isLoading}
-          pagination={{ current: page, pageSize: 20, total, onChange: setPage }}
-        />
-      </Card>
+      {isLoading ? (
+        viewMode === "grid" ? (
+          <CardGridSkeleton />
+        ) : (
+          <TableSkeleton />
+        )
+      ) : viewMode === "grid" ? (
+        <>
+          <AnomalyCardGrid anomalies={anomalies} onViewDetail={handleViewDetail} />
+          {total > 20 && (
+            <div className="flex justify-center mt-6">
+              <Button
+                onClick={() => setPage(page + 1)}
+                disabled={page * 20 >= total}
+              >
+                加载更多
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <Card>
+          <Table
+            columns={columns}
+            dataSource={anomalies}
+            rowKey="anomaly_id"
+            pagination={{ current: page, pageSize: 20, total, onChange: setPage }}
+          />
+        </Card>
+      )}
 
-      <AnomalyDetailModal anomaly={selectedAnomaly} open={detailVisible} onClose={() => setDetailVisible(false)} />
+      <AnomalyDetailModal
+        anomaly={selectedAnomaly}
+        open={detailVisible}
+        onClose={() => setDetailVisible(false)}
+      />
     </div>
   );
 }
