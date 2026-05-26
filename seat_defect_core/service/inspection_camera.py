@@ -14,6 +14,8 @@ from ..efficientad import EfficientADService
 from ..rule_engine import apply_rules, merge_rules
 from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
 from ..util import select_texture_input
+from ..proposal import ProposalGenerator, ProposalConfig, aggregate_proposals
+from defect_protocol import FilterResult
 
 if TYPE_CHECKING:
     from .core import CameraPipeline, InspectionService
@@ -159,11 +161,74 @@ def inspect_prepared_camera(
         status = "OK"
         reason = "all_checks_passed"
 
+    # --- Region Proposal + Dual-Modal Filter ---
+    filter_result: Optional[FilterResult] = None
+    proposals: list[Any] = []
+
+    if texture_result.is_anomaly:
+        filter_svc = getattr(service, '_filter_service', None) or getattr(service, 'filter_service', None)
+        if filter_svc is not None:
+            try:
+                proposal_cfg = getattr(camera, 'proposal', None) or ProposalConfig()
+                generator = ProposalGenerator(proposal_cfg)
+                isolation_key = f"{seat_model_id or 'unknown'}|{camera.camera_id}|default"
+
+                roi_h, roi_w = prepared.roi.aligned_roi_image.shape[:2]
+                roi_bbox = (
+                    int(prepared.roi.crop_box.x1) if prepared.roi.crop_box is not None else 0,
+                    int(prepared.roi.crop_box.y1) if prepared.roi.crop_box is not None else 0,
+                    roi_w, roi_h,
+                )
+
+                proposals = generator.generate(
+                    heatmap=texture_result.anomaly_map,
+                    roi_image=prepared.roi.aligned_roi_image,
+                    efficientad_features=texture_result.features,
+                    anomaly_score=texture_result.score,
+                    anomaly_threshold=texture_result.threshold,
+                    roi_bbox=roi_bbox,
+                    isolation_key=isolation_key,
+                )
+
+                # Per-patch dual-modal inference
+                if proposals:
+                    patch_crops = generator.extract_patch_crops(
+                        prepared.roi.aligned_roi_image, proposals)
+                    patch_features_list = []
+                    if texture_result.features:
+                        patch_features_list = generator.extract_patch_features(
+                            texture_result.features, proposals, (roi_h, roi_w))
+
+                    for i, proposal in enumerate(proposals):
+                        patch_img = patch_crops[i] if i < len(patch_crops) else None
+                        patch_feats = patch_features_list[i] if i < len(patch_features_list) else None
+                        if patch_img is not None:
+                            pf_result = filter_svc.predict_dual_modal(patch_img, patch_feats)
+                            proposal.filter_result = pf_result
+
+                    # Aggregate to ROI-level decision
+                    filter_result = aggregate_proposals(proposals)
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                filter_result = FilterResult(
+                    is_real_defect=True, confidence=0.0,
+                    real_defect_score=0.0, false_alarm_score=0.0,
+                    class_id=1, diagnostics={"mode": "error_fallback"},
+                )
+
+    # Override status if filter suppressed the anomaly
+    if filter_result is not None and not filter_result.is_real_defect:
+        status = "OK"
+        reason = "filter_suppressed"
+
     result = CameraInspectionResult(
         status=status,
         reason=reason,
         texture_result=texture_result,
         crop_box=prepared.roi.crop_box,
+        filter_result=filter_result,
+        proposals=proposals,
         **shared_result_fields,
     )
     # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
