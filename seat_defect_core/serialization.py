@@ -26,7 +26,7 @@ def inspection_result_to_dict(result: InspectionResult) -> Dict[str, Any]:
 
 def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
     """Convert one camera result to a JSON-safe payload."""
-    return {
+    out: Dict[str, Any] = {
         "camera_id": result.camera_id,
         "frame_id": result.frame_id,
         "source": result.source,
@@ -57,6 +57,13 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
         "filter_result": filter_result_to_dict(result.filter_result),
         "artifact_paths": dict(result.artifact_paths),
     }
+    # Add proposals if present
+    if result.proposals:
+        from defect_protocol import proposals_to_json
+        import json as _json
+
+        out["proposals"] = _json.loads(proposals_to_json(result.proposals))
+    return out
 
 
 def quality_to_dict(quality) -> Optional[Dict[str, Any]]:
