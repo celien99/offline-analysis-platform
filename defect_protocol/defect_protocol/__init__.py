@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .canonical_proposal import CanonicalPatchProposal
+from .embedding_space import EmbeddingSpaceContract, UnifiedEmbedding
 from .entities import (
     AnomalyContext,
     BoundingBox,
@@ -21,6 +22,8 @@ from .types import FeatureRef, IsolationKeyStr, ProposalId
 
 __all__ = [
     "CanonicalPatchProposal",
+    "EmbeddingSpaceContract",
+    "UnifiedEmbedding",
     "AnomalyContext",
     "BoundingBox",
     "EfficientADFeatures",
