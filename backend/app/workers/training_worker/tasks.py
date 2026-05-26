@@ -307,8 +307,47 @@ def train_filter_classifier(
             region_id=region_id,
         ))
 
-        # 训练完成后自动部署到默认目标
-        if settings.deploy_on_train_complete:
+        # 训练完成后触发门禁评估，通过后自动部署
+        if settings.gate_enabled:
+            from celery import chain
+            from app.workers.gate_worker.tasks import evaluate_model_gate
+
+            if settings.deploy_on_train_complete:
+                # chain: gate → deploy (gate 失败则跳过 deploy)
+                default_target = settings.default_deploy_target
+                pipeline = chain(
+                    evaluate_model_gate.s(
+                        model_version_id=model_version.id,
+                        triggered_by="system:auto_gate",
+                    ),
+                    celery_app.signature(
+                        "deployment.deploy_model_version",
+                        kwargs={
+                            "model_name": model_version.model_name,
+                            "version": model_version.version,
+                            "target": default_target,
+                            "deployed_by": "system:training_worker",
+                            "require_gate_pass": True,
+                        },
+                    ),
+                )
+                result = pipeline.delay()
+                logger.info(
+                    "gate_and_deploy_chain_dispatched",
+                    chain_id=result.id,
+                    model_version_id=model_version.id,
+                )
+            else:
+                # 只跑门禁，不自动部署
+                evaluate_model_gate.delay(
+                    model_version_id=model_version.id,
+                    triggered_by="system:auto_gate",
+                )
+                logger.info(
+                    "gate_evaluation_triggered",
+                    model_version_id=model_version.id,
+                )
+        elif settings.deploy_on_train_complete:
             from app.workers.deployment_worker.tasks import deploy_model_version_task
 
             default_target = settings.default_deploy_target

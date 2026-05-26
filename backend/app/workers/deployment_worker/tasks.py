@@ -18,6 +18,7 @@ def deploy_model_version_task(
     target: str,
     deployed_by: str | None = None,
     strategy: str = "immediate",
+    require_gate_pass: bool = False,
 ) -> dict[str, object]:
     """异步执行模型部署：创建部署记录并拷贝模型文件到目标目录。"""
     logger.info(
@@ -26,6 +27,7 @@ def deploy_model_version_task(
         version=version,
         target=target,
         strategy=strategy,
+        require_gate_pass=require_gate_pass,
     )
 
     async def _deploy() -> dict[str, object]:
@@ -37,6 +39,7 @@ def deploy_model_version_task(
                 target=target,
                 deployed_by=deployed_by,
                 strategy=strategy,
+                require_gate_pass=require_gate_pass,
             )
             await session.commit()
             return {

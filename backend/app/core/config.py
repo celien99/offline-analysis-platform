@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     isolation_clustering_min_samples: int = 50  # 聚类最少样本数
     isolation_training_min_samples: int = 200    # 训练最少样本数
 
+    # 模型上线门禁
+    gate_enabled: bool = True
+    gate_min_real_defect_recall: float = 0.95  # 真实缺陷召回率不得低于此值
+    gate_max_recall_drop: float = 0.02  # 召回率相比基线最多允许下降 2%
+    gate_min_false_alarm_suppression: float = 0.10  # 误报抑制率至少提升 10%
+    gate_max_suppressed_real_defects: int = 0  # 被错误抑制的真实缺陷数上限
+    gate_evaluation_split: float = 0.2  # 从已审核数据中预留多少比例做回归评估
+    gate_min_evaluation_samples: int = 20  # 评估集最少样本数
+
     # VLM（支持任意 OpenAI 兼容的视觉模型 API）
     vlm_model: str = "qwen2.5-vl"
     vlm_endpoint: str = "http://localhost:8001/v1"

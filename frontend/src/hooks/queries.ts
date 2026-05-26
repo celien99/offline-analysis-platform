@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
 import { cameraConfigApi } from "../api/camera-config";
+import { gateApi } from "../api/gate";
 import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormData, CameraConfigFormData, ModelRegisterData } from "../types";
 
 // ── Cluster queries ──
@@ -461,6 +462,34 @@ export function useRegisterModel() {
     mutationFn: (data: ModelRegisterData) => modelApi.register(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["model", "options"] });
+    },
+  });
+}
+
+// ── Gate hooks ──
+
+export function useGateStatus(modelVersionId: string | null) {
+  return useQuery({
+    queryKey: ["gates", "status", modelVersionId],
+    queryFn: ({ signal }) => gateApi.status(modelVersionId!, signal),
+    enabled: !!modelVersionId,
+  });
+}
+
+export function useGateReport(modelVersionId: string | null) {
+  return useQuery({
+    queryKey: ["gates", "report", modelVersionId],
+    queryFn: ({ signal }) => gateApi.report(modelVersionId!, signal),
+    enabled: !!modelVersionId,
+  });
+}
+
+export function useGateEvaluate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (modelVersionId: string) => gateApi.evaluate(modelVersionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["gates"] });
     },
   });
 }

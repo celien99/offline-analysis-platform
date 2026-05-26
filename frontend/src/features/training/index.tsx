@@ -30,6 +30,7 @@ import {
   useTrainedModels,
   useTrainingStatus,
   usePatchCoreTrainingStart,
+  useGateReport,
 } from "../../hooks/queries";
 import type { TrainingStartParams, TrainedModel } from "../../types";
 import dayjs from "dayjs";
@@ -46,6 +47,8 @@ export default function TrainingPage() {
   const [statusVisible, setStatusVisible] = useState(false);
   const [statusTaskId, setStatusTaskId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("models");
+  const [gateModelId, setGateModelId] = useState<string | null>(null);
+  const [gateModalVisible, setGateModalVisible] = useState(false);
 
   // PatchCore inline form state
   const [pcCameraId, setPcCameraId] = useState("");
@@ -57,6 +60,7 @@ export default function TrainingPage() {
   const filterStart = useTrainingStart();
   const patchcoreStart = usePatchCoreTrainingStart();
   const { data: statusData } = useTrainingStatus(statusTaskId);
+  const { data: gateReport } = useGateReport(gateModelId);
 
   // ── Filter Classifier ──
   const handleFilterStart = (values: TrainingStartParams) => {
@@ -130,9 +134,33 @@ export default function TrainingPage() {
       title: "状态",
       dataIndex: "status",
       key: "status",
-      width: 100,
-      render: (s: string) => (
-        <Tag color={s === "registered" ? "green" : "orange"}>{s}</Tag>
+      width: 110,
+      render: (s: string) => {
+        const colorMap: Record<string, string> = {
+          registered: "blue",
+          validated: "green",
+          deployed: "purple",
+          gate_failed: "red",
+          retired: "default",
+        };
+        return <Tag color={colorMap[s] || "orange"}>{s}</Tag>;
+      },
+    },
+    {
+      title: "门禁",
+      key: "gate",
+      width: 80,
+      render: (_: unknown, record: TrainedModel) => (
+        <Button
+          size="small"
+          type="link"
+          onClick={() => {
+            setGateModelId(record.model_id);
+            setGateModalVisible(true);
+          }}
+        >
+          查看
+        </Button>
       ),
     },
     {
@@ -348,6 +376,64 @@ export default function TrainingPage() {
           </Descriptions>
         ) : (
           <Typography.Text type="secondary">加载状态中...</Typography.Text>
+        )}
+      </Modal>
+
+      {/* ── Gate Report Modal ── */}
+      <Modal
+        title="上线门禁评估报告"
+        open={gateModalVisible}
+        onCancel={() => setGateModalVisible(false)}
+        footer={null}
+        width={640}
+      >
+        {gateReport ? (
+          <Descriptions column={2} size="small" bordered>
+            <Descriptions.Item label="门禁状态" span={2}>
+              <Tag color={gateReport.status === "passed" ? "green" : gateReport.status === "failed" ? "red" : "orange"}>
+                {gateReport.status === "passed" ? "通过" : gateReport.status === "failed" ? "未通过" : "评估中"}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="评估时间" span={2}>
+              {dayjs(gateReport.evaluated_at).format("YYYY-MM-DD HH:mm:ss")}
+            </Descriptions.Item>
+            <Descriptions.Item label="总样本数">{gateReport.total_samples ?? "-"}</Descriptions.Item>
+            <Descriptions.Item label="真实缺陷样本">{gateReport.real_defect_samples ?? "-"}</Descriptions.Item>
+            <Descriptions.Item label="真实缺陷召回率">
+              <strong>{gateReport.real_defect_recall != null ? (gateReport.real_defect_recall * 100).toFixed(1) + "%" : "-"}</strong>
+            </Descriptions.Item>
+            <Descriptions.Item label="基线召回率">
+              {gateReport.baseline_real_defect_recall != null ? (gateReport.baseline_real_defect_recall * 100).toFixed(1) + "%" : "（无基线）"}
+            </Descriptions.Item>
+            <Descriptions.Item label="误报抑制率">
+              <strong>{gateReport.false_alarm_suppression_rate != null ? (gateReport.false_alarm_suppression_rate * 100).toFixed(1) + "%" : "-"}</strong>
+            </Descriptions.Item>
+            <Descriptions.Item label="基线抑制率">
+              {gateReport.baseline_false_alarm_suppression_rate != null ? (gateReport.baseline_false_alarm_suppression_rate * 100).toFixed(1) + "%" : "（无基线）"}
+            </Descriptions.Item>
+            <Descriptions.Item label="被抑制的真实缺陷">
+              <span style={{ color: (gateReport.suppressed_real_defect_count ?? 0) > 0 ? "red" : "green" }}>
+                {gateReport.suppressed_real_defect_count ?? 0}
+              </span>
+            </Descriptions.Item>
+            <Descriptions.Item label="评估者">{gateReport.evaluated_by}</Descriptions.Item>
+            {gateReport.failure_reasons && gateReport.failure_reasons.length > 0 && (
+              <Descriptions.Item label="失败原因" span={2}>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {gateReport.failure_reasons.map((r, i) => (
+                    <li key={i} style={{ color: "red" }}>{r}</li>
+                  ))}
+                </ul>
+              </Descriptions.Item>
+            )}
+            {gateReport.metrics && (
+              <Descriptions.Item label="完整指标" span={2}>
+                <pre className="text-xs">{JSON.stringify(gateReport.metrics, null, 2)}</pre>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        ) : (
+          <Typography.Text type="secondary">加载中...</Typography.Text>
         )}
       </Modal>
     </div>

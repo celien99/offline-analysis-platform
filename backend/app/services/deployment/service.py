@@ -30,12 +30,24 @@ class DeploymentService:
         target: str,
         deployed_by: str | None = None,
         strategy: str = "immediate",
+        require_gate_pass: bool = False,
     ) -> DeploymentRecord:
         model = await self._model_version_repo.get_by_name_and_version(
             model_name, version
         )
         if model is None:
             raise ModelNotFoundError(model_name, version)
+
+        # 门禁检查：若要求通过门禁但模型未通过，则拒绝部署
+        if require_gate_pass:
+            from app.repositories.gate.repository import GateEvaluationRepository
+            gate_repo = GateEvaluationRepository(self._session)
+            gate_eval = await gate_repo.get_passed_by_model_version(model.id)
+            if gate_eval is None:
+                raise DeploymentError(
+                    f"模型 {model_name}:{version} 未通过上线门禁评估，禁止部署。"
+                    f"请等待门禁评估完成或手动触发评估。"
+                )
 
         # 验证模型文件存在，提前失败避免创建无效的部署记录
         if model.artifact_path is None or not Path(model.artifact_path).exists():
