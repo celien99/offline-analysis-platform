@@ -13,6 +13,7 @@ from app.core.security import generate_uuid
 from app.models.registry import DeploymentRecord
 from app.repositories.registry.deployment import DeploymentRepository
 from app.repositories.registry.model_version import ModelVersionRepository
+from app.services.hot_reload.service import HotReloadService
 
 logger = get_logger(__name__)
 
@@ -22,6 +23,11 @@ class DeploymentService:
         self._session = session
         self._deployment_repo = DeploymentRepository(session)
         self._model_version_repo = ModelVersionRepository(session)
+        self._hot_reload = HotReloadService()
+
+    @staticmethod
+    def _compute_checksum(file_path: str) -> str:
+        return HotReloadService.compute_checksum(file_path)
 
     async def deploy_model(
         self,
@@ -76,6 +82,8 @@ class DeploymentService:
                 if previous_deployment is not None:
                     previous_deployment.deployment_status = "superseded"
                 model.status = "deployed"
+                active_model = model_name
+                active_version = version
 
             case "shadow":
                 # 影子部署：复制到 shadow 子目录，不切换生产模型
@@ -86,6 +94,8 @@ class DeploymentService:
                 if previous_deployment is not None:
                     previous_deployment.deployment_status = "superseded"
                 model.status = "deployed"
+                active_model = model_name
+                active_version = version
 
             case "canary":
                 # 金丝雀部署：复制到 canary 子目录，生产仍用旧模型
@@ -96,6 +106,8 @@ class DeploymentService:
                 shutil.copy2(model.artifact_path, str(tmp))
                 tmp.rename(canary_dest)
                 model.status = "deployed"
+                active_model = model_name
+                active_version = version
                 # 调度金丝雀监控任务
                 from app.workers.deployment_worker.tasks import watch_canary_metrics
                 watch_canary_metrics.apply_async(
@@ -108,12 +120,32 @@ class DeploymentService:
 
         await self._session.flush()
 
+        # 计算 checksum 并更新 manifest + 发送重载信号
+        checksum = self._compute_checksum(model.artifact_path)
+        await self._hot_reload.update_model_manifest(
+            target=target,
+            active_model=active_model,
+            active_version=active_version,
+            active_checksum=checksum,
+        )
+
+        if strategy != "shadow":
+            await self._hot_reload.send_reload_signal(
+                target=target,
+                model_name=active_model,
+                model_version=active_version,
+                model_path=f"{target}/model.pt",
+                reload_reason=f"deploy_{strategy}",
+                checksum=checksum,
+            )
+
         logger.info(
             "model_deployed",
             model_name=model_name,
             version=version,
             target=target,
             strategy=strategy,
+            checksum=checksum[:16],
         )
         return deployment
 

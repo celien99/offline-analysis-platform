@@ -19,7 +19,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
-import { useDeployments, useDeployModel, useDeployTargets, useRollbackModel, useTrainedModels } from "../../hooks/queries";
+import { useDeployments, useDeployModel, useDeployTargets, useRollbackModel, useTrainedModels, useHotReloadTargets } from "../../hooks/queries";
 import type { DeploymentRecord, TrainedModel } from "../../types";
 import dayjs from "dayjs";
 
@@ -32,6 +32,7 @@ export default function ModelDeployPage() {
   const { data: deployments, refetch: refetchDeployments } = useDeployments({ page });
   const { data: modelsData } = useTrainedModels({ page: 1 });
   const { data: deployTargets } = useDeployTargets();
+  const { data: hotReloadData } = useHotReloadTargets();
   const deployModel = useDeployModel();
   const rollbackModel = useRollbackModel();
 
@@ -142,6 +143,53 @@ export default function ModelDeployPage() {
           pagination={{ current: page, onChange: (p) => setPage(p) }}
         />
       </Card>
+
+      {/* ── Hot Reload Status ── */}
+      {hotReloadData?.targets && hotReloadData.targets.length > 0 && (
+        <Card title="热重载状态" style={{ marginTop: 16 }}>
+          <Table
+            dataSource={hotReloadData.targets as unknown as Record<string, unknown>[]}
+            rowKey="target"
+            pagination={false}
+            size="small"
+            columns={[
+              { title: "目标", key: "target", render: (_: unknown, r: Record<string, unknown>) => <Tag color="purple">{String(r.target ?? "")}</Tag> },
+              { title: "生产模型", key: "active_model", render: (_: unknown, r: Record<string, unknown>) => String(r.active_model ?? "-") },
+              { title: "版本", key: "active_version", render: (_: unknown, r: Record<string, unknown>) => String(r.active_version ?? "-") },
+              {
+                title: "Checksum", key: "active_checksum",
+                render: (_: unknown, r: Record<string, unknown>) => r.active_checksum ? <Typography.Text code>{String(r.active_checksum)}</Typography.Text> : "-",
+              },
+              {
+                title: "完整性", key: "checksum_verified",
+                render: (_: unknown, r: Record<string, unknown>) => (
+                  <Tag color={r.checksum_verified ? "green" : "red"}>
+                    {r.checksum_verified ? "通过" : "异常"}
+                  </Tag>
+                ),
+              },
+              {
+                title: "热重载信号", key: "has_pending_reload",
+                render: (_: unknown, r: Record<string, unknown>) => (
+                  <Tag color={r.has_pending_reload ? "orange" : "default"}>
+                    {r.has_pending_reload ? "待重载" : "已同步"}
+                  </Tag>
+                ),
+              },
+              {
+                title: "影子模型", key: "has_shadow",
+                render: (_: unknown, r: Record<string, unknown>) => (
+                  r.has_shadow ? <Tag color="blue">有</Tag> : <span>-</span>
+                ),
+              },
+              {
+                title: "可回滚版本", key: "rollback_version",
+                render: (_: unknown, r: Record<string, unknown>) => String(r.rollback_version ?? "-"),
+              },
+            ]}
+          />
+        </Card>
+      )}
 
       <Modal
         title="部署模型到目标"
