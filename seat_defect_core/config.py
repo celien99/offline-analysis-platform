@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 from .efficientad import EfficientADConfig
-from .proposal.config import ProposalConfig  # noqa: F401
-from .tracking.config import TrackConfig  # noqa: F401
 
 
 @dataclass

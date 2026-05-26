@@ -471,21 +471,6 @@ def _region_box(value: Any, *, scope: str) -> List[float]:
     return items
 
 
-def _select_seat_model_payload(
-    seat_models: List[Dict[str, Any]],
-    seat_model_id: Optional[str],
-) -> Optional[Dict[str, Any]]:
-    if not seat_models:
-        return None
-    if seat_model_id is None:
-        return seat_models[0]
-    for item in seat_models:
-        if item.get("seat_model_id") == seat_model_id:
-            return item
-    available = ", ".join(str(item.get("seat_model_id")) for item in seat_models)
-    raise ValueError(f"未知 seat_model_id `{seat_model_id}`，可选值：{available}")
-
-
 # 通用字段读取与路径解析工具。
 def _is_missing(value: Any) -> bool:
     return value is None or value == ""
