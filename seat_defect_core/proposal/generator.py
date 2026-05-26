@@ -17,13 +17,16 @@ from defect_protocol import (
 )
 
 from .config import ProposalConfig
+from .budget import BudgetController
 
 
 class ProposalGenerator:
     """Generate PatchProposals from EfficientAD heatmap + features."""
 
-    def __init__(self, config: ProposalConfig | None = None):
+    def __init__(self, config: ProposalConfig | None = None,
+                 budget_ctrl: BudgetController | None = None):
         self.config = config or ProposalConfig()
+        self.budget = budget_ctrl or BudgetController(self.config.budget)
 
     def generate(self, heatmap: np.ndarray, roi_image: np.ndarray,
                  efficientad_features: dict[str, np.ndarray] | None,
@@ -33,13 +36,12 @@ class ProposalGenerator:
                  roi_image_key: str = "") -> list[PatchProposal]:
         cfg = self.config
 
-        # 1. Compute adaptive threshold
-        if cfg.heatmap_threshold_mode == "adaptive":
-            h_mean = float(heatmap.mean())
-            h_std = float(heatmap.std())
-            threshold = h_mean + cfg.heatmap_adaptive_std_multiplier * h_std
-        else:
-            threshold = cfg.heatmap_threshold_fixed
+        # Use budget controller for adaptive threshold
+        self.budget.start_frame()
+        threshold, k_limit, mode = self.budget.regulate(heatmap)
+
+        if mode == "emergency":
+            return []  # Emergency exit — skip all proposals
 
         # 2. Binary threshold + morphological cleanup
         binary = (heatmap > threshold).astype(np.uint8)
@@ -55,6 +57,8 @@ class ProposalGenerator:
         # 3. Connected components
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             binary, connectivity=8)
+
+        self.budget.record_cc_count(num_labels - 1)
 
         components = []
         for i in range(1, num_labels):
@@ -81,7 +85,9 @@ class ProposalGenerator:
 
         # Sort by area * score descending
         components.sort(key=lambda c: c[0] * c[2], reverse=True)
-        components = components[:cfg.max_proposals]
+        # Apply budget limit alongside max_proposals
+        effective_max = min(cfg.max_proposals, k_limit if k_limit > 0 else cfg.max_proposals)
+        components = components[:effective_max]
 
         roi_h, roi_w = roi_image.shape[:2]
         roi_context = ROIContext(
