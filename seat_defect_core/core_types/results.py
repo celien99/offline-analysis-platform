@@ -146,6 +146,9 @@ class CameraInspectionResult:
     filter_result: Optional[FilterClassifierResult] = None
     """过滤器分类器分支结果。"""
 
+    proposals: list[Any] = field(default_factory=list)  # list[PatchProposal]
+    """PatchCore 级别候选异常 patch 列表。"""
+
     crop_box: Optional[BoundingBox] = None
     """原图坐标系下最终使用的 ROI 裁剪框。"""
 
