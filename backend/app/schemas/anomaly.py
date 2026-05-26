@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -43,6 +44,8 @@ class AnomalyResponse(BaseModel):
     heatmap_url: str | None = None
     crop_url: str | None = None
     crop_urls: list[str] = []
+    proposal_count: int = 0
+    proposals_json: Optional[str] = None
     cluster_id: str | None = None
     created_at: datetime
     trace_id: str | None = None
