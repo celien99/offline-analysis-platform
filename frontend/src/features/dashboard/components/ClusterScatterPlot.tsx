@@ -24,7 +24,7 @@ export default function ClusterScatterPlot({ points }: Props) {
   if (points.length === 0) {
     return (
       <Card title="聚类分布 (UMAP 投影)">
-        <div className="flex flex-col items-center justify-center text-gray-400 py-12" style={{ height: 450 }}>
+        <div className="flex flex-col items-center justify-center text-gray-400 py-12 h-[450px]">
           <Empty description="暂无聚类数据" />
           <Button type="primary" className="mt-3" onClick={() => navigate("/training")}>
             运行聚类任务

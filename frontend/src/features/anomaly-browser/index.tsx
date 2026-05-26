@@ -100,21 +100,21 @@ export default function AnomalyBrowser() {
             <Input
               placeholder="相机ID"
               allowClear
-              style={{ width: 150 }}
+              className="w-[150px]"
               value={cameraInput}
               onChange={(e) => setCameraInput(e.target.value)}
             />
             <Input
               placeholder="区域ID"
               allowClear
-              style={{ width: 150 }}
+              className="w-[150px]"
               value={regionInput}
               onChange={(e) => setRegionInput(e.target.value)}
             />
             <Select
               placeholder="状态"
               allowClear
-              style={{ width: 130 }}
+              className="w-[130px]"
               value={statusFilter}
               onChange={setStatusFilter}
               options={[

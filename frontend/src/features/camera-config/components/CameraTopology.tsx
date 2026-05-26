@@ -41,7 +41,7 @@ export default function CameraTopology({ seatModelId, cameras }: Props) {
 
   return (
     <Card title="配置拓扑" className="industrial-card mb-4">
-      <svg width="100%" viewBox={`0 0 ${800} ${Math.max(160, cameras.length * ROW_H + 60)}`} style={{ maxWidth: 800 }}>
+      <svg width="100%" viewBox={`0 0 ${800} ${Math.max(160, cameras.length * ROW_H + 60)}`} className="max-w-[800px]">
         <rect x={20} y={cameras.length * ROW_H / 2 - 22 + 20} width={NODE_W} height={NODE_H * 1.5} rx={10}
           fill="#f0f5ff" stroke="#1677ff" strokeWidth={2} />
         <text x={20 + NODE_W / 2} y={cameras.length * ROW_H / 2 + 20} textAnchor="middle" fill="#1677ff" fontSize={13} fontWeight="bold">

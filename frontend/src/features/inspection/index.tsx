@@ -155,7 +155,7 @@ export default function InspectionPage() {
           <Card title={<Space><ScanOutlined />检测配置</Space>}>
             <Typography.Text strong>1. 选择座椅型号</Typography.Text>
             <Select
-              style={{ width: "100%", marginTop: 4, marginBottom: 16 }}
+              className="w-full mt-1 mb-4"
               placeholder="选择座椅型号"
               loading={optionsLoading}
               value={selectedSeatModel}
@@ -172,7 +172,7 @@ export default function InspectionPage() {
               <>
                 <Typography.Text strong>2. 选择相机</Typography.Text>
                 <Select
-                  style={{ width: "100%", marginTop: 4, marginBottom: 16 }}
+                  className="w-full mt-1 mb-4"
                   mode="multiple"
                   placeholder="勾选检测相机"
                   value={selectedCameras}
@@ -190,7 +190,7 @@ export default function InspectionPage() {
               <>
                 <Typography.Text strong>3. 上传图像</Typography.Text>
                 {slots.map((slot) => (
-                  <div key={slot.cameraId} style={{ marginBottom: 12, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                  <div key={slot.cameraId} className="mb-3 p-3 border border-gray-200 rounded-lg">
                     <Typography.Text strong>{slot.cameraId}</Typography.Text>
                     <Dragger
                       accept="image/*"
@@ -231,15 +231,15 @@ export default function InspectionPage() {
         <Col span={14}>
           <Card title="检测结果">
             {isRunning && (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <div className="text-center py-10">
                 <Spin size="large" />
-                <div style={{ marginTop: 12, color: "#999" }}>检测运行中，请稍候...</div>
+                <div className="mt-3 text-gray-400">检测运行中，请稍候...</div>
               </div>
             )}
 
             {result && !isRunning && (
               <>
-                <Descriptions column={2} size="small" bordered style={{ marginBottom: 16 }}>
+                <Descriptions column={2} size="small" bordered className="mb-4">
                   <Descriptions.Item label="任务 ID" span={2}>
                     {result.task_id}
                   </Descriptions.Item>
@@ -257,7 +257,7 @@ export default function InspectionPage() {
                 </Descriptions>
 
                 {result.error_message && (
-                  <Typography.Text type="danger" style={{ display: "block", marginBottom: 16 }}>
+                  <Typography.Text type="danger" className="block mb-4">
                     {result.error_message}
                   </Typography.Text>
                 )}
@@ -289,13 +289,13 @@ export default function InspectionPage() {
                           render: (v: number | null) =>
                             v != null ? (
                               <Space size={4}>
-                                <span style={{ fontSize: 12 }}>{v.toFixed(4)}</span>
+                                <span className="text-xs">{v.toFixed(4)}</span>
                                 <Progress
                                   percent={Math.min(v * 100, 100)}
                                   showInfo={false}
                                   size="small"
                                   strokeColor={v > 0.5 ? "#ff4d4f" : "#52c41a"}
-                                  style={{ width: 48, display: "inline-block" }}
+                                  className="w-12 inline-block"
                                 />
                               </Space>
                             ) : "-",
@@ -314,9 +314,9 @@ export default function InspectionPage() {
                       size="small"
                     />
 
-                    <Typography.Title level={5} style={{ marginTop: 16 }}>检测图像</Typography.Title>
+                    <Typography.Title level={5} className="mt-4">检测图像</Typography.Title>
                     <PhotoProvider>
-                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <div className="flex gap-4 flex-wrap">
                         {result.camera_results.map((r) =>
                           r.overlay_image_base64 ? (
                             <Card
@@ -324,14 +324,14 @@ export default function InspectionPage() {
                               size="small"
                               title={r.camera_id}
                               extra={<Tag color={statusColor(r.status)}>{r.status}</Tag>}
-                              style={{ width: 420 }}
+                              className="w-[420px]"
                               styles={{ body: { padding: 0 } }}
                             >
                               <PhotoView src={`data:image/jpeg;base64,${r.overlay_image_base64}`}>
                                 <img
                                   src={`data:image/jpeg;base64,${r.overlay_image_base64}`}
                                   alt={`${r.camera_id} overlay`}
-                                  style={{ width: "100%", maxHeight: 400, objectFit: "contain", display: "block", cursor: "zoom-in" }}
+                                  className="w-full max-h-[400px] object-contain block cursor-zoom-in"
                                 />
                               </PhotoView>
                             </Card>
@@ -345,8 +345,8 @@ export default function InspectionPage() {
             )}
 
             {!taskId && !result && (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <ScanOutlined style={{ fontSize: 40, color: "#d9d9d9", display: "block", marginBottom: 12 }} />
+              <div className="text-center py-10">
+                <ScanOutlined className="text-[40px] text-gray-300 block mb-3" />
                 <Typography.Text type="secondary">
                   选择座椅型号和相机，上传图像后点击「开始检测」
                 </Typography.Text>

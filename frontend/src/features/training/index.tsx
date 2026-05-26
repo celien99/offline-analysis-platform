@@ -429,9 +429,9 @@ export default function TrainingPage() {
             <Descriptions.Item label="评估者">{gateReport.evaluated_by}</Descriptions.Item>
             {gateReport.failure_reasons && gateReport.failure_reasons.length > 0 && (
               <Descriptions.Item label="失败原因" span={2}>
-                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                <ul className="m-0 pl-5">
                   {gateReport.failure_reasons.map((r, i) => (
-                    <li key={i} style={{ color: "red" }}>{r}</li>
+                    <li key={i} className="text-red-500">{r}</li>
                   ))}
                 </ul>
               </Descriptions.Item>

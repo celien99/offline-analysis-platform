@@ -173,7 +173,7 @@ export default function ClusterDetailModal({ cluster, open, onClose }: Props) {
                   src={url}
                   width={160}
                   height={120}
-                  style={{ objectFit: "cover", borderRadius: 4 }}
+                  className="object-cover rounded"
                   fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNjY2MiIGZvbnQtc2l6ZT0iMTIiPuWbvueJi+WKoOi9veWksei0pTwvdGV4dD48L3N2Zz4="
                 />
               ))}
@@ -202,7 +202,7 @@ export default function ClusterDetailModal({ cluster, open, onClose }: Props) {
                 onClick={() => navigate(`/anomalies?anomaly_id=${a.anomaly_id}`)}
                 styles={{ body: { padding: 8 } }}
               >
-                <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                <Space direction="vertical" size={2} className="w-full">
                   <Space>
                     <Text code className="text-xs">{a.anomaly_id.slice(0, 12)}...</Text>
                     <Tag className="text-xs">{a.camera_id}</Tag>
@@ -215,7 +215,7 @@ export default function ClusterDetailModal({ cluster, open, onClose }: Props) {
                       src={a.crop_url}
                       width="100%"
                       height={100}
-                      style={{ objectFit: "cover", borderRadius: 4 }}
+                      className="object-cover rounded"
                       fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2YwZjBmMCIvPjwvc3ZnPg=="
                     />
                   )}

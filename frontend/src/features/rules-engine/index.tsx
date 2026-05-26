@@ -120,7 +120,7 @@ export default function RulesManagement() {
             <Select
               placeholder="规则类型"
               allowClear
-              style={{ width: 130 }}
+              className="w-[130px]"
               value={typeFilter}
               onChange={setTypeFilter}
               options={RULE_TYPE_OPTIONS as { value: string; label: string }[]}

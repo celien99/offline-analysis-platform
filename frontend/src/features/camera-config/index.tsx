@@ -309,9 +309,9 @@ export default function CameraConfigPage() {
             }
           >
             {!selectedSeatModel && (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <div className="text-center py-10">
                 <SettingOutlined
-                  style={{ fontSize: 40, color: "#d9d9d9", display: "block", marginBottom: 12 }}
+                  className="text-[40px] text-gray-300 block mb-3"
                 />
                 <Typography.Text type="secondary">
                   请先选择左侧座椅型号
@@ -455,17 +455,17 @@ export default function CameraConfigPage() {
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item name="detection_confidence" label="YOLO 置信度">
-                <InputNumber min={0} max={1} step={0.05} style={{ width: "100%" }} />
+                <InputNumber min={0} max={1} step={0.05} className="w-full" />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item name="patchcore_image_size" label="PatchCore 图像尺寸">
-                <InputNumber min={64} max={1024} step={32} style={{ width: "100%" }} />
+                <InputNumber min={64} max={1024} step={32} className="w-full" />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item name="patchcore_threshold" label="PatchCore 阈值">
-                <InputNumber min={0} max={1} step={0.01} style={{ width: "100%" }} />
+                <InputNumber min={0} max={1} step={0.01} className="w-full" />
               </Form.Item>
             </Col>
           </Row>
