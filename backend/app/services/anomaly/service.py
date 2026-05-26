@@ -46,6 +46,8 @@ class AnomalyService:
         crop_data_list: list[bytes] | None = None,
         original_content_type: str = "image/jpeg",
         heatmap_content_type: str = "image/jpeg",
+        proposals_json: str | None = None,
+        feature_files: list[bytes] | None = None,
     ) -> list[AnomalyRecord]:
         """创建异常记录并上传文件到 MinIO，然后触发 Celery 流水线。"""
         trace_id = generate_trace_id()
@@ -61,6 +63,19 @@ class AnomalyService:
 
         original_path = await _save(original_data, "original", original_content_type)
         heatmap_path = await _save(heatmap_data, "heatmap", heatmap_content_type)
+
+        # Store EfficientAD feature files
+        feature_paths: list[str] = []
+        if feature_files:
+            for i, feat_data in enumerate(feature_files):
+                feat_path = f"{base_path}/features/feature_{i:03d}.npy"
+                await self._minio.upload(feat_path, feat_data, "application/octet-stream")
+                feature_paths.append(feat_path)
+
+        # Store proposals JSON
+        if proposals_json:
+            prop_path = f"{base_path}/proposals.json"
+            await self._minio.upload(prop_path, proposals_json.encode("utf-8"), "application/json")
 
         anomalies: list[AnomalyRecord] = []
         for i, crop_data in enumerate(crop_data_list or []):
