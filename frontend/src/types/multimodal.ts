@@ -20,3 +20,11 @@ export interface VLMBatchAnalysisResponse {
   total: number;
   results: VLMAnalysisResponse[];
 }
+
+/** POST /api/multimodal/analyze/anomaly/{id} 响应 */
+export interface VLMAnomalyAnalysisResponse {
+  status: string;
+  anomaly_id: string;
+  result?: VLMResult;
+  error?: string;
+}

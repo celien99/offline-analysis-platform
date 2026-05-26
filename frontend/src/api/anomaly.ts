@@ -1,5 +1,5 @@
 import { del, get, post } from "./client";
-import type { AnomalyRecord, PaginatedResponse } from "../types";
+import type { AnomalyRecord, AnomalyReprocessResponse, AnomalyDeleteResponse, EmbeddingSimilarResult, PaginatedResponse } from "../types";
 
 export const anomalyApi = {
   list: (params: {
@@ -17,13 +17,13 @@ export const anomalyApi = {
     get<AnomalyRecord>(`/anomaly/${anomalyId}`, { signal }),
 
   reprocess: (anomalyId: string, signal?: AbortSignal) =>
-    post(`/anomaly/${anomalyId}/reprocess`, undefined, { signal }),
+    post<AnomalyReprocessResponse>(`/anomaly/${anomalyId}/reprocess`, undefined, { signal }),
 
   delete: (anomalyId: string) =>
-    del<{ status: string; anomaly_id: string }>(`/anomaly/${anomalyId}`),
+    del<AnomalyDeleteResponse>(`/anomaly/${anomalyId}`),
 
   searchSimilar: (anomalyId: string, topK = 20, threshold = 0.7, signal?: AbortSignal) =>
-    get("/embedding/search", {
+    get<EmbeddingSimilarResult[]>("/embedding/search", {
       params: { anomaly_id: anomalyId, top_k: topK, threshold },
       signal,
     }),

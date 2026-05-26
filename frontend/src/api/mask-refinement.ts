@@ -1,13 +1,14 @@
 import { get, post } from "./client";
+import type { MaskRefineResponse, DualTrackComparisonResult } from "../types";
 
 export const maskRefinementApi = {
   refine: (anomalyId: string, signal?: AbortSignal) =>
-    post(`/mask-refinement/refine/${anomalyId}`, undefined, { signal }),
+    post<MaskRefineResponse>(`/mask-refinement/refine/${anomalyId}`, undefined, { signal }),
 
   compare: (params: {
     seat_model_id?: string;
     camera_id?: string;
     region_id?: string;
   }, signal?: AbortSignal) =>
-    get("/mask-refinement/compare", { params, signal }),
+    get<DualTrackComparisonResult>("/mask-refinement/compare", { params, signal }),
 };

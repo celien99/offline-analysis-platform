@@ -9,3 +9,9 @@ export interface KnowledgeEntry {
   camera_ids: string[];
   created_at: string;
 }
+
+/** POST /api/knowledge/entries 响应 */
+export interface KnowledgeCreateResponse {
+  status: string;
+  knowledge_id: string;
+}
