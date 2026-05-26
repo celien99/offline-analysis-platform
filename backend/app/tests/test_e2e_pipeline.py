@@ -57,7 +57,7 @@ class TestAnomalyUploadE2E:
             camera_id="cam_front",
             seat_model_id="model_a",
             region_id="region_upper",
-            source="patchcore",
+            source="efficientad",
             anomaly_score=0.92,
             date_folder="2025-12-01",
             detected_at=sample_detected_at,
@@ -72,7 +72,7 @@ class TestAnomalyUploadE2E:
         assert a.camera_id == "cam_front"
         assert a.seat_model_id == "model_a"
         assert a.region_id == "region_upper"
-        assert a.source == "patchcore"
+        assert a.source == "efficientad"
         assert a.status == "pending"
         assert a.decision_reason == "texture_anomaly"
         assert a.filter_confidence == 0.85

@@ -12,7 +12,7 @@ class ConfigBuilder:
     """将 DB 中的相机配置与硬编码默认参数合并，生成完整配置 JSON。
 
     默认参数来自 seat_defect_core/config.example.json，仅暴露相机级的少量字段给用户配置，
-    YOLO/ROI/PatchCore/Filter/Color/Rule 等底层参数使用代码内默认值。
+    YOLO/ROI/EfficientAD/Filter/Rule 等底层参数使用代码内默认值。
     """
 
     DEFAULT_QUALITY = {
@@ -41,34 +41,14 @@ class ConfigBuilder:
         "alignment": {"output_width": 256, "output_height": 256},
     }
 
-    DEFAULT_PATCHCORE = {
-        "backend": "full",
-        "image_size": 256,
-        "patch_size": 32,
-        "stride": 16,
-        "max_memory": 1024,
-        "backbone_name": "wide_resnet50_2",
-        "feature_layers": ["layer2", "layer3"],
-        "backbone_pretrained": True,
-        "backbone_device": "cpu",
-        "feature_pool_kernel_size": 3,
-        "coreset_sampling_ratio": 0.1,
-        "texture_input": "lab_l",
-        "min_target_coverage": 0.6,
-        "max_ignore_overlap": 0.1,
-        "min_valid_patch_ratio": 0.4,
-        "threshold_quantile": 0.99,
-        "training_threshold_upper_quantile": 0.995,
-        "decision_score_margin": 1.08,
-        "strong_patch_score_ratio": 0.9,
-        "min_strong_patch_count": 3,
-        "min_strong_component_count": 2,
-        "min_strong_patch_ratio": 0.015,
-        "min_strong_component_ratio": 0.01,
-        "critical_score_margin": 1.35,
-        "critical_peak_score_margin": 1.45,
-        "critical_min_component_patch_count": 2,
-        "min_peak_component_patch_count": 1,
+    DEFAULT_EFFICIENTAD = {
+        "device": "cpu",
+        "input_size": 256,
+        "teacher_backbone": "wide_resnet50_2",
+        "student_backbone": "resnet18",
+        "min_valid_pixel_ratio": 0.3,
+        "image_threshold": 0.0,
+        "pixel_threshold": 0.0,
     }
 
     DEFAULT_COLOR_BRANCH = {
@@ -171,9 +151,9 @@ class ConfigBuilder:
         detection["model_path"] = yolo_path
         detection["confidence"] = cam.detection_confidence
 
-        patchcore = dict(self.DEFAULT_PATCHCORE)
-        patchcore["image_size"] = cam.patchcore_image_size
-        patchcore["threshold_quantile"] = cam.patchcore_threshold
+        efficientad = dict(self.DEFAULT_EFFICIENTAD)
+        efficientad["input_size"] = cam.efficientad_image_size
+        efficientad["image_threshold"] = cam.efficientad_threshold
 
         filter_classifier: dict[str, object] = dict(self.DEFAULT_FILTER_CLASSIFIER)
         filter_clf_path = self._resolve_model_path(
@@ -191,59 +171,56 @@ class ConfigBuilder:
         if deployed_rules:
             rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
 
-        patchcore_path = self._resolve_model_path(
-            cam.patchcore_model_version_id, model_paths
+        efficientad_path = self._resolve_model_path(
+            cam.efficientad_model_version_id, model_paths
         )
 
         config: dict[str, object] = {
             "camera_id": cam.camera_id,
-            "patchcore_model_path": patchcore_path,
+            "efficientad_model_path": efficientad_path,
             "source": "",
             "enabled": True,
             "color_insensitive_mode": True,
             "quality": dict(self.DEFAULT_QUALITY),
             "detection": detection,
             "roi": dict(self.DEFAULT_ROI),
-            "patchcore": patchcore,
-            "color_branch": dict(self.DEFAULT_COLOR_BRANCH),
+            "efficientad": efficientad,
             "filter_classifier": filter_classifier,
             "rule_engine": rule_engine,
             "regions": [],
         }
 
         if cam.region_mode_enabled:
-            region_patchcore_overrides: dict[str, object] = {
-                "backbone_pretrained": True,
-                "min_target_coverage": 0.5,
-                "min_valid_patch_ratio": 0.35,
+            region_efficientad_overrides: dict[str, object] = {
+                "min_valid_pixel_ratio": 0.35,
             }
             config["regions"] = [
                 {
                     "region_id": "upper",
                     "box": [0.03, 0.03, 0.97, 0.42],
-                    "patchcore_model_path": self._resolve_model_path(
+                    "efficientad_model_path": self._resolve_model_path(
                         cam.region_upper_model_version_id, model_paths
                     ),
                     "enabled": bool(cam.region_upper_model_version_id),
-                    "patchcore": region_patchcore_overrides,
+                    "efficientad": region_efficientad_overrides,
                 },
                 {
                     "region_id": "middle",
                     "box": [0.03, 0.38, 0.97, 0.67],
-                    "patchcore_model_path": self._resolve_model_path(
+                    "efficientad_model_path": self._resolve_model_path(
                         cam.region_middle_model_version_id, model_paths
                     ),
                     "enabled": bool(cam.region_middle_model_version_id),
-                    "patchcore": region_patchcore_overrides,
+                    "efficientad": region_efficientad_overrides,
                 },
                 {
                     "region_id": "lower",
                     "box": [0.03, 0.66, 0.97, 0.97],
-                    "patchcore_model_path": self._resolve_model_path(
+                    "efficientad_model_path": self._resolve_model_path(
                         cam.region_lower_model_version_id, model_paths
                     ),
                     "enabled": bool(cam.region_lower_model_version_id),
-                    "patchcore": region_patchcore_overrides,
+                    "efficientad": region_efficientad_overrides,
                 },
             ]
 

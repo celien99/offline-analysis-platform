@@ -36,11 +36,11 @@ class SeatModelWithCameras(SeatModelResponse):
 
 class CameraConfigCreate(BaseModel):
     camera_id: str = Field(..., max_length=128, description="相机标识符")
-    patchcore_model_version_id: str = Field(..., description="PatchCore 模型版本 ID")
+    efficientad_model_version_id: str = Field(..., description="EfficientAD 模型版本 ID")
     yolo_model_version_id: str = Field(..., description="YOLO 检测模型版本 ID")
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
-    patchcore_image_size: int = Field(default=256, ge=64, le=1024)
-    patchcore_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
+    efficientad_image_size: int = Field(default=256, ge=64, le=1024)
+    efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
     region_mode_enabled: bool = False
     filter_classifier_model_version_id: str | None = Field(default=None, description="Filter Classifier 模型版本 ID")
     region_upper_model_version_id: str | None = Field(default=None, description="upper 区域模型版本 ID")
@@ -50,11 +50,11 @@ class CameraConfigCreate(BaseModel):
 
 class CameraConfigUpdate(BaseModel):
     camera_id: str | None = Field(default=None, max_length=128)
-    patchcore_model_version_id: str | None = Field(default=None)
+    efficientad_model_version_id: str | None = Field(default=None)
     yolo_model_version_id: str | None = Field(default=None)
     detection_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    patchcore_image_size: int | None = Field(default=None, ge=64, le=1024)
-    patchcore_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    efficientad_image_size: int | None = Field(default=None, ge=64, le=1024)
+    efficientad_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     region_mode_enabled: bool | None = None
     filter_classifier_model_version_id: str | None = Field(default=None)
     region_upper_model_version_id: str | None = Field(default=None)
@@ -66,12 +66,12 @@ class CameraConfigResponse(BaseModel):
     id: str
     camera_id: str
     seat_model_id: str
-    patchcore_model_version_id: str | None
+    efficientad_model_version_id: str | None
     yolo_model_version_id: str | None
     filter_classifier_model_version_id: str | None
     detection_confidence: float
-    patchcore_image_size: int
-    patchcore_threshold: float
+    efficientad_image_size: int
+    efficientad_threshold: float
     region_mode_enabled: bool
     region_upper_model_version_id: str | None
     region_middle_model_version_id: str | None

@@ -12,7 +12,7 @@ from app.infrastructure.database.session import async_session_factory
 from app.models.anomaly import AnomalyRecord
 
 CAMERAS = ["left_top", "left_bottom", "right_top", "right_bottom"]
-SOURCES = ["patchcore", "filter_classifier", "rule_engine"]
+SOURCES = ["efficientad", "filter_classifier", "rule_engine"]
 
 
 async def seed() -> None:

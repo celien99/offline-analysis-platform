@@ -65,7 +65,7 @@ class ModelRegisterRequest(BaseModel):
     """手动注册外部模型（如 YOLO），模型文件留在本地文件系统。"""
     model_name: str = Field(..., max_length=128, description="模型名称")
     version: str = Field(..., max_length=32, description="版本号")
-    model_type: str = Field(..., max_length=32, description="模型类型: yolo / patchcore / filter_classifier / embedding")
+    model_type: str = Field(..., max_length=32, description="模型类型: yolo / efficientad / filter_classifier / embedding")
     artifact_path: str = Field(..., max_length=512, description="模型文件绝对路径")
 
 

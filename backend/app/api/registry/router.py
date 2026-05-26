@@ -127,7 +127,7 @@ async def list_deployments(
 
 @router.get("/options", response_model=list[ModelOption])
 async def list_model_options(
-    model_type: str | None = Query(default=None, description="按类型筛选: yolo / patchcore / filter_classifier / embedding"),
+    model_type: str | None = Query(default=None, description="按类型筛选: yolo / efficientad / filter_classifier / embedding"),
     session: AsyncSession = Depends(get_session),
 ) -> list[ModelOption]:
     """获取已注册模型列表，供相机配置页下拉框使用。"""

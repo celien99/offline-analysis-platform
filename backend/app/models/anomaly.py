@@ -20,7 +20,7 @@ class AnomalyRecord(BaseModel):
         String(64), nullable=True, index=True, comment="所属 ROI 区域 ID，用于细粒度数据隔离"
     )
     source: Mapped[str] = mapped_column(
-        String(32), nullable=False, comment="patchcore / filter_classifier / rule_engine"
+        String(32), nullable=False, comment="efficientad / filter_classifier / rule_engine"
     )
     anomaly_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     date_folder: Mapped[str] = mapped_column(String(16), nullable=False, comment="YYYY-MM-DD")
