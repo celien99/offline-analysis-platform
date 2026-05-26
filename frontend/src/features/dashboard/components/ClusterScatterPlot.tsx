@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "antd";
+import { Card, Empty, Button } from "antd";
 import Plot from "react-plotly.js";
 import type { ScatterPoint } from "../../../types";
 import { STATUS_COLORS } from "../../../lib/constants";
@@ -23,9 +23,12 @@ export default function ClusterScatterPlot({ points }: Props) {
 
   if (points.length === 0) {
     return (
-      <Card title="聚类分布 (UMAP 二维投影)">
-        <div className="flex items-center justify-center text-gray-400" style={{ height: 450 }}>
-          暂无聚类数据，请先运行聚类任务
+      <Card title="聚类分布 (UMAP 投影)">
+        <div className="flex flex-col items-center justify-center text-gray-400 py-12" style={{ height: 450 }}>
+          <Empty description="暂无聚类数据" />
+          <Button type="primary" className="mt-3" onClick={() => navigate("/training")}>
+            运行聚类任务
+          </Button>
         </div>
       </Card>
     );
@@ -62,7 +65,7 @@ export default function ClusterScatterPlot({ points }: Props) {
   }
 
   return (
-    <Card title="Cluster Distribution (UMAP 2D Projection)">
+    <Card title="聚类分布 (UMAP 投影)">
       <Plot
         data={plotData}
         layout={{
