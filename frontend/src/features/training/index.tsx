@@ -16,6 +16,8 @@ import {
   Tabs,
   Input,
   Upload,
+  Row,
+  Col,
 } from "antd";
 import {
   PlayCircleOutlined,
@@ -34,6 +36,7 @@ import {
 } from "../../hooks/queries";
 import type { TrainingStartParams, TrainedModel } from "../../types";
 import dayjs from "dayjs";
+import TaskLogPanel from "./components/TaskLogPanel";
 
 const FILTER_MODEL_TYPE_OPTIONS = [
   { value: "mobilenet_v3_small", label: "MobileNetV3-Small" },
@@ -295,7 +298,14 @@ export default function TrainingPage() {
         }
       />
 
-      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+      <Row gutter={16}>
+        <Col xs={24} xl={13}>
+          <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+        </Col>
+        <Col xs={24} xl={11}>
+          <TaskLogPanel />
+        </Col>
+      </Row>
 
       {/* ── Filter Classifier Modal ── */}
       <Modal
