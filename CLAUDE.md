@@ -30,9 +30,8 @@ uv run mypy app                                       # type check (mypy strict)
 # ===================== 在线检测核心 =====================
 cd seat_defect_core
 uv sync                                               # 安装依赖 (torch, cv2, ultralytics, etc.)
-cd ..                                                 # 回到仓库根目录再运行
-./seat_defect_core/.venv/bin/python -m seat_defect_core --help
-./seat_defect_core/.venv/bin/python -m seat_defect_core \
+uv run python -m seat_defect_core --help
+uv run python -m seat_defect_core \
   --config seat_defect_core/config.example.json \
   --images "cam_front=sample.jpg"
 
