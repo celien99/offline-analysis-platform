@@ -1,5 +1,5 @@
 {
-  "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性:Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine + Per-Region EfficientAD。",
+  "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性:Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine。",
   "seat_defect_inspection": {
     "part_id": "seat_demo",
     "default_seat_model_id": "seat_model_a",
