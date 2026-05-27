@@ -15,7 +15,7 @@ from ..rule_engine import apply_rules, merge_rules
 from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
 from ..util import select_texture_input
 from ..proposal import ProposalGenerator, ProposalConfig, aggregate_proposals
-from defect_protocol import FilterResult
+from .._protocol import FilterResult
 
 if TYPE_CHECKING:
     from .core import CameraPipeline, InspectionService

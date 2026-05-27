@@ -20,26 +20,18 @@
 
 ## 安装和交付
 
-`seat_defect_core` 依赖 `defect_protocol`，两者同属一个 monorepo。安装时需按顺序处理：
+`seat_defect_core` 已将共享协议库（`defect_protocol`）嵌入为 `_protocol` 子模块，零外部 Python 包依赖。部署时只需安装 `seat_defect_core` 自身及其 PyPI 依赖。
 
-### 从源码安装（推荐）
+### 从源码安装
 
 ```bash
-# 先安装 protocol 包（零依赖纯 Python 协议库）
-pip install ./defect_protocol
-# 再安装 core
 pip install ./seat_defect_core
 ```
 
 ### 从预构建 wheel 安装
 
 ```bash
-# 分别在两个目录构建 wheel
-cd defect_protocol && python -m build -w && cd ..
-cd seat_defect_core && python -m build -w && cd ..
-
-# 按顺序安装
-pip install defect_protocol/dist/defect_protocol-*.whl
+cd seat_defect_core && python -m build -w
 pip install seat_defect_core/dist/seat_defect_core-*.whl
 ```
 
@@ -49,7 +41,6 @@ pip install seat_defect_core/dist/seat_defect_core-*.whl
 
 ```bash
 python -m pip download --only-binary=:all: -r requirements-core-py38-cpu.txt -d wheelhouse
-python -m pip wheel --no-deps ./defect_protocol -w wheelhouse
 python -m pip wheel --no-deps ./seat_defect_core -w wheelhouse
 ```
 
@@ -57,12 +48,12 @@ python -m pip wheel --no-deps ./seat_defect_core -w wheelhouse
 
 ```bash
 python -m pip install --no-index --find-links wheelhouse -r requirements-core-py38-cpu.txt
-python -m pip install --no-index --find-links wheelhouse defect_protocol seat_defect_core
+python -m pip install --no-index --find-links wheelhouse seat-defect-core
 ```
 
 ### 开发时使用（monorepo 内）
 
-在 workspace 内直接 `uv sync --all-packages`，uv 会自动解析 workspace 成员依赖。
+在 workspace 内直接 `uv sync --all-packages`，所有依赖自动解析。
 
 不建议长期依赖手工复制目录作为正式交付方式。手工复制可以用于临时验证，但容易遗漏依赖、版本和包数据。
 

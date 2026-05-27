@@ -18,7 +18,7 @@ import numpy as np
 import requests
 
 from .core_types import CameraInspectionResult, InspectionResponse
-from defect_protocol import proposals_to_json
+from ._protocol import proposals_to_json
 
 logger = logging.getLogger(__name__)
 

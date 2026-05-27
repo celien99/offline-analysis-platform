@@ -59,7 +59,7 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
     }
     # Add proposals if present
     if result.proposals:
-        from defect_protocol import proposals_to_json
+        from ._protocol import proposals_to_json
         import json as _json
 
         out["proposals"] = _json.loads(proposals_to_json(result.proposals))

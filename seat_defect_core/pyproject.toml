@@ -11,11 +11,7 @@ dependencies = [
     "torchvision>=0.18.0",
     "ultralytics>=8.2.0",
     "requests>=2.31.0",
-    "defect_protocol",
 ]
-
-[tool.uv.sources]
-defect_protocol = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=75.0"]
