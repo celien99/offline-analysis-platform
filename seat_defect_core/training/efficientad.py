@@ -138,11 +138,13 @@ def train_efficientad(
             default_root_dir=str(tmp_dir / "results"),
         )
 
+        train_batch_size = 1
+        eval_batch_size = efficientad_cfg.batch_size
         datamodule_kwargs = {
             "normal_dir": str(good_dir),
             "normal_test_dir": str(test_good_dir),
-            "train_batch_size": efficientad_cfg.batch_size,
-            "eval_batch_size": efficientad_cfg.batch_size,
+            "train_batch_size": train_batch_size,
+            "eval_batch_size": eval_batch_size,
             "num_workers": 0,
         }
         datamodule_signature = inspect.signature(datamodule_cls)
@@ -196,6 +198,8 @@ def train_efficientad(
             "train_image_count": len(train_images),
             "threshold_image_count": len(threshold_images),
             "epochs": efficientad_cfg.epochs,
+            "train_batch_size": train_batch_size,
+            "eval_batch_size": eval_batch_size,
             "train_time_s": train_time_s,
             "camera_id": camera_id,
         }
@@ -211,7 +215,9 @@ def train_efficientad(
                     "student_backbone": efficientad_cfg.student_backbone,
                     "input_size": efficientad_cfg.input_size,
                     "epochs": efficientad_cfg.epochs,
-                    "batch_size": efficientad_cfg.batch_size,
+                    "configured_batch_size": efficientad_cfg.batch_size,
+                    "train_batch_size": train_batch_size,
+                    "eval_batch_size": eval_batch_size,
                     "learning_rate": efficientad_cfg.learning_rate,
                     "train_image_count": len(train_images),
                     "threshold_image_count": len(threshold_images),
