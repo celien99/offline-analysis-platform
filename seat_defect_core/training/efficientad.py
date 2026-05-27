@@ -265,8 +265,8 @@ def _compute_threshold(
     """
     model.eval()
     scores: list[float] = []
-    imagenet_mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
-    imagenet_std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+    imagenet_mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1)
+    imagenet_std = torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1)
 
     with torch.no_grad():
         for img in images:
