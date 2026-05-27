@@ -6,7 +6,7 @@ import uuid
 import cv2
 import numpy as np
 
-from defect_protocol import (
+from .._protocol import (
     AnomalyContext,
     BoundingBox,
     EfficientADFeatures,

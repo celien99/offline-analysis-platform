@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from defect_protocol import CanonicalPatchProposal
+from .._protocol import CanonicalPatchProposal
 
 from .config import TrackConfig
 from .identity import DefectIdentity, IdentityState

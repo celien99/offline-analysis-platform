@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from defect_protocol import FilterResult, PatchProposal
+from .._protocol import FilterResult, PatchProposal
 
 
 def aggregate_proposals(proposals: list[PatchProposal],
