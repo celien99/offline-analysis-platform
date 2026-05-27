@@ -13,13 +13,19 @@ from .config import (
     ProjectionConfig,
     WhiteningConfig,
 )
+from .projector import (
+    EmbeddingProjector,
+    ProjectionParams,
+)
 
 __all__ = [
     "CalibrationConfig",
     "CameraNormConfig",
     "CameraNormalizer",
     "CameraNormStats",
+    "EmbeddingProjector",
     "EMACenterConfig",
     "ProjectionConfig",
+    "ProjectionParams",
     "WhiteningConfig",
 ]
