@@ -7,9 +7,10 @@
 from __future__ import annotations
 
 import json
+import inspect
 import time
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Type
 
 import cv2
 import numpy as np
@@ -73,15 +74,26 @@ def train_efficientad(
 
     device = _resolve_train_device(efficientad_cfg.device)
 
-    # 使用 anomalib 训练
+    # 兼容 anomalib 1.x/2.x：新版数据模块改名为 MVTecAD，旧版仍可能暴露 MVTec。
     try:
-        from anomalib.data import MVTec
+        from anomalib.data import MVTecAD as MVTecDataModule
         from anomalib.models import EfficientAd
         from anomalib.engine import Engine
-    except ImportError:
-        raise RuntimeError(
-            "EfficientAD 训练依赖 anomalib 库，请安装: pip install anomalib"
-        )
+    except ImportError as exc:
+        try:
+            from anomalib.data import MVTec as MVTecDataModule
+            from anomalib.models import EfficientAd
+            from anomalib.engine import Engine
+        except ImportError as fallback_exc:
+            detail = f"{fallback_exc.__class__.__name__}: {fallback_exc}"
+            if str(exc) != str(fallback_exc):
+                detail = f"{exc.__class__.__name__}: {exc}; fallback {detail}"
+            raise RuntimeError(
+                "EfficientAD training requires anomalib and its runtime dependencies. "
+                "Install them in the active Python environment with: pip install anomalib. "
+                f"Underlying import error: {detail}"
+            ) from fallback_exc
+    datamodule_cls: Type = MVTecDataModule
 
     import tempfile
     import shutil
@@ -126,14 +138,20 @@ def train_efficientad(
             default_root_dir=str(tmp_dir / "results"),
         )
 
-        datamodule = MVTec(
-            root=str(tmp_dir),
-            category=category,
-            image_size=(efficientad_cfg.input_size, efficientad_cfg.input_size),
-            train_batch_size=efficientad_cfg.batch_size,
-            eval_batch_size=efficientad_cfg.batch_size,
-            num_workers=0,
-        )
+        datamodule_kwargs = {
+            "root": str(tmp_dir),
+            "category": category,
+            "train_batch_size": efficientad_cfg.batch_size,
+            "eval_batch_size": efficientad_cfg.batch_size,
+            "num_workers": 0,
+        }
+        # anomalib 1.x 支持 image_size；2.x 将尺寸放到 transforms 中，避免传入未知参数。
+        if "image_size" in inspect.signature(datamodule_cls).parameters:
+            datamodule_kwargs["image_size"] = (
+                efficientad_cfg.input_size,
+                efficientad_cfg.input_size,
+            )
+        datamodule = datamodule_cls(**datamodule_kwargs)
 
         engine.fit(model=model, datamodule=datamodule)
 
