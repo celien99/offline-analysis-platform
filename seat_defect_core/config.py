@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+from .calibration import CalibrationConfig
 from .efficientad import EfficientADConfig
 from .proposal import ProposalConfig
 from .tracking import TrackConfig
@@ -169,6 +170,7 @@ class CameraConfig:
     filter_classifier: FilterClassifierConfig = field(default_factory=FilterClassifierConfig)
     rule_engine: RuleEngineConfig = field(default_factory=RuleEngineConfig)
     proposal: ProposalConfig | None = None
+    calibration: CalibrationConfig | None = None
     track: TrackConfig | None = None
     regions: List[RegionConfig] = field(default_factory=list)
 
