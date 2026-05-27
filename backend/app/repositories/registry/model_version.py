@@ -63,3 +63,14 @@ class ModelVersionRepository(BaseRepository[ModelVersion]):
         total_result = await self._session.execute(count_stmt)
 
         return models, total_result.scalar_one()
+
+    async def get_by_ids(self, ids: list[str]) -> dict[str, ModelVersion]:
+        """批量按 ID 查询 ModelVersion，返回 id→ModelVersion 映射。"""
+        if not ids:
+            return {}
+        stmt = select(ModelVersion).where(
+            ModelVersion.deleted_at.is_(None),
+            ModelVersion.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return {mv.id: mv for mv in result.scalars().all()}
