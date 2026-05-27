@@ -15,12 +15,10 @@ class CameraNormStats:
     mean: np.ndarray  # shape matches feature channels
     std: np.ndarray
     sample_count: int = 0
-    _M2: Optional[np.ndarray] = None
-
     def to_dict(self) -> dict:
         return {
-            "mean": self.mean,
-            "std": self.std,
+            "mean": self.mean.tolist(),
+            "std": self.std.tolist(),
             "sample_count": self.sample_count,
         }
 
@@ -42,6 +40,9 @@ class CameraNormalizer:
 
     def fit(self, features_list: list[dict[str, np.ndarray]]) -> None:
         """在正常样本特征列表上离线拟合 per-channel mean/std。
+
+        将所有样本特征 concatenate 到内存中计算 mean/std，
+        大规模数据集注意 O(n) 内存占用。
 
         Args:
             features_list: 正常样本的特征字典列表，每个字典含 'teacher_l1' 等 key，
@@ -85,7 +86,7 @@ class CameraNormalizer:
             if stats is None:
                 result[key] = val.copy()
             else:
-                result[key] = (val.astype(np.float32) - stats.mean) / stats.std
+                result[key] = (np.asarray(val, dtype=np.float32) - stats.mean) / stats.std
         return result
 
     def update(self, features: dict[str, np.ndarray]) -> None:
@@ -113,15 +114,18 @@ class CameraNormalizer:
                 )
                 continue
 
-            delta = batch_mean - existing.mean
+            # 使用 float64 中间计算保持精度
+            old_mean = existing.mean.astype(np.float64)
+            old_var = (existing.std.astype(np.float64)) ** 2
+            delta = batch_mean - old_mean
             new_count = existing.sample_count + batch_count
-            existing.mean = existing.mean + delta * batch_count / new_count
-            existing.std = np.sqrt(
-                (existing.std ** 2 * existing.sample_count
-                 + (samples.var(axis=0) * batch_count
-                    + delta ** 2 * existing.sample_count * batch_count / new_count))
-                / new_count
-            ).astype(np.float32)
+            existing.mean = (old_mean + delta * batch_count / new_count).astype(np.float32)
+            combined_var = (
+                old_var * existing.sample_count
+                + samples.var(axis=0) * batch_count
+                + delta ** 2 * existing.sample_count * batch_count / new_count
+            ) / new_count
+            existing.std = np.sqrt(combined_var).astype(np.float32)
             existing.std = np.where(existing.std < 1e-8, 1.0, existing.std)
             existing.sample_count = new_count
 
@@ -152,7 +156,7 @@ class CameraNormalizer:
 
     @property
     def is_fitted(self) -> bool:
-        return len(self._stats) > 0
+        return set(self._stats.keys()) == set(self._FEATURE_KEYS)
 
     @property
     def fitted_keys(self) -> list[str]:
