@@ -201,73 +201,20 @@ async def get_filter_classifier_stats(
     """过滤器分类器效果统计，交叉对比人工审核结果。"""
     from datetime import datetime as dt, timedelta, timezone
 
-    from sqlalchemy import func, select
+    from app.repositories.anomaly.repository import AnomalyRepository
 
-    from app.models.cluster import Cluster, ClusterMembership
+    since_dt = dt.now(tz=timezone.utc) - timedelta(days=days)
+    since_str = since_dt.isoformat()
+    repo = AnomalyRepository(session)
 
-    since = dt.now(tz=timezone.utc) - timedelta(days=days)
-
-    # 按 filter_action 统计
-    base_filters = []
-    if camera_id:
-        base_filters.append(AnomalyRecord.camera_id == camera_id)
-    if seat_model_id:
-        base_filters.append(AnomalyRecord.seat_model_id == seat_model_id)
-
-    action_stmt = (
-        select(
-            AnomalyRecord.filter_action,
-            func.count(AnomalyRecord.id),
-        )
-        .where(
-            AnomalyRecord.deleted_at.is_(None),
-            AnomalyRecord.detected_at >= since,
-            AnomalyRecord.filter_action.isnot(None),
-            *(base_filters if base_filters else [])
-        )
-        .group_by(AnomalyRecord.filter_action)
+    action_counts = await repo.get_filter_stats(
+        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
     )
-    action_result = await session.execute(action_stmt)
-    action_counts = dict(action_result.all())
-
-    # 交叉对比：filter_action vs 人工审核结果
-    review_stmt = (
-        select(
-            AnomalyRecord.filter_action,
-            Cluster.review_status,
-            func.count(AnomalyRecord.id),
-        )
-        .join(
-            ClusterMembership,
-            ClusterMembership.anomaly_id == AnomalyRecord.id,
-        )
-        .join(
-            Cluster,
-            Cluster.id == ClusterMembership.cluster_id,
-        )
-        .where(
-            AnomalyRecord.deleted_at.is_(None),
-            AnomalyRecord.detected_at >= since,
-            AnomalyRecord.filter_action.isnot(None),
-            Cluster.review_status.isnot(None),
-            Cluster.deleted_at.is_(None),
-            ClusterMembership.deleted_at.is_(None),
-            *(base_filters if base_filters else [])
-        )
-        .group_by(
-            AnomalyRecord.filter_action,
-            Cluster.review_status,
-        )
+    review_breakdown = await repo.get_filter_vs_human_review(
+        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
     )
-    review_result = await session.execute(review_stmt)
-    review_breakdown = [
-        {"filter_action": row[0], "human_review": row[1], "count": row[2]}
-        for row in review_result.all()
-    ]
 
     total_with_filter = sum(action_counts.values())
-
-    # 计算准确率：filter confirmed_ng → 人工标记 real_defect = 正确
     confirmed_total = action_counts.get("confirmed_ng", 0)
     suppressed_total = action_counts.get("suppressed_to_ok", 0)
     confirmed_correct = sum(
@@ -333,9 +280,10 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
         crop_url = results[0]
         crop_urls = [u for u in results[1:] if u is not None]
 
-    original_url, heatmap_url = await asyncio.gather(
+    original_url, heatmap_url, refined_crop_url = await asyncio.gather(
         _presigned(record.original_path),
         _presigned(record.heatmap_path),
+        _presigned(record.refined_crop_path),
     )
     return AnomalyResponse(
         anomaly_id=record.id,
@@ -351,6 +299,7 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
         heatmap_url=heatmap_url,
         crop_url=crop_url,
         crop_urls=crop_urls if crop_urls else [],
+        refined_crop_url=refined_crop_url,
         created_at=record.created_at,
         trace_id=record.trace_id,
     )

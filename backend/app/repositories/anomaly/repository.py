@@ -146,3 +146,68 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
         )
         result = await self._session.execute(stmt)
         return result.scalars().all()
+
+    async def get_filter_stats(
+        self,
+        since: str | None = None,
+        camera_id: str | None = None,
+        seat_model_id: str | None = None,
+    ) -> dict[str, int]:
+        """统计指定时间范围内的 filter_action 分布。"""
+        conditions = [
+            AnomalyRecord.deleted_at.is_(None),
+            AnomalyRecord.filter_action.isnot(None),
+        ]
+        if since is not None:
+            conditions.append(AnomalyRecord.detected_at >= since)
+        if camera_id:
+            conditions.append(AnomalyRecord.camera_id == camera_id)
+        if seat_model_id:
+            conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
+        stmt = (
+            select(AnomalyRecord.filter_action, func.count(AnomalyRecord.id))
+            .where(*conditions)
+            .group_by(AnomalyRecord.filter_action)
+        )
+        result = await self._session.execute(stmt)
+        return dict(result.all())
+
+    async def get_filter_vs_human_review(
+        self,
+        since: str | None = None,
+        camera_id: str | None = None,
+        seat_model_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        """交叉对比 filter_action 与人工审核结果。"""
+        from app.models.cluster import Cluster, ClusterMembership
+
+        conditions = [
+            AnomalyRecord.deleted_at.is_(None),
+            AnomalyRecord.filter_action.isnot(None),
+            Cluster.review_status.isnot(None),
+            Cluster.deleted_at.is_(None),
+            ClusterMembership.deleted_at.is_(None),
+        ]
+        if since is not None:
+            conditions.append(AnomalyRecord.detected_at >= since)
+        if camera_id:
+            conditions.append(AnomalyRecord.camera_id == camera_id)
+        if seat_model_id:
+            conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
+
+        stmt = (
+            select(
+                AnomalyRecord.filter_action,
+                Cluster.review_status,
+                func.count(AnomalyRecord.id),
+            )
+            .join(ClusterMembership, ClusterMembership.anomaly_id == AnomalyRecord.id)
+            .join(Cluster, Cluster.id == ClusterMembership.cluster_id)
+            .where(*conditions)
+            .group_by(AnomalyRecord.filter_action, Cluster.review_status)
+        )
+        result = await self._session.execute(stmt)
+        return [
+            {"filter_action": row[0], "human_review": row[1], "count": row[2]}
+            for row in result.all()
+        ]

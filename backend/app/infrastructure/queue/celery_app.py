@@ -21,6 +21,9 @@ celery_app = Celery(
         "app.workers.pipeline_worker.tasks",
         "app.workers.efficientad_training_worker.tasks",
         "app.workers.inspection_worker.tasks",
+        "app.workers.mask_refinement_worker.tasks",
+        "app.workers.gate_worker.tasks",
+        "app.workers.graph_worker.tasks",
     ],
 )
 

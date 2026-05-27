@@ -40,10 +40,6 @@ class AnomalyRecord(BaseModel):
         DateTime(timezone=True), nullable=True,
         comment="单个异常被审核的时间（非 cluster 审核场景）"
     )
-    anomaly_review_status: Mapped[str | None] = mapped_column(
-        String(32), nullable=True,
-        comment="real_defect / false_alarm — 噪声异常审核结果"
-    )
     decision_reason: Mapped[str | None] = mapped_column(
         String(64), nullable=True,
         comment="在线检测的 decision_reason: texture_anomaly / filter_classifier_suppressed 等"

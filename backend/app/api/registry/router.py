@@ -111,10 +111,18 @@ async def list_deployments(
     deployments, _ = await service.list_deployments(
         target=target, offset=offset, limit=page_size
     )
+    # 批量加载关联的 ModelVersion，填充 model_name/version
+    from app.repositories.registry.model_version import ModelVersionRepository
+    mv_repo = ModelVersionRepository(session)
+    mv_ids = list({d.model_version_id for d in deployments})
+    mv_map = await mv_repo.get_by_ids(mv_ids)
+
     return [
         DeploymentResponse(
             deployment_id=d.id,
             model_version_id=d.model_version_id,
+            model_name=mv_map[d.model_version_id].model_name if d.model_version_id in mv_map else None,
+            version=mv_map[d.model_version_id].version if d.model_version_id in mv_map else None,
             target=d.target,
             deployed_by=d.deployed_by,
             deployed_at=d.deployed_at,
