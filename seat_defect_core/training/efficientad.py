@@ -165,6 +165,7 @@ def train_efficientad(
         datamodule = datamodule_cls(**datamodule_kwargs)
 
         engine.fit(model=model, datamodule=datamodule)
+        model.to(device)
 
         # 计算最优阈值：在正常图像上推理，取分数的指定分位数作为阈值
         image_threshold = _compute_threshold(
@@ -180,8 +181,14 @@ def train_efficientad(
         output.parent.mkdir(parents=True, exist_ok=True)
 
         model.eval()
-        example_input = torch.randn(1, 3, efficientad_cfg.input_size, efficientad_cfg.input_size)
-        traced = torch.jit.trace(model, example_input.to(device))
+        example_input = torch.randn(
+            1,
+            3,
+            efficientad_cfg.input_size,
+            efficientad_cfg.input_size,
+            device=device,
+        )
+        traced = torch.jit.trace(model, example_input)
         traced.save(str(output))
 
         # 像素级阈值（取图像级阈值的 0.8 倍作为参考）
