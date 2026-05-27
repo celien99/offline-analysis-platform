@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -149,7 +150,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
 
     async def get_filter_stats(
         self,
-        since: str | None = None,
+        since: datetime | None = None,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
     ) -> dict[str, int]:
@@ -174,7 +175,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
 
     async def get_filter_vs_human_review(
         self,
-        since: str | None = None,
+        since: datetime | None = None,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
     ) -> list[dict[str, object]]:

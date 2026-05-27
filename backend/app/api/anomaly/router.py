@@ -173,14 +173,13 @@ async def get_filter_classifier_stats(
     from app.repositories.anomaly.repository import AnomalyRepository
 
     since_dt = dt.now(tz=timezone.utc) - timedelta(days=days)
-    since_str = since_dt.isoformat()
     repo = AnomalyRepository(session)
 
     action_counts = await repo.get_filter_stats(
-        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
+        since=since_dt, camera_id=camera_id, seat_model_id=seat_model_id
     )
     review_breakdown = await repo.get_filter_vs_human_review(
-        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
+        since=since_dt, camera_id=camera_id, seat_model_id=seat_model_id
     )
 
     total_with_filter = sum(action_counts.values())
