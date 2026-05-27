@@ -21,6 +21,9 @@ from .projector import (
     EmbeddingProjector,
     ProjectionParams,
 )
+from .registry import (
+    CalibrationRegistry,
+)
 from .whitening import (
     WhiteningTransform,
 )
@@ -30,6 +33,7 @@ __all__ = [
     "CameraNormConfig",
     "CameraNormalizer",
     "CameraNormStats",
+    "CalibrationRegistry",
     "DefectCenter",
     "EmbeddingProjector",
     "EMAFeatureCenter",
