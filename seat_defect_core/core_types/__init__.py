@@ -17,7 +17,6 @@ from .results import (
     InspectionError,
     InspectionResponse,
     InspectionResult,
-    RegionAnomalyResult,
     TextureAnomalyResult,
 )
 
@@ -34,7 +33,6 @@ __all__ = [
     "InspectionFrame",
     "InspectionResponse",
     "InspectionResult",
-    "RegionAnomalyResult",
     "RoiRefineResult",
     "TextureAnomalyResult",
 ]

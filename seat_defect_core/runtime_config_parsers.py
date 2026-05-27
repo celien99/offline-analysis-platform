@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 
 from .config import (
     AlignmentConfig,
@@ -15,7 +15,6 @@ from .config import (
     FusionConfig,
     InspectionConfig,
     QualityGuardConfig,
-    RegionConfig,
     RoiRefineConfig,
     RuleConfig,
     RuleEngineConfig,
@@ -170,11 +169,6 @@ def _parse_camera_config(payload: Dict[str, Any], config_dir: Path, *, scope: st
         rule_engine=_parse_rule_engine_config(
             payload.get("rule_engine"),
             scope=f"{scope}.rule_engine",
-        ),
-        regions=_parse_region_configs(
-            payload.get("regions"),
-            config_dir,
-            scope=f"{scope}.regions",
         ),
     )
 
@@ -417,58 +411,6 @@ def _parse_rule_config(payload: Any, *, scope: str) -> RuleConfig:
         knowledge_entry_id=_optional_string(payload.get("knowledge_entry_id")),
         priority=_int_or_default(payload.get("priority"), 0),
     )
-
-
-def _parse_region_configs(
-    payload: Any,
-    config_dir: Path,
-    *,
-    scope: str,
-) -> List[RegionConfig]:
-    if payload is None:
-        return []
-    return [
-        _parse_region_config(item, config_dir, scope=f"{scope}[{index}]")
-        for index, item in enumerate(_ensure_list(payload, scope))
-    ]
-
-
-def _parse_region_config(
-    payload: Any,
-    config_dir: Path,
-    *,
-    scope: str,
-) -> RegionConfig:
-    payload = _expect_dict(payload, scope)
-    _reject_unknown_keys(payload, _field_names(RegionConfig), scope)
-    return RegionConfig(
-        region_id=_require_string(payload, "region_id", scope),
-        box=_region_box(payload.get("box"), scope=f"{scope}.box"),
-        efficientad_model_path=_resolve_local_path(
-            config_dir,
-            _require_string(payload, "efficientad_model_path", scope),
-            force=True,
-        ),
-        enabled=_bool_or_default(payload.get("enabled"), True),
-        efficientad=(
-            _parse_efficientad_config(
-                payload.get("efficientad"),
-                scope=f"{scope}.efficientad",
-            )
-            if payload.get("efficientad") is not None
-            else None
-        ),
-    )
-
-
-def _region_box(value: Any, *, scope: str) -> List[float]:
-    items = [float(item) for item in _ensure_list(value, scope)]
-    if len(items) != 4:
-        raise ValueError(f"{scope} 必须包含 4 个归一化坐标")
-    x1, y1, x2, y2 = items
-    if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
-        raise ValueError(f"{scope} 必须满足 0 <= x1 < x2 <= 1 且 0 <= y1 < y2 <= 1")
-    return items
 
 
 # 通用字段读取与路径解析工具。

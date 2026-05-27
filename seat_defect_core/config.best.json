@@ -1,20 +1,20 @@
 {
-  "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性：Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine + Per-Region EfficientAD。",
+  "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性:Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine + Per-Region EfficientAD。",
   "seat_defect_inspection": {
     "part_id": "seat_demo",
     "default_seat_model_id": "seat_model_a",
     "output_json_path": "../outputs/seat_defect_inspection/results.json",
     "debug_dir": "../outputs/seat_defect_inspection/debug",
     "debug_artifacts_enabled": false,
-    "debug_artifact_names": ["overlay"],
+    "debug_artifact_names": [
+      "overlay"
+    ],
     "upload_base_url": "http://localhost:8000",
-
     "fusion": {
       "reject_on_any_reject": true,
       "ng_strategy": "any",
       "defect_overrides_reject": true
     },
-
     "cameras": [],
     "seat_models": [
       {
@@ -25,8 +25,6 @@
             "camera_id": "cam_back",
             "source": "",
             "enabled": true,
-            "efficientad_model_path": "../models/seat_model_a/cam_back_efficientad.pt",
-
             "quality": {
               "min_laplacian_variance": 80.0,
               "min_brightness_mean": 30.0,
@@ -34,7 +32,6 @@
               "max_overexposed_ratio": 0.25,
               "max_underexposed_ratio": 0.35
             },
-
             "detection": {
               "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
@@ -45,7 +42,6 @@
               "fill_segmentation_holes": true,
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
-
             "roi": {
               "crop_expand_ratio": 0.02,
               "crop_shrink_ratio": 0.0,
@@ -56,7 +52,6 @@
                 "output_height": 256
               }
             },
-
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_back_efficientad.pt",
               "device": "cuda",
@@ -72,7 +67,6 @@
               "validation_split": 0.1,
               "early_stopping_patience": 20
             },
-
             "filter_classifier": {
               "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
@@ -80,13 +74,11 @@
               "input_size": 448,
               "confidence_threshold": 0.5
             },
-
             "rule_engine": {
               "enabled": true,
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-
             "proposal": {
               "heatmap_threshold_mode": "adaptive",
               "heatmap_threshold_fixed": 0.5,
@@ -96,7 +88,7 @@
               "max_proposals": 20,
               "open_kernel_size": 3,
               "close_kernel_size": 5,
-              "context_padding_ratio": 0.10,
+              "context_padding_ratio": 0.1,
               "min_crop_size": 20,
               "aggregation_method": "weighted_confidence",
               "area_exponent": 0.5,
@@ -114,7 +106,6 @@
                 "recovery_rate": 0.01
               }
             },
-
             "calibration": {
               "enabled": true,
               "camera_norm": {
@@ -139,7 +130,6 @@
                 "centers_path": "../models/calibration/defect_centers.json"
               }
             },
-
             "track": {
               "max_age": 30,
               "min_hits": 2,
@@ -151,65 +141,12 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.38],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_back_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_back_upper_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [0.03, 0.33, 0.97, 0.69],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_back_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_back_middle_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [0.03, 0.64, 0.97, 0.97],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_back_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_back_lower_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              }
-            ]
+            }
           },
           {
             "camera_id": "cam_front",
             "source": "",
             "enabled": true,
-            "efficientad_model_path": "../models/seat_model_a/cam_front_efficientad.pt",
-
             "quality": {
               "min_laplacian_variance": 80.0,
               "min_brightness_mean": 30.0,
@@ -217,7 +154,6 @@
               "max_overexposed_ratio": 0.25,
               "max_underexposed_ratio": 0.35
             },
-
             "detection": {
               "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
@@ -228,7 +164,6 @@
               "fill_segmentation_holes": true,
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
-
             "roi": {
               "crop_expand_ratio": 0.02,
               "crop_shrink_ratio": 0.0,
@@ -239,7 +174,6 @@
                 "output_height": 256
               }
             },
-
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_front_efficientad.pt",
               "device": "cuda",
@@ -255,7 +189,6 @@
               "validation_split": 0.1,
               "early_stopping_patience": 20
             },
-
             "filter_classifier": {
               "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
@@ -263,13 +196,11 @@
               "input_size": 448,
               "confidence_threshold": 0.5
             },
-
             "rule_engine": {
               "enabled": true,
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-
             "proposal": {
               "heatmap_threshold_mode": "adaptive",
               "heatmap_threshold_fixed": 0.5,
@@ -279,7 +210,7 @@
               "max_proposals": 20,
               "open_kernel_size": 3,
               "close_kernel_size": 5,
-              "context_padding_ratio": 0.10,
+              "context_padding_ratio": 0.1,
               "min_crop_size": 20,
               "aggregation_method": "weighted_confidence",
               "area_exponent": 0.5,
@@ -297,7 +228,6 @@
                 "recovery_rate": 0.01
               }
             },
-
             "calibration": {
               "enabled": true,
               "camera_norm": {
@@ -322,7 +252,6 @@
                 "centers_path": "../models/calibration/defect_centers.json"
               }
             },
-
             "track": {
               "max_age": 30,
               "min_hits": 2,
@@ -334,65 +263,12 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.38],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [0.03, 0.33, 0.97, 0.69],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_front_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_front_middle_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [0.03, 0.64, 0.97, 0.97],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_front_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_front_lower_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              }
-            ]
+            }
           },
           {
             "camera_id": "cam_left",
             "source": "",
             "enabled": true,
-            "efficientad_model_path": "../models/seat_model_a/cam_left_efficientad.pt",
-
             "quality": {
               "min_laplacian_variance": 80.0,
               "min_brightness_mean": 30.0,
@@ -400,7 +276,6 @@
               "max_overexposed_ratio": 0.25,
               "max_underexposed_ratio": 0.35
             },
-
             "detection": {
               "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
@@ -411,7 +286,6 @@
               "fill_segmentation_holes": true,
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
-
             "roi": {
               "crop_expand_ratio": 0.02,
               "crop_shrink_ratio": 0.0,
@@ -422,7 +296,6 @@
                 "output_height": 256
               }
             },
-
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_left_efficientad.pt",
               "device": "cuda",
@@ -438,7 +311,6 @@
               "validation_split": 0.1,
               "early_stopping_patience": 20
             },
-
             "filter_classifier": {
               "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
@@ -446,13 +318,11 @@
               "input_size": 448,
               "confidence_threshold": 0.5
             },
-
             "rule_engine": {
               "enabled": true,
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-
             "proposal": {
               "heatmap_threshold_mode": "adaptive",
               "heatmap_threshold_fixed": 0.5,
@@ -462,7 +332,7 @@
               "max_proposals": 20,
               "open_kernel_size": 3,
               "close_kernel_size": 5,
-              "context_padding_ratio": 0.10,
+              "context_padding_ratio": 0.1,
               "min_crop_size": 20,
               "aggregation_method": "weighted_confidence",
               "area_exponent": 0.5,
@@ -480,7 +350,6 @@
                 "recovery_rate": 0.01
               }
             },
-
             "calibration": {
               "enabled": true,
               "camera_norm": {
@@ -505,7 +374,6 @@
                 "centers_path": "../models/calibration/defect_centers.json"
               }
             },
-
             "track": {
               "max_age": 30,
               "min_hits": 2,
@@ -517,65 +385,12 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.38],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_left_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_left_upper_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [0.03, 0.33, 0.97, 0.69],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_left_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_left_middle_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [0.03, 0.64, 0.97, 0.97],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_left_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_left_lower_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              }
-            ]
+            }
           },
           {
             "camera_id": "cam_right",
             "source": "",
             "enabled": true,
-            "efficientad_model_path": "../models/seat_model_a/cam_right_efficientad.pt",
-
             "quality": {
               "min_laplacian_variance": 80.0,
               "min_brightness_mean": 30.0,
@@ -583,7 +398,6 @@
               "max_overexposed_ratio": 0.25,
               "max_underexposed_ratio": 0.35
             },
-
             "detection": {
               "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
@@ -594,7 +408,6 @@
               "fill_segmentation_holes": true,
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
-
             "roi": {
               "crop_expand_ratio": 0.02,
               "crop_shrink_ratio": 0.0,
@@ -605,7 +418,6 @@
                 "output_height": 256
               }
             },
-
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_right_efficientad.pt",
               "device": "cuda",
@@ -621,7 +433,6 @@
               "validation_split": 0.1,
               "early_stopping_patience": 20
             },
-
             "filter_classifier": {
               "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
@@ -629,13 +440,11 @@
               "input_size": 448,
               "confidence_threshold": 0.5
             },
-
             "rule_engine": {
               "enabled": true,
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-
             "proposal": {
               "heatmap_threshold_mode": "adaptive",
               "heatmap_threshold_fixed": 0.5,
@@ -645,7 +454,7 @@
               "max_proposals": 20,
               "open_kernel_size": 3,
               "close_kernel_size": 5,
-              "context_padding_ratio": 0.10,
+              "context_padding_ratio": 0.1,
               "min_crop_size": 20,
               "aggregation_method": "weighted_confidence",
               "area_exponent": 0.5,
@@ -663,7 +472,6 @@
                 "recovery_rate": 0.01
               }
             },
-
             "calibration": {
               "enabled": true,
               "camera_norm": {
@@ -688,7 +496,6 @@
                 "centers_path": "../models/calibration/defect_centers.json"
               }
             },
-
             "track": {
               "max_age": 30,
               "min_hits": 2,
@@ -700,65 +507,12 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.38],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_right_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_right_upper_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [0.03, 0.33, 0.97, 0.69],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_right_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_right_middle_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [0.03, 0.64, 0.97, 0.97],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_right_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_right_lower_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              }
-            ]
+            }
           },
           {
             "camera_id": "cam_bottom",
             "source": "",
             "enabled": true,
-            "efficientad_model_path": "../models/seat_model_a/cam_bottom_efficientad.pt",
-
             "quality": {
               "min_laplacian_variance": 80.0,
               "min_brightness_mean": 30.0,
@@ -766,7 +520,6 @@
               "max_overexposed_ratio": 0.25,
               "max_underexposed_ratio": 0.35
             },
-
             "detection": {
               "model_path": "../models/yolo/best.pt",
               "target_class": "seat",
@@ -777,7 +530,6 @@
               "fill_segmentation_holes": true,
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
-
             "roi": {
               "crop_expand_ratio": 0.02,
               "crop_shrink_ratio": 0.0,
@@ -788,7 +540,6 @@
                 "output_height": 256
               }
             },
-
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_bottom_efficientad.pt",
               "device": "cuda",
@@ -804,7 +555,6 @@
               "validation_split": 0.1,
               "early_stopping_patience": 20
             },
-
             "filter_classifier": {
               "enabled": true,
               "model_path": "../backend/deployed_models/line_a/filter_classifier/",
@@ -812,13 +562,11 @@
               "input_size": 448,
               "confidence_threshold": 0.5
             },
-
             "rule_engine": {
               "enabled": true,
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-
             "proposal": {
               "heatmap_threshold_mode": "adaptive",
               "heatmap_threshold_fixed": 0.5,
@@ -828,7 +576,7 @@
               "max_proposals": 20,
               "open_kernel_size": 3,
               "close_kernel_size": 5,
-              "context_padding_ratio": 0.10,
+              "context_padding_ratio": 0.1,
               "min_crop_size": 20,
               "aggregation_method": "weighted_confidence",
               "area_exponent": 0.5,
@@ -846,7 +594,6 @@
                 "recovery_rate": 0.01
               }
             },
-
             "calibration": {
               "enabled": true,
               "camera_norm": {
@@ -871,7 +618,6 @@
                 "centers_path": "../models/calibration/defect_centers.json"
               }
             },
-
             "track": {
               "max_age": 30,
               "min_hits": 2,
@@ -883,61 +629,11 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            },
-
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.38],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_bottom_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_bottom_upper_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [0.03, 0.33, 0.97, 0.69],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_bottom_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_bottom_middle_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [0.03, 0.64, 0.97, 0.97],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_bottom_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_bottom_lower_efficientad.pt",
-                  "device": "cuda",
-                  "input_size": 256,
-                  "teacher_backbone": "wide_resnet50_2",
-                  "student_backbone": "resnet18",
-                  "min_valid_pixel_ratio": 0.3,
-                  "image_threshold": 0.0,
-                  "pixel_threshold": 0.0
-                }
-              }
-            ]
+            }
           }
         ]
       }
-    ]
+    ],
+    "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性：Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine。"
   }
 }

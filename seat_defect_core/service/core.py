@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..calibration import CalibrationConfig, CalibrationRegistry
 from ..classifier.engine import FilterClassifierService
-from ..config import CameraConfig, InspectionConfig, RegionConfig
+from ..config import CameraConfig, InspectionConfig
 from ..cvops import ImageQualityGuard, RoiRefineEngine
 from ..efficientad import EfficientADService
 from ..core_types import DetectionResult, ImageQualityDecision, RoiRefineResult, TextureAnomalyResult
@@ -164,14 +164,6 @@ class InspectionService:
     ) -> EfficientADService:
         return self._model_cache.load_camera_bundle(camera, seat_model_id)
 
-    def load_region_model_bundle(
-        self,
-        camera: CameraConfig,
-        region: RegionConfig,
-        seat_model_id: Optional[str],
-    ) -> EfficientADService:
-        return self._model_cache.load_region_bundle(camera, region, seat_model_id)
-
     def load_filter_classifier(
         self,
         camera: CameraConfig,
@@ -192,12 +184,7 @@ class InspectionService:
         for camera in context.cameras:
             pipeline = context.pipelines[camera.camera_id]
             pipeline.detection_service.warmup()
-            active_regions = [region for region in camera.regions if region.enabled]
-            if active_regions:
-                for region in active_regions:
-                    self.load_region_model_bundle(camera, region, context.seat_model_id)
-            else:
-                self.load_model_bundle(camera, context.seat_model_id)
+            self.load_model_bundle(camera, context.seat_model_id)
             if camera.filter_classifier.enabled and camera.filter_classifier.model_path:
                 self.load_filter_classifier(camera, context.seat_model_id)
 
@@ -226,26 +213,6 @@ class AnomalyModelCache:
             return bundle
 
         loaded = EfficientADService.load_bundle(camera.efficientad_model_path)
-        self._cache[cache_key] = loaded
-        return loaded
-
-    def load_region_bundle(
-        self,
-        camera: CameraConfig,
-        region: RegionConfig,
-        seat_model_id: Optional[str],
-    ) -> EfficientADService:
-        cache_key = self._cache_key(
-            seat_model_id=seat_model_id,
-            camera_id=camera.camera_id,
-            model_id=region.region_id,
-            model_path=region.efficientad_model_path,
-        )
-        bundle = self._cache.get(cache_key)
-        if bundle is not None:
-            return bundle
-
-        loaded = EfficientADService.load_bundle(region.efficientad_model_path)
         self._cache[cache_key] = loaded
         return loaded
 

@@ -9,7 +9,7 @@
 - 加载检测配置文件。
 - 加载训练好的 YOLO 分割模型和 EfficientAD 模型。
 - 接收外部项目传入的多机位图像。
-- 执行 YOLO、ROI 对齐、EfficientAD、region EfficientAD、颜色分支和多机位融合。
+- 执行 YOLO、ROI 对齐、EfficientAD 和多机位融合。
 - 返回结构化检测结果、错误码、耗时和报告路径。
 
 `seat_defect_core` 不负责的能力：
@@ -136,7 +136,6 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
 - `[fusion]`：整件融合策略
 - `[camera.<camera_id>]`：顶层单机位
 - `[camera.<camera_id>.detection]`、`roi`、`roi.alignment`、`efficientad`、`color_branch`
-- `[camera.<camera_id>.region.<region_id>]`：单机位局部区域
 - `[seat_model.<seat_model_id>]` 和 `[seat_model.<seat_model_id>.camera.<camera_id>]`：多型号配置
 
 示例：
@@ -162,7 +161,6 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
           {
             "camera_id": "cam_front",
             "efficientad_model_path": "../models/seat_model_a/cam_front_efficientad.pt",
-            "color_insensitive_mode": true,
             "detection": {
               "model_path": "../models/yolo/seat_model_a_best.pt",
               "target_class": "seat",
@@ -180,21 +178,12 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
               }
             },
             "efficientad": {
-              "teacher_backbone": "tf_efficientnet_b5",
-              "student_backbone": "tf_efficientnet_b5",
-              "autoencoder": true,
+              "teacher_backbone": "wide_resnet50_2",
+              "student_backbone": "resnet18",
               "device": "cpu",
-              "image_size": 256,
-              "min_target_coverage": 0.6,
-              "min_valid_patch_ratio": 0.4
-            },
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [0.03, 0.03, 0.97, 0.42],
-                "efficientad_model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt"
-              }
-            ]
+              "input_size": 256,
+              "min_valid_pixel_ratio": 0.3
+            }
           }
         ]
       }
@@ -346,30 +335,16 @@ dict frame 可选字段：
       "source": "/data/current/cam_front.png",
       "source_kind": "image_path",
       "status": "OK",
-      "reason": "all_regions_passed",
+      "reason": "all_checks_passed",
       "seat_model_id": "seat_model_a",
       "timings_ms": {
         "prepare": 30.0,
-        "split_regions": 1.0,
-        "region_efficientad_batch": 80.0,
+        "anomaly": 80.0,
         "debug_artifacts": 0.0,
         "total": 111.0
       },
       "error": null,
-      "artifact_paths": {},
-      "region_results": [
-        {
-          "region_id": "upper",
-          "status": "OK",
-          "reason": "all_checks_passed",
-          "efficientad_model_path": "../models/seat_model_a/cam_front_upper_efficientad.pt",
-          "timings_ms": {
-            "efficientad": 80.0
-          },
-          "error": null,
-          "artifact_paths": {}
-        }
-      ]
+      "artifact_paths": {}
     }
   ]
 }
@@ -384,9 +359,7 @@ dict frame 可选字段：
 常见 `reason`：
 
 - `all_checks_passed`
-- `all_regions_passed`
 - `texture_anomaly`
-- `region_texture_anomaly:<region_id>`
 - `color_anomaly`
 - `target_not_found`
 - `target_mask_missing`
@@ -414,10 +387,9 @@ dict frame 可选字段：
 1. YOLO 检测目标座椅。
 2. 根据分割 mask 做 ROI 裁剪和对齐。
 3. 做图像质量检查。
-4. 如果未配置 regions，执行完整 ROI EfficientAD。
-5. 如果配置了 regions，切分标准 ROI 并执行 region EfficientAD。
-6. 异常帧进入 Feature Calibration（Normalize → Project → Whiten → EMA Center）。
-7. Region Proposal 生成 defect patch 候选。
+4. 执行完整 ROI EfficientAD 纹理异常检测。
+5. 异常帧进入 Feature Calibration（Normalize → Project → Whiten → EMA Center）。
+6. Proposal 生成 defect patch 候选。
 8. Identity Linking 跨帧关联。
 9. Cascading Budget 调度 Filter 推理（full/partial/skip_all/emergency）。
 10. Filter Classifier 三模态推理 + Proposal Aggregation。
@@ -431,17 +403,6 @@ dict frame 可选字段：
 3. 按 fusion 配置汇总整件状态。
 4. 写出 latest report。
 
-## region 模式性能注意事项
-
-region 模式会对一个机位内多个局部区域分别运行 EfficientAD，因此天然比完整 ROI 单模型更慢。当前 core 已做以下优化：
-
-- 相同配置共享 torch feature extractor。
-- 相同配置的多个 region 使用 batch 前向。
-- 调试产物可通过 `debug_artifacts_enabled=false` 关闭。
-- region 调试产物复用运行时已有 region sample，避免重复切图。
-
-这些优化不会改变 ROI、region box、memory bank、阈值或最终判定规则，只可能带来极小的浮点差异。
-
 ## 模型和配置一致性
 
 EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时如果修改了会影响 ROI 或特征输入的关键配置，core 会拒绝使用旧模型，并提示重新训练。
@@ -450,7 +411,6 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 
 - YOLO 模型路径或目标类别发生变化。
 - ROI 裁剪、mask、alignment 配置变化。
-- region box 变化。
 - EfficientAD 的 backbone、image_size、teacher/student 或 feature_layers 变化。
 
 运行时可以调整部分判定阈值类配置，但不能用配置去掩盖训练数据不足的问题。
@@ -468,9 +428,8 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 当速度偏慢时，优先检查：
 
 1. `debug_artifacts_enabled` 是否为 `false`。
-2. `timings_ms.cameras` 和单机位 `timings_ms.region_efficientad_batch`。
-3. region 数量是否过多。
-4. `backbone_device` 是否符合现场硬件。
+2. `timings_ms.cameras` 和各机位 `timings_ms.anomaly`。
+3. `backbone_device` 是否符合现场硬件。
 5. 是否每次请求都重新创建 `SeatDefectInspector`。
 
 ## 最佳检测效果配置
@@ -479,7 +438,6 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 
 | 特性 | 作用 | 效果提升 |
 |------|------|----------|
-| **Per-Region EfficientAD** | 将 ROI 切分为多个子区域分别建模 | 局部缺陷检出率提升，避免全局阈值掩盖小缺陷 |
 | **Calibration** | 跨机位特征校准（Normalize→Project→Whiten） | 消除机位间特征分布差异，Filter Classifier 跨机位泛化能力提升 |
 | **Cascading Budget** | 自适应提案+过滤预算调度 | 保证实时性（<20ms/帧），同时在正常帧上做完整推理 |
 | **Tracking** | 缺陷跨帧身份关联（IoU+Kalman+Cosine） | 消除单帧误报，Mature 缺陷自动升级告警等级 |
@@ -494,7 +452,7 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 ### 特性启用顺序
 
 1. **基础链路**：YOLO + EfficientAD（必须，最小可用）
-2. **精度提升**：Per-Region EfficientAD + Filter Classifier + Rule Engine
+2. **精度提升**：Filter Classifier + Rule Engine
 3. **鲁棒性提升**：Calibration + Tracking + Proposal Aggregation
 4. **性能保障**：Cascading Budget（实时性要求高时启用）
 

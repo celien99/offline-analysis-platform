@@ -24,7 +24,6 @@ def train_efficientad(
     *,
     mlflow_tracking_uri: Optional[str] = None,
     mlflow_experiment: str = "efficientad",
-    region_id: Optional[str] = None,
 ) -> dict:
     """训练 EfficientAD 模型并导出 TorchScript。
 
@@ -35,7 +34,6 @@ def train_efficientad(
         output_path: 输出 .pt 文件路径。
         mlflow_tracking_uri: MLflow tracking URI，为 None 则不记录。
         mlflow_experiment: MLflow 实验名称。
-        region_id: 子区域 ID（训练 region 模型时传入）。
 
     Returns:
         dict: {status, artifact_path, image_threshold, pixel_threshold, train_image_count, mlflow_run_id}
@@ -174,7 +172,6 @@ def train_efficientad(
             "epochs": efficientad_cfg.epochs,
             "train_time_s": train_time_s,
             "camera_id": camera_id,
-            "region_id": region_id,
         }
         meta_path = output.with_suffix(".meta.json")
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
@@ -182,13 +179,8 @@ def train_efficientad(
         # 记录 MLflow
         if mlflow is not None:
             try:
-                model_name = f"efficientad_{camera_id}"
-                if region_id:
-                    model_name += f"_{region_id}"
-
                 mlflow.log_params({
                     "camera_id": camera_id,
-                    "region_id": region_id or "__full__",
                     "teacher_backbone": efficientad_cfg.teacher_backbone,
                     "student_backbone": efficientad_cfg.student_backbone,
                     "input_size": efficientad_cfg.input_size,
@@ -299,7 +291,6 @@ def train_efficientad_cli() -> None:
     parser.add_argument("--camera-id", required=True, help="目标相机 ID")
     parser.add_argument("--good-images", required=True, help="正常参考图像目录")
     parser.add_argument("--output", required=True, help="输出 .pt 文件路径")
-    parser.add_argument("--region-id", default=None, help="子区域 ID（训练 region 模型时传入）")
     parser.add_argument("--mlflow-uri", default=None, help="MLflow tracking URI")
     parser.add_argument("--mlflow-experiment", default="efficientad", help="MLflow 实验名称")
 
@@ -322,7 +313,6 @@ def train_efficientad_cli() -> None:
         output_path=args.output,
         mlflow_tracking_uri=args.mlflow_uri,
         mlflow_experiment=args.mlflow_experiment,
-        region_id=args.region_id,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

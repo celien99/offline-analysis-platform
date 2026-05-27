@@ -64,53 +64,6 @@
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [
-                  0.03,
-                  0.03,
-                  0.97,
-                  0.42
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_0_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_0_upper_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [
-                  0.03,
-                  0.38,
-                  0.97,
-                  0.67
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_0_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_0_middle_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [
-                  0.03,
-                  0.66,
-                  0.97,
-                  0.97
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_0_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_0_lower_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              }
-            ],
             "efficientad_model_path": "../models/seat_model_a/cam_0_lower_efficientad.pt",
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_0_lower_efficientad.pt",
@@ -166,53 +119,6 @@
               "rules": [],
               "deployed_rules_path": "../backend/deployed_models/line_a/rules/rules.json"
             },
-            "regions": [
-              {
-                "region_id": "upper",
-                "box": [
-                  0.03,
-                  0.03,
-                  0.97,
-                  0.42
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_1_upper_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_1_upper_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              },
-              {
-                "region_id": "middle",
-                "box": [
-                  0.03,
-                  0.33,
-                  0.97,
-                  0.74
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_1_middle_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_1_middle_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              },
-              {
-                "region_id": "lower",
-                "box": [
-                  0.03,
-                  0.66,
-                  0.97,
-                  0.97
-                ],
-                "enabled": true,
-                "efficientad_model_path": "../models/seat_model_a/cam_1_lower_efficientad.pt",
-                "efficientad": {
-                  "model_path": "../models/seat_model_a/cam_1_lower_efficientad.pt",
-                  "min_valid_pixel_ratio": 0.3
-                }
-              }
-            ],
             "efficientad_model_path": "../models/seat_model_a/cam_1_lower_efficientad.pt",
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_1_lower_efficientad.pt",

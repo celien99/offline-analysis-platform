@@ -2,41 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import numpy as np
 
 from ..artifacts import generate_overlay_image, save_debug_artifacts
 from ..config import CameraConfig
-from ..cvops import split_roi_regions
-from ..cvops.regions import RegionRoiSample
-from ..efficientad import EfficientADService
 from ..rule_engine import apply_rules, merge_rules
-from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
+from ..core_types import CameraInspectionResult, FramePacket, InspectionError
 from ..util import select_texture_input
 from ..proposal import BudgetController, BudgetConfig, ProposalGenerator, ProposalConfig, aggregate_proposals
 from .._protocol import FilterResult
 
 if TYPE_CHECKING:
     from .core import CameraPipeline, InspectionService
-
-
-@dataclass
-class RegionAnomalyPlan:
-    """Deferred region anomaly work for cross-camera batching."""
-
-    frame_packet: FramePacket
-    camera: CameraConfig
-    prepared: Any
-    seat_model_id: Optional[str]
-    shared_result_fields: dict
-    quality_rejected: bool
-    camera_timer: "_StageTimer"
-    region_results: List[RegionAnomalyResult]
-    anomaly_items: List[Tuple[EfficientADService, Any, Any, Any]]
-    runnable_regions: List[Tuple[Any, RegionRoiSample]]
 
 
 def inspect_one_camera(
@@ -50,7 +30,7 @@ def inspect_one_camera(
     camera_timer = _StageTimer()
     prepared = pipeline.prepare_image(frame_packet.image)
     camera_timer.mark("prepare")
-    outcome = inspect_prepared_camera(
+    return inspect_prepared_camera(
         service,
         frame_packet,
         camera,
@@ -58,16 +38,6 @@ def inspect_one_camera(
         seat_model_id,
         camera_timer,
     )
-    if isinstance(outcome, RegionAnomalyPlan):
-        texture_results = service.predict_anomaly_batch(outcome.anomaly_items)
-        anomaly_elapsed_ms = camera_timer.mark("region_anomaly_batch")
-        return finish_region_anomaly_plan(
-            service,
-            outcome,
-            texture_results,
-            anomaly_elapsed_ms=anomaly_elapsed_ms,
-        )
-    return outcome
 
 
 def inspect_prepared_camera(
@@ -77,8 +47,8 @@ def inspect_prepared_camera(
     prepared,
     seat_model_id: Optional[str],
     camera_timer: "_StageTimer",
-) -> Union[CameraInspectionResult, RegionAnomalyPlan]:
-    """Finish one camera after prepare, optionally deferring region anomaly."""
+) -> CameraInspectionResult:
+    """Finish one camera after prepare with EfficientAD and filter pipeline."""
     shared_result_fields = {
         "camera_id": frame_packet.camera_id,
         "frame_id": frame_packet.frame_id,
@@ -110,19 +80,6 @@ def inspect_prepared_camera(
             prepared,
             seat_model_id,
             result,
-            camera_timer,
-        )
-
-    active_regions = [region for region in camera.regions if region.enabled]
-    if active_regions:
-        return build_region_anomaly_plan(
-            service,
-            frame_packet,
-            camera,
-            prepared,
-            seat_model_id,
-            shared_result_fields,
-            quality_rejected,
             camera_timer,
         )
 
@@ -230,9 +187,9 @@ def inspect_prepared_camera(
                 # --- Cascading Budget: schedule which proposals get Filter ---
                 if proposals:
                     if cascading_budget_ctrl is not None:
-                        to_filter, skip_list, filter_mode = cascading_budget_ctrl.schedule_filter(proposals)
+                        to_filter, _, _ = cascading_budget_ctrl.schedule_filter(proposals)
                     else:
-                        to_filter, skip_list, filter_mode = proposals, [], "full"
+                        to_filter = proposals
 
                     patch_crops = generator.extract_patch_crops(
                         prepared.roi.aligned_roi_image, to_filter)
@@ -300,164 +257,6 @@ def inspect_prepared_camera(
     )
 
 
-def build_region_anomaly_plan(
-    service: "InspectionService",
-    frame_packet: FramePacket,
-    camera: CameraConfig,
-    prepared,
-    seat_model_id: Optional[str],
-    shared_result_fields: dict,
-    quality_rejected: bool,
-    camera_timer: "_StageTimer",
-) -> RegionAnomalyPlan:
-    region_samples: Dict[str, RegionRoiSample] = {
-        sample.region_id: sample
-        for sample in split_roi_regions(prepared.roi, camera.regions)
-    }
-    camera_timer.mark("split_regions")
-    region_results: List[RegionAnomalyResult] = []
-    anomaly_items = []
-    runnable_regions = []
-    for region in camera.regions:
-        if not region.enabled:
-            continue
-        region_sample = region_samples.get(region.region_id)
-        if region_sample is None:
-            region_results.append(
-                RegionAnomalyResult(
-                    region_id=region.region_id,
-                    status="REJECT",
-                    reason="region_empty",
-                    box=_region_config_box_to_roi_box(region.box, prepared.roi.aligned_roi_image.shape[:2]),
-                    efficientad_model_path=region.efficientad_model_path,
-                    timings_ms={},
-                    error=_error_from_reason("region_empty", stage="region_prepare"),
-                )
-            )
-            continue
-
-        model_bundle = service.load_region_model_bundle(camera, region, seat_model_id)
-        anomaly_items.append(
-            (
-                model_bundle,
-                region_sample.image,
-                region_sample.target_mask,
-                region_sample.ignore_mask,
-            )
-        )
-        runnable_regions.append((region, region_sample))
-
-    return RegionAnomalyPlan(
-        frame_packet=frame_packet,
-        camera=camera,
-        prepared=prepared,
-        seat_model_id=seat_model_id,
-        shared_result_fields=shared_result_fields,
-        quality_rejected=quality_rejected,
-        camera_timer=camera_timer,
-        region_results=region_results,
-        anomaly_items=anomaly_items,
-        runnable_regions=runnable_regions,
-    )
-
-
-def finish_region_anomaly_plan(
-    service: "InspectionService",
-    plan: RegionAnomalyPlan,
-    texture_results,
-    *,
-    anomaly_elapsed_ms: float,
-) -> CameraInspectionResult:
-    region_results = list(plan.region_results)
-    per_region_anomaly_ms = (
-        anomaly_elapsed_ms / len(texture_results)
-        if texture_results
-        else 0.0
-    )
-    for (region, region_sample), texture_result in zip(plan.runnable_regions, texture_results):
-        min_valid_pixel_ratio = (
-            region.efficientad.min_valid_pixel_ratio
-            if region.efficientad is not None
-            else plan.camera.efficientad.min_valid_pixel_ratio
-        )
-        if texture_result.valid_pixel_ratio < min_valid_pixel_ratio:
-            status = "REJECT"
-            reason = "low_valid_pixel_ratio"
-            error = _error_from_reason(reason, stage="anomaly")
-        elif texture_result.is_anomaly:
-            status = "NG"
-            reason = (
-                "texture_anomaly_quality_override"
-                if plan.quality_rejected
-                else "texture_anomaly"
-            )
-            error = None
-        else:
-            status = "OK"
-            reason = "all_checks_passed"
-            error = None
-        region_results.append(
-            RegionAnomalyResult(
-                region_id=region.region_id,
-                status=status,
-                reason=reason,
-                box=region_sample.box,
-                texture_result=texture_result,
-                efficientad_model_path=region.efficientad_model_path,
-                timings_ms={"anomaly": per_region_anomaly_ms},
-                error=error,
-                sample=region_sample,
-            )
-        )
-
-    if not region_results:
-        result = CameraInspectionResult(
-            status="REJECT",
-            reason="no_enabled_regions",
-            crop_box=plan.prepared.roi.crop_box,
-            error=_error_from_reason("no_enabled_regions", stage="region_prepare"),
-            **plan.shared_result_fields,
-        )
-        return _finish_camera_result(
-            service,
-            plan.frame_packet,
-            plan.prepared,
-            plan.seat_model_id,
-            result,
-            plan.camera_timer,
-        )
-
-    status, reason = _merge_region_status(
-        region_results,
-        plan.quality_rejected,
-        plan.prepared,
-    )
-    result = CameraInspectionResult(
-        status=status,
-        reason=reason,
-        region_results=region_results,
-        crop_box=plan.prepared.roi.crop_box,
-        **plan.shared_result_fields,
-    )
-    if status == "REJECT":
-        result.error = _error_from_reason(reason, stage="region_merge")
-    # 应用规则引擎后处理（合并本地规则 + 离线平台部署规则）
-    if plan.camera.rule_engine.enabled:
-        all_rules = merge_rules(plan.camera.rule_engine.rules, plan.camera.rule_engine.deployed_rules_path)
-        if all_rules:
-            result = apply_rules(result, all_rules)
-    result = _finish_camera_result(
-        service,
-        plan.frame_packet,
-        plan.prepared,
-        plan.seat_model_id,
-        result,
-        plan.camera_timer,
-        region_results=region_results,
-    )
-    return result
-
-
 class _StageTimer:
     """Small monotonic stage timer for one camera."""
 
@@ -483,42 +282,6 @@ class _StageTimer:
         return dict(self.timings_ms)
 
 
-def _merge_region_status(
-    region_results: List[RegionAnomalyResult],
-    quality_rejected: bool,
-    prepared,
-) -> Tuple[str, str]:
-    ng_regions = [item for item in region_results if item.status == "NG"]
-    reject_regions = [item for item in region_results if item.status == "REJECT"]
-
-    if ng_regions:
-        region_ids = ",".join(item.region_id for item in ng_regions)
-        prefix = "region_texture_anomaly_quality_override" if quality_rejected else "region_texture_anomaly"
-        reason = f"{prefix}:{region_ids}"
-        if reject_regions:
-            reject_ids = ",".join(item.region_id for item in reject_regions)
-            reason += f"_with_reject:{reject_ids}"
-        return "NG", reason
-    if reject_regions:
-        return "REJECT", f"region_reject:{reject_regions[0].region_id}:{reject_regions[0].reason}"
-    if quality_rejected:
-        return "REJECT", prepared.rejection_reason or "quality_reject"
-    return "OK", "all_regions_passed"
-
-
-def _region_config_box_to_roi_box(
-    box: List[float],
-    roi_shape: Tuple[int, int],
-) -> BoundingBox:
-    height, width = roi_shape
-    return BoundingBox(
-        x1=float(round(box[0] * width)),
-        y1=float(round(box[1] * height)),
-        x2=float(round(box[2] * width)),
-        y2=float(round(box[3] * height)),
-    )
-
-
 def _attach_debug_artifacts(
     service: "InspectionService",
     frame_packet: FramePacket,
@@ -526,7 +289,6 @@ def _attach_debug_artifacts(
     seat_model_id: Optional[str],
     result: CameraInspectionResult,
     texture_result=None,
-    region_results=None,
 ) -> CameraInspectionResult:
     if not getattr(service.config, "debug_artifacts_enabled", True):
         result.artifact_paths = {}
@@ -537,7 +299,6 @@ def _attach_debug_artifacts(
         frame_packet=frame_packet,
         prepared=prepared,
         texture_result=texture_result,
-        region_results=region_results,
         seat_model_id=seat_model_id,
     )
     return result
@@ -551,14 +312,12 @@ def _finish_camera_result(
     result: CameraInspectionResult,
     timer: _StageTimer,
     texture_result=None,
-    region_results=None,
 ) -> CameraInspectionResult:
     before_artifacts = perf_counter()
     result.overlay_image = generate_overlay_image(
         frame_packet,
         prepared,
         texture_result=texture_result,
-        region_results=region_results,
     )
     # 保存干净图像，供 anomaly_uploader 按 original / roi 语义上传。
     if frame_packet.image is not None:
@@ -575,7 +334,6 @@ def _finish_camera_result(
         seat_model_id,
         result,
         texture_result=texture_result,
-        region_results=region_results,
     )
     result.timings_ms = timer.finish()
     result.timings_ms["debug_artifacts"] = (perf_counter() - before_artifacts) * 1000.0

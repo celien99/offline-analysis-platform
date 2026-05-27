@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import List, Optional
 
 from .calibration import CalibrationConfig
 from .efficientad import EfficientADConfig
@@ -144,18 +144,6 @@ class RuleEngineConfig:
 
 
 @dataclass
-class RegionConfig:
-    """单机位标准 ROI 内的局部纹理异常检测区域。"""
-
-    region_id: str
-    # 标准 ROI 内的归一化矩形：[x1, y1, x2, y2]，取值范围 0-1。
-    box: List[float]
-    efficientad_model_path: str
-    enabled: bool = True
-    efficientad: Optional[EfficientADConfig] = None
-
-
-@dataclass
 class CameraConfig:
     """单机位 runtime 配置。"""
 
@@ -172,7 +160,6 @@ class CameraConfig:
     proposal: ProposalConfig | None = None
     calibration: CalibrationConfig | None = None
     track: TrackConfig | None = None
-    regions: List[RegionConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -221,7 +208,6 @@ __all__ = [
     "FusionConfig",
     "InspectionConfig",
     "QualityGuardConfig",
-    "RegionConfig",
     "RoiRefineConfig",
     "RuleConfig",
     "RuleEngineConfig",
