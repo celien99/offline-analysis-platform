@@ -17,6 +17,9 @@ from .projector import (
     EmbeddingProjector,
     ProjectionParams,
 )
+from .whitening import (
+    WhiteningTransform,
+)
 
 __all__ = [
     "CalibrationConfig",
@@ -28,4 +31,5 @@ __all__ = [
     "ProjectionConfig",
     "ProjectionParams",
     "WhiteningConfig",
+    "WhiteningTransform",
 ]
