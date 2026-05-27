@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .camera_normalizer import (
+    CameraNormalizer,
+    CameraNormStats,
+)
 from .config import (
     CalibrationConfig,
     CameraNormConfig,
@@ -13,6 +17,8 @@ from .config import (
 __all__ = [
     "CalibrationConfig",
     "CameraNormConfig",
+    "CameraNormalizer",
+    "CameraNormStats",
     "EMACenterConfig",
     "ProjectionConfig",
     "WhiteningConfig",
