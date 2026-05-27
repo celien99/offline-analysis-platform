@@ -17,6 +17,22 @@ import numpy as np
 import torch
 
 
+class _EfficientADExportWrapper(torch.nn.Module):
+    """把 anomalib InferenceBatch 规范化为推理服务期望的 TorchScript 输出。"""
+
+    def __init__(self, model: torch.nn.Module) -> None:
+        super().__init__()
+        self.model = model
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+    def forward(self, batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # 线上 EfficientADService 已做 ImageNet normalize；anomalib 内部模型会自行 normalize。
+        batch = (batch * self.std + self.mean).clamp(0.0, 1.0)
+        output = self.model(batch)
+        return output.anomaly_map, output.pred_score
+
+
 def train_efficientad(
     config: object,
     camera_id: str,
@@ -166,10 +182,11 @@ def train_efficientad(
 
         engine.fit(model=model, datamodule=datamodule)
         model.to(device)
+        torch_model = model.model.to(device).eval()
 
         # 计算最优阈值：在正常图像上推理，取分数的指定分位数作为阈值
         image_threshold = _compute_threshold(
-            model=model,
+            model=torch_model,
             images=threshold_images,
             device=device,
             input_size=efficientad_cfg.input_size,
@@ -181,6 +198,7 @@ def train_efficientad(
         output.parent.mkdir(parents=True, exist_ok=True)
 
         model.eval()
+        export_model = _EfficientADExportWrapper(torch_model).to(device).eval()
         example_input = torch.randn(
             1,
             3,
@@ -188,7 +206,7 @@ def train_efficientad(
             efficientad_cfg.input_size,
             device=device,
         )
-        traced = torch.jit.trace(model, example_input)
+        traced = torch.jit.trace(export_model, example_input)
         traced.save(str(output))
 
         # 像素级阈值（取图像级阈值的 0.8 倍作为参考）
@@ -272,27 +290,18 @@ def _compute_threshold(
     """
     model.eval()
     scores: list[float] = []
-    imagenet_mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1)
-    imagenet_std = torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1)
-
     with torch.no_grad():
         for img in images:
-            # BGR → RGB → resize → normalize → tensor
+            # anomalib EfficientAdModel 内部会做 ImageNet normalize，这里只转成 0-1 RGB tensor。
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_resized = cv2.resize(img_rgb, (input_size, input_size))
             tensor = (
                 torch.from_numpy(img_resized).float().permute(2, 0, 1).to(device) / 255.0
             )
-            tensor = (tensor - imagenet_mean) / imagenet_std
             tensor = tensor.unsqueeze(0)
 
             output = model(tensor)
-            if isinstance(output, tuple):
-                _, score = output
-            elif isinstance(output, torch.Tensor):
-                score = output
-            else:
-                continue
+            score = _extract_pred_score(output)
 
             if isinstance(score, torch.Tensor):
                 score_val = float(score.detach().cpu().item())
@@ -307,6 +316,22 @@ def _compute_threshold(
     # 确保阈值不低于合理下限，避免正常波动被误检
     threshold = max(threshold, 1e-6)
     return round(threshold, 6)
+
+
+def _extract_pred_score(output: object) -> torch.Tensor | float:
+    """从 anomalib 1.x/2.x 输出中提取图像级异常分数。"""
+    if hasattr(output, "pred_score"):
+        return getattr(output, "pred_score")
+    if isinstance(output, dict) and "pred_score" in output:
+        return output["pred_score"]
+    if isinstance(output, (tuple, list)):
+        if len(output) >= 3 and torch.is_tensor(output[2]):
+            return output[0]
+        if len(output) >= 2:
+            return output[1]
+    if torch.is_tensor(output):
+        return output.mean()
+    raise RuntimeError(f"EfficientAD 输出格式不支持: {type(output)}")
 
 
 def _init_mlflow(tracking_uri: Optional[str], experiment: str):
