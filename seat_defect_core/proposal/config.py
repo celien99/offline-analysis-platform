@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -52,3 +52,21 @@ class ProposalConfig:
     area_exponent: float = 0.5
     confidence_threshold: float = 0.5
     budget: BudgetConfig | None = None
+
+
+@dataclass
+class CascadingBudgetConfig:
+    """Configuration for cascading (proposal + filter) budget control."""
+    enabled: bool = True
+
+    # Proposal 阶段（复用现有 BudgetConfig）
+    proposal: BudgetConfig = field(default_factory=BudgetConfig)
+
+    # Filter 阶段
+    filter_budget_ratio: float = 0.4       # Proposal 后最多 40% 时间给 Filter
+    filter_hard_limit_ms: float = 8.0      # Filter 阶段硬上限
+    filter_cost_ema_alpha: float = 0.95    # per-patch cost 的 EMA 系数
+    filter_min_patches: int = 1            # 即使预算不够也最少送几个 patch
+
+    # 紧急熔断
+    emergency_filter_ratio: float = 0.1    # 剩余预算低于此比例触发 emergency
