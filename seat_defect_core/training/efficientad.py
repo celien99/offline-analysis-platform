@@ -39,7 +39,7 @@ def train_efficientad(
         dict: {status, artifact_path, image_threshold, pixel_threshold, train_image_count, mlflow_run_id}
     """
     from ..config import InspectionConfig
-    from ..config_file import resolve_config
+    from ..api import resolve_config
 
     # 解析配置
     if isinstance(config, (str, Path)):

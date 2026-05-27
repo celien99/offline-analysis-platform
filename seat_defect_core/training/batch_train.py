@@ -50,7 +50,7 @@ def batch_train_all(
         dict: {status, results: [{camera_id, status, artifact_path, image_threshold}]}
     """
     from seat_defect_core.config import InspectionConfig
-    from seat_defect_core.config_file import resolve_config
+    from seat_defect_core.api import resolve_config
 
     config = resolve_config(config_path) if isinstance(config_path, str) else config_path
     if not isinstance(config, InspectionConfig):
