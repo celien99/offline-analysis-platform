@@ -71,6 +71,12 @@ class WhiteningTransform:
         x = np.asarray(embeddings, dtype=np.float32) - self._mean.astype(np.float32)
         whitened = x @ self._W
         norms = np.linalg.norm(whitened, axis=1, keepdims=True)
+        near_zero = (norms < 1e-8).sum()
+        if near_zero > 0:
+            _logger.warning(
+                "whitening_batch_near_zero_norm",
+                extra={"near_zero_count": int(near_zero), "batch_size": len(embeddings)},
+            )
         norms = np.where(norms < 1e-8, 1.0, norms)
         return (whitened / norms).astype(np.float32)
 
@@ -85,9 +91,14 @@ class WhiteningTransform:
     def load(cls, path: str) -> "WhiteningTransform":
         """从 .npz 文件加载白化矩阵。"""
         data = np.load(path)
-        instance = cls(dim=int(data["dim"]))
-        instance._W = data["W"].astype(np.float32)
-        instance._mean = data["mean"].astype(np.float32)
+        dim = int(data["dim"])
+        W = data["W"]
+        mean_arr = data["mean"]
+        assert W.shape == (dim, dim), f"W shape mismatch: expected ({dim},{dim}), got {W.shape}"
+        assert mean_arr.shape == (dim,), f"mean shape mismatch: expected ({dim},), got {mean_arr.shape}"
+        instance = cls(dim=dim)
+        instance._W = W.astype(np.float32)
+        instance._mean = mean_arr.astype(np.float32)
         return instance
 
     @property
