@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
+
 from ..artifacts import generate_overlay_image, save_debug_artifacts
 from ..config import CameraConfig
 from ..cvops import split_roi_regions
@@ -14,7 +16,7 @@ from ..efficientad import EfficientADService
 from ..rule_engine import apply_rules, merge_rules
 from ..core_types import BoundingBox, CameraInspectionResult, FramePacket, InspectionError, RegionAnomalyResult
 from ..util import select_texture_input
-from ..proposal import ProposalGenerator, ProposalConfig, aggregate_proposals
+from ..proposal import BudgetController, BudgetConfig, ProposalGenerator, ProposalConfig, aggregate_proposals
 from .._protocol import FilterResult
 
 if TYPE_CHECKING:
@@ -161,16 +163,31 @@ def inspect_prepared_camera(
         status = "OK"
         reason = "all_checks_passed"
 
-    # --- Region Proposal + Dual-Modal Filter ---
+    # --- Region Proposal + Dual-Modal Filter (with Calibration & Cascading Budget) ---
     filter_result: Optional[FilterResult] = None
     proposals: list[Any] = []
 
     if texture_result.is_anomaly:
-        filter_svc = getattr(service, '_filter_service', None) or getattr(service, 'filter_service', None)
+        filter_svc = getattr(service, 'filter_service', None)
         if filter_svc is not None:
             try:
                 proposal_cfg = getattr(camera, 'proposal', None) or ProposalConfig()
-                generator = ProposalGenerator(proposal_cfg)
+                proposal_budget_cfg = proposal_cfg.budget
+                cascading_budget_ctrl = None
+                if proposal_budget_cfg is not None:
+                    from ..proposal import CascadingBudgetConfig, CascadingBudgetController
+                    try:
+                        cascade_cfg = CascadingBudgetConfig(proposal=proposal_budget_cfg)
+                        cascading_budget_ctrl = CascadingBudgetController(cascade_cfg)
+                    except Exception:
+                        pass
+                if cascading_budget_ctrl is not None:
+                    generator = ProposalGenerator(proposal_cfg, budget_ctrl=cascading_budget_ctrl)
+                else:
+                    budget_ctrl = BudgetController(
+                        proposal_budget_cfg if proposal_budget_cfg else BudgetConfig()
+                    )
+                    generator = ProposalGenerator(proposal_cfg, budget_ctrl=budget_ctrl)
                 isolation_key = f"{seat_model_id or 'unknown'}|{camera.camera_id}|default"
 
                 roi_h, roi_w = prepared.roi.aligned_roi_image.shape[:2]
@@ -190,7 +207,15 @@ def inspect_prepared_camera(
                     isolation_key=isolation_key,
                 )
 
-                # --- Identity Linking ---
+                # --- Calibration: normalize + project + whiten ---
+                unified_emb: Optional[np.ndarray] = None
+                calibration = getattr(service, 'calibration', None)
+                if calibration is not None and texture_result.features:
+                    calibrated = calibration.calibrate(camera.camera_id, texture_result.features)
+                    if calibrated is not None:
+                        unified_emb = np.array(calibrated.vector, dtype=np.float32)
+
+                # --- Identity Linking (with unified embedding) ---
                 if proposals:
                     tracker = getattr(service, '_trackers', {})
                     cam_tracker = tracker.get(camera.camera_id)
@@ -202,24 +227,40 @@ def inspect_prepared_camera(
                     if cam_tracker is not None:
                         proposals = cam_tracker.update(proposals)
 
-                # Per-patch dual-modal inference
+                # --- Cascading Budget: schedule which proposals get Filter ---
                 if proposals:
+                    if cascading_budget_ctrl is not None:
+                        to_filter, skip_list, filter_mode = cascading_budget_ctrl.schedule_filter(proposals)
+                    else:
+                        to_filter, skip_list, filter_mode = proposals, [], "full"
+
                     patch_crops = generator.extract_patch_crops(
-                        prepared.roi.aligned_roi_image, proposals)
+                        prepared.roi.aligned_roi_image, to_filter)
                     patch_features_list = []
                     if texture_result.features:
                         patch_features_list = generator.extract_patch_features(
-                            texture_result.features, proposals, (roi_h, roi_w))
+                            texture_result.features, to_filter, (roi_h, roi_w))
 
-                    for i, proposal in enumerate(proposals):
+                    filter_start_ms = perf_counter()
+                    for i, proposal in enumerate(to_filter):
                         patch_img = patch_crops[i] if i < len(patch_crops) else None
                         patch_feats = patch_features_list[i] if i < len(patch_features_list) else None
                         if patch_img is not None:
-                            pf_result = filter_svc.predict_dual_modal(patch_img, patch_feats)
+                            pf_result = filter_svc.predict_dual_modal(
+                                patch_img, patch_feats,
+                                unified_emb=unified_emb.tolist() if unified_emb is not None else None,
+                            )
                             proposal.filter_result = pf_result
+
+                    if cascading_budget_ctrl is not None:
+                        cascading_budget_ctrl.record_filter_cost(
+                            len(to_filter),
+                            (perf_counter() - filter_start_ms) * 1000.0,
+                        )
 
                     # Aggregate to ROI-level decision
                     filter_result = aggregate_proposals(proposals)
+
             except Exception:
                 import traceback
                 traceback.print_exc()
