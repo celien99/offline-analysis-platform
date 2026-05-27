@@ -473,6 +473,160 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 4. `backbone_device` 是否符合现场硬件。
 5. 是否每次请求都重新创建 `SeatDefectInspector`。
 
+## 最佳检测效果配置
+
+要发挥 `seat_defect_core` 最强检测效果，需同时启用以下特性：
+
+| 特性 | 作用 | 效果提升 |
+|------|------|----------|
+| **Per-Region EfficientAD** | 将 ROI 切分为多个子区域分别建模 | 局部缺陷检出率提升，避免全局阈值掩盖小缺陷 |
+| **Calibration** | 跨机位特征校准（Normalize→Project→Whiten） | 消除机位间特征分布差异，Filter Classifier 跨机位泛化能力提升 |
+| **Cascading Budget** | 自适应提案+过滤预算调度 | 保证实时性（<20ms/帧），同时在正常帧上做完整推理 |
+| **Tracking** | 缺陷跨帧身份关联（IoU+Kalman+Cosine） | 消除单帧误报，Mature 缺陷自动升级告警等级 |
+| **Filter Classifier** | 三模态（图像+EAD特征+统一嵌入）误报抑制 | 误报率降低 50-80% |
+| **Rule Engine** | 知识库规则后处理 | 针对已知缺陷类型/机位做定向压制或升级 |
+| **Proposal Aggregation** | 加权置信度 ROI 级聚合 | 多 patch 联合判定，避免碎片化误检 |
+
+### 推荐配置文件
+
+使用 `config.best.json`（位于 seat_defect_core 目录）作为起点，按现场环境调整设备（`cpu`/`cuda`/`mps`）和模型路径。
+
+### 特性启用顺序
+
+1. **基础链路**：YOLO + EfficientAD（必须，最小可用）
+2. **精度提升**：Per-Region EfficientAD + Filter Classifier + Rule Engine
+3. **鲁棒性提升**：Calibration + Tracking + Proposal Aggregation
+4. **性能保障**：Cascading Budget（实时性要求高时启用）
+
+### 关键参数调优指南
+
+#### EfficientAD 阈值
+
+训练完成后自动计算 `image_threshold`（正常图像 anomaly score 的 99.7% 分位数）。现场调优时：
+
+- **漏检多**：降低 `image_threshold`（当前值 × 0.7-0.8）
+- **误报多**：提高 `image_threshold`（当前值 × 1.2-1.5）
+- 阈值保存在模型 `.meta.json` 中，修改后重新加载即可生效
+
+#### Filter Classifier 置信度
+
+- `confidence_threshold: 0.5` 为平衡点
+- 产线容忍误报率低时提高到 `0.7-0.8`
+- 产线不容忍漏检时降低到 `0.3-0.4`
+
+#### Cascading Budget 延迟目标
+
+- `target_latency_ms: 15.0` 适合大多数产线节拍
+- 高速产线（<100ms/件）设 `target_latency_ms: 8.0`, `hard_limit_ms: 12.0`
+- 低速产线（>500ms/件）可关闭 budget 做完整推理
+
+#### Calibration 数据准备
+
+Calibration 需要离线拟合参数，训练脚本位于 `ml/alignment/trainer.py`：
+
+1. 收集各机位正常图像 100+ 张
+2. 用已训练的 EfficientAD 模型提取特征
+3. 运行 AlignmentTrainer 拟合 CameraNormalizer + Projector + Whitening
+4. 将输出的 `.npz` 文件路径填入 calibration 配置
+
+## 训练工作流
+
+### 准备训练数据
+
+按机位和区域组织正常图像：
+
+```
+training_data/
+  cam_back/
+    upper/       # 上区域正常图像（各 50-200 张）
+      0001.jpg
+      0002.jpg
+    middle/      # 中区域
+      0001.jpg
+      ...
+    lower/       # 下区域
+      0001.jpg
+      ...
+  cam_front/
+    upper/
+    middle/
+    lower/
+```
+
+**数据要求：**
+- 只包含正常（无缺陷）座椅图像
+- 覆盖产线正常波动（光照变化、座椅颜色/材质差异、轻微位置偏移）
+- 每个区域至少 50 张，推荐 100-200 张
+- 图像应为 ROI 对齐后的裁剪（256×256 或与 `input_size` 一致）
+
+### 单机位训练
+
+```bash
+python -m seat_defect_core train-efficientad \
+  --config config.best.json \
+  --camera-id cam_back \
+  --good-images ./training_data/cam_back/upper/ \
+  --output ./models/seat_model_a/cam_back_upper_efficientad.pt
+```
+
+### 批量训练全部机位
+
+```bash
+# 预览训练计划（不实际执行）
+python -m seat_defect_core batch-train \
+  --config config.best.json \
+  --good-images-root ./training_data/ \
+  --output-root ./models/seat_model_a/ \
+  --dry-run
+
+# 执行训练
+python -m seat_defect_core batch-train \
+  --config config.best.json \
+  --good-images-root ./training_data/ \
+  --output-root ./models/seat_model_a/
+
+# 仅训练指定机位
+python -m seat_defect_core batch-train \
+  --config config.best.json \
+  --good-images-root ./training_data/ \
+  --output-root ./models/seat_model_a/ \
+  --cameras cam_back,cam_front
+```
+
+### 训练流程
+
+1. 自动将图像转换为 MVTec 格式
+2. 划分训练集/阈值计算集（90/10）
+3. 使用 anomalib `EfficientAd(teacher_out_channels=384, model_size="medium")` 训练
+4. 在阈值集上计算 anomaly score 的 99.7% 分位数作为 `image_threshold`
+5. 导出 TorchScript `.pt` 模型 + `.meta.json` 阈值元数据
+6. 记录 MLflow 实验（params/metrics/artifacts）
+
+### 训练参数建议
+
+| 参数 | 推荐值 | 说明 |
+|------|--------|------|
+| `epochs` | 200 | 更多轮数有利于 teacher-student 收敛 |
+| `batch_size` | 16 | GPU 显存充足可设 32 |
+| `learning_rate` | 1e-4 | EfficientAD 官方推荐 |
+| `validation_split` | 0.1 | 10% 用于阈值计算 |
+| `early_stopping_patience` | 20 | 避免过拟合 |
+
+## 生产部署检查清单
+
+- [ ] `debug_artifacts_enabled` 设为 `false`
+- [ ] 所有 `device` 字段与现场硬件一致（`cpu`/`cuda`/`mps`）
+- [ ] YOLO 模型路径和分类名确认正确
+- [ ] 每个机位/区域的 EfficientAD 模型已训练并路径正确
+- [ ] Filter Classifier 已部署且路径正确
+- [ ] 规则引擎 deployed_rules_path 指向最新部署规则
+- [ ] Calibration `.npz` 文件已拟合并路径正确
+- [ ] `upload_base_url` 指向正确的离线平台后端
+- [ ] 使用 `SeatDefectInspector` 单例，避免重复加载模型
+- [ ] 预热调用 `inspector.warmup()` 在首次检测前执行
+- [ ] 固定依赖版本（torch, torchvision, anomalib, ultralytics）
+- [ ] 离线样本集回归验证通过
+
 ## 版本稳定性建议
 
 外部项目接入时，建议固定以下内容：

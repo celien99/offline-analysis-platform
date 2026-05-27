@@ -53,6 +53,8 @@ def train_efficientad_model(
             "--camera-id", camera_id,
             "--good-images", good_image_paths[0] if len(good_image_paths) == 1 and Path(good_image_paths[0]).is_dir() else tmp_dir,
             "--output", str(output_path),
+            "--mlflow-uri", settings.mlflow_tracking_uri,
+            "--mlflow-experiment", "efficientad",
         ]
 
         # 如果传的是文件列表而非目录，需要把图片放到同一目录
@@ -77,16 +79,18 @@ def train_efficientad_model(
 
         numeric_metrics = {
             "train_image_count": int(result.get("train_image_count", 0)),
-            "total_embeddings": int(result.get("total_embeddings", 0)),
-            "threshold": float(result.get("threshold", 0.0)),
+            "image_threshold": float(result.get("image_threshold", 0.5)),
+            "pixel_threshold": float(result.get("pixel_threshold", 0.4)),
+            "train_time_s": float(result.get("train_time_s", 0)),
         }
+        mlflow_run_id = result.get("mlflow_run_id")
 
         model_version = run_async(_create_model_version(
             model_name=f"efficientad_{camera_id}",
             model_type="efficientad",
             artifact_path=str(output_path),
             metrics=numeric_metrics,
-            mlflow_run_id=None,
+            mlflow_run_id=mlflow_run_id,
         ))
 
         logger.info(

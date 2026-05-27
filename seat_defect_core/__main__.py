@@ -3,6 +3,7 @@
 Usage examples:
   python -m seat_defect_core inspect --config config.json --images cam1=img1.jpg
   python -m seat_defect_core train-efficientad --config config.json --camera-id cam_front --good-images ./good/ --output model.pt
+  python -m seat_defect_core batch-train --config config.json --good-images-root ./training_data/ --output-root ./models/
 """
 
 from __future__ import annotations
@@ -32,10 +33,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     train_parser.add_argument("--good-images", type=str, required=True, help="正常参考图像目录")
     train_parser.add_argument("--output", type=str, required=True, help="输出 .pt 文件路径")
 
+    # batch-train 子命令
+    batch_parser = subparsers.add_parser("batch-train", help="批量训练多机位 EfficientAD 模型")
+    batch_parser.add_argument("--config", type=str, required=True, help="检测配置文件路径 (JSON)")
+    batch_parser.add_argument("--good-images-root", type=str, required=True, help="正常图像根目录")
+    batch_parser.add_argument("--output-root", type=str, required=True, help="模型输出根目录")
+    batch_parser.add_argument("--cameras", type=str, default=None, help="限定训练机位，逗号分隔")
+    batch_parser.add_argument("--mlflow-uri", type=str, default=None, help="MLflow tracking URI")
+    batch_parser.add_argument("--dry-run", action="store_true", help="只打印训练计划")
+
     args = parser.parse_args(argv)
 
     if args.command == "train-efficientad":
         return _run_train_efficientad(args)
+
+    if args.command == "batch-train":
+        return _run_batch_train(args)
 
     # 默认：inspect（兼容旧的 --config --images 直接调用方式）
     if args.command is None:
@@ -146,6 +159,16 @@ def _run_train_efficientad(args) -> int:
         return 0
     except Exception as exc:
         print(f"训练失败：{exc}", file=sys.stderr)
+        return 1
+
+
+def _run_batch_train(args) -> int:
+    try:
+        from seat_defect_core.training.batch_train import batch_train_cli
+        batch_train_cli()
+        return 0
+    except Exception as exc:
+        print(f"批量训练失败：{exc}", file=sys.stderr)
         return 1
 
 
