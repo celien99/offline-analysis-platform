@@ -293,14 +293,6 @@ flowchart TB
 
 ```
 offline-analysis-platform/
-├── defect_protocol/                   # 共享数据协议包（PatchProposal 统一契约）
-│   ├── defect_protocol/
-│   │   ├── entities.py                 #   PatchProposal, EfficientADFeatures 等 dataclass
-│   │   ├── canonical_proposal.py       #   CanonicalPatchProposal (schema_version + 归一化坐标)
-│   │   ├── embedding_space.py          #   EmbeddingSpaceContract + UnifiedEmbedding
-│   │   ├── serialization.py            #   JSON/dict 序列化
-│   │   └── types.py                    #   类型别名
-│   └── tests/
 ├── backend/                          # Python 后端（160+ 文件）
 │   ├── app/
 │   │   ├── api/                      # 17 个 FastAPI 路由，65+ 端点
@@ -375,13 +367,18 @@ offline-analysis-platform/
     │   └── config.py                 #   AlignmentConfig
     └── vlm/                          # Qwen2.5-VL 多模态分析器
 ```
-- `seat_defect_core/` 在线检测核心（38 个 Python 文件），详见下方
+- `seat_defect_core/` 在线检测核心（含 `_protocol/` 共享协议子模块），详见下方
 
 ### seat_defect_core — 在线实时检测核心
 
 ```
 seat_defect_core/
-├── config.py                         # 全部运行时配置 dataclass（含 FilterClassifier / RuleEngine）
+├── _protocol/                         # 共享数据协议（内嵌，零外部依赖）
+│   ├── entities.py                 #   PatchProposal, EfficientADFeatures 等 dataclass
+│   ├── canonical_proposal.py       #   CanonicalPatchProposal (schema_version + 归一化坐标)
+│   ├── embedding_space.py          #   EmbeddingSpaceContract + UnifiedEmbedding
+│   ├── serialization.py            #   JSON/dict 序列化
+│   └── types.py                    #   类型别名
 ├── runtime_config_parsers.py         # JSON / INI 配置解析器
 ├── config_file.py                    # 配置文件加载入口
 ├── rule_engine.py                    # 规则引擎：阈值条件命中 + 动作执行
@@ -696,7 +693,7 @@ mkdir -p sample_images
 
 | 原则 | 实践 |
 |---|---|
-| **统一数据协议** | `defect_protocol/` 定义 `PatchProposal` 统一数据契约，在线推理和离线训练共享同一套数据结构 |
+| **统一数据协议** | `seat_defect_core/_protocol/` 定义 `PatchProposal` 统一数据契约，内嵌于在线核心，在线推理和离线训练共享同一套数据结构 |
 | **严格分层架构** | API 层只处理 HTTP，零数据库访问、零业务逻辑 |
 | **Protocol 接口抽象** | `EmbeddingExtractor` 和 `VLMAnalyzer` 采用 Protocol 定义，替换模型无需改动业务代码 |
 | **全链路异步** | Async FastAPI + async SQLAlchemy + async MinIO，CPU/GPU 密集型任务全部交 Celery Worker 异步执行 |
