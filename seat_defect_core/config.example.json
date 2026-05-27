@@ -1,5 +1,5 @@
 {
-  "$comment": "seat_defect_core 检测配置。路径类字段相对于本配置文件所在目录解析。",
+  "$comment": "seat_defect_core 检测配置（示例）。路径类字段相对于本配置文件所在目录解析。全特性配置见 config.best.json。",
   "seat_defect_inspection": {
     "part_id": "seat_demo",
     "default_seat_model_id": "seat_model_a",
