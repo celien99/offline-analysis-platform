@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,6 +58,11 @@ class EmbeddingProjector:
         norm = np.linalg.norm(y)
         if norm > 1e-8:
             y = y / norm
+        else:
+            _logger.warning(
+                "projection_near_zero_norm",
+                extra={"norm": float(norm)},
+            )
         return y.astype(np.float32)
 
     @staticmethod
@@ -144,8 +152,9 @@ class EmbeddingProjector:
             for key in input_keys:
                 feat = feats.get(key)
                 if feat is None:
-                    pooled.append(np.zeros(
-                        sum(pool_sizes[key]) * 1, dtype=np.float32))
+                    raise KeyError(
+                        f"Missing feature key '{key}' during PCA fit"
+                    )
                 else:
                     pooled.append(instance._adaptive_pool(feat, pool_sizes[key]))
             pooled_list.append(np.concatenate(pooled))
