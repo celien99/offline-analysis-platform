@@ -154,9 +154,15 @@ def _run_train_efficientad(args) -> int:
         return 1
 
     try:
-        from seat_defect_core.training.efficientad import train_efficientad_cli
-        train_efficientad_cli()
-        return 0
+        from seat_defect_core.training.efficientad import train_efficientad
+        result = train_efficientad(
+            config=args.config,
+            camera_id=args.camera_id,
+            good_image_paths=image_paths,
+            output_path=args.output,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("status") == "completed" else 1
     except Exception as exc:
         print(f"训练失败：{exc}", file=sys.stderr)
         return 1
@@ -164,9 +170,22 @@ def _run_train_efficientad(args) -> int:
 
 def _run_batch_train(args) -> int:
     try:
-        from seat_defect_core.training.batch_train import batch_train_cli
-        batch_train_cli()
-        return 0
+        from seat_defect_core.training.batch_train import batch_train_all
+
+        cameras_list: Optional[list[str]] = None
+        if args.cameras:
+            cameras_list = [c.strip() for c in args.cameras.split(",") if c.strip()]
+
+        result = batch_train_all(
+            config_path=args.config,
+            good_images_root=args.good_images_root,
+            output_root=args.output_root,
+            cameras=cameras_list,
+            mlflow_tracking_uri=args.mlflow_uri,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        return 0 if result.get("status") in ("completed", "dry_run") else 1
     except Exception as exc:
         print(f"批量训练失败：{exc}", file=sys.stderr)
         return 1

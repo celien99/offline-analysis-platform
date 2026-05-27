@@ -510,7 +510,7 @@
             }
           },
           {
-            "camera_id": "cam_bottom",
+            "camera_id": "cam_top",
             "source": "",
             "enabled": true,
             "quality": {
@@ -541,7 +541,7 @@
               }
             },
             "efficientad": {
-              "model_path": "../models/seat_model_a/cam_bottom_efficientad.pt",
+              "model_path": "../models/seat_model_a/cam_top_efficientad.pt",
               "device": "cuda",
               "input_size": 256,
               "teacher_backbone": "wide_resnet50_2",
@@ -598,7 +598,7 @@
               "enabled": true,
               "camera_norm": {
                 "enabled": true,
-                "stats_path": "../models/calibration/cam_bottom_norm_stats.npz"
+                "stats_path": "../models/calibration/cam_top_norm_stats.npz"
               },
               "projection": {
                 "enabled": true,
