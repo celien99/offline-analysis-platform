@@ -74,14 +74,14 @@ def train_efficientad(
 
     device = _resolve_train_device(efficientad_cfg.device)
 
-    # 兼容 anomalib 1.x/2.x：新版数据模块改名为 MVTecAD，旧版仍可能暴露 MVTec。
+    # 只使用正常图训练时，Folder 数据模块可以直接从 train/good 中拆分验证集。
     try:
-        from anomalib.data import MVTecAD as MVTecDataModule
+        from anomalib.data import Folder as FolderDataModule
         from anomalib.models import EfficientAd
         from anomalib.engine import Engine
     except ImportError as exc:
         try:
-            from anomalib.data import MVTec as MVTecDataModule
+            from anomalib.data.image.folder import Folder as FolderDataModule
             from anomalib.models import EfficientAd
             from anomalib.engine import Engine
         except ImportError as fallback_exc:
@@ -93,7 +93,7 @@ def train_efficientad(
                 "Install them in the active Python environment with: pip install anomalib. "
                 f"Underlying import error: {detail}"
             ) from fallback_exc
-    datamodule_cls: Type = MVTecDataModule
+    datamodule_cls: Type = FolderDataModule
 
     import tempfile
     import shutil
@@ -139,14 +139,22 @@ def train_efficientad(
         )
 
         datamodule_kwargs = {
-            "root": str(tmp_dir),
-            "category": category,
+            "normal_dir": str(good_dir),
+            "normal_test_dir": str(test_good_dir),
             "train_batch_size": efficientad_cfg.batch_size,
             "eval_batch_size": efficientad_cfg.batch_size,
             "num_workers": 0,
         }
+        datamodule_signature = inspect.signature(datamodule_cls)
+        datamodule_parameters = datamodule_signature.parameters
+        if "name" in datamodule_parameters:
+            datamodule_kwargs["name"] = category
+        if "root" in datamodule_parameters:
+            datamodule_kwargs["root"] = None
+        if "val_split_ratio" in datamodule_parameters:
+            datamodule_kwargs["val_split_ratio"] = 0.5
         # anomalib 1.x 支持 image_size；2.x 将尺寸放到 transforms 中，避免传入未知参数。
-        if "image_size" in inspect.signature(datamodule_cls).parameters:
+        if "image_size" in datamodule_parameters:
             datamodule_kwargs["image_size"] = (
                 efficientad_cfg.input_size,
                 efficientad_cfg.input_size,
