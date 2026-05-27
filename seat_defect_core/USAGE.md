@@ -203,6 +203,67 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
 }
 ```
 
+### Feature Calibration 配置
+
+在 `CameraConfig` 中增加 `calibration` 字段启用跨机位特征校准：
+
+```json
+{
+  "camera_id": "cam_front",
+  "calibration": {
+    "enabled": true,
+    "camera_norm": {
+      "enabled": true,
+      "stats_path": "./calibration/cam_front_norm_stats.npz"
+    },
+    "projection": {
+      "enabled": true,
+      "projector_path": "./calibration/projector.npz"
+    },
+    "whitening": {
+      "enabled": true,
+      "method": "zca",
+      "regularization": 0.0001,
+      "matrix_path": "./calibration/whitening_matrix.npz"
+    },
+    "ema_center": {
+      "enabled": true,
+      "alpha": 0.99,
+      "min_samples": 10,
+      "novelty_threshold": 0.3,
+      "centers_path": "./calibration/defect_centers.json"
+    }
+  }
+}
+```
+
+校准链路：`EAD features → CameraNormalizer (per-camera per-channel 标准化) → EmbeddingProjector (PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → UnifiedEmbedding`。
+
+### Cascading Budget 配置
+
+预算配置已内嵌于 `ProposalConfig` 的 `budget` 字段。如需启用两级预算（Proposal + Filter 级联），设置：
+
+```json
+{
+  "proposal": {
+    "budget": {
+      "enabled": true,
+      "scope": "proposal_and_filter",
+      "target_latency_ms": 15.0,
+      "hard_limit_ms": 20.0,
+      "max_cc_before_emergency": 50,
+      "avg_filter_latency_ms": 3.0,
+      "window_size": 100,
+      "threshold_multiplier_step": 0.5,
+      "threshold_multiplier_max": 3.0,
+      "recovery_rate": 0.01
+    }
+  }
+}
+```
+
+`CascadingBudgetController` 会根据剩余预算动态调度 Filter：`full` (全部推理) / `partial` (按优先级裁剪) / `skip_all` / `emergency` (紧急熔断)。
+
 生产环境建议：
 
 - `debug_artifacts_enabled` 设置为 `false`，避免保存大量调试图片拖慢检测。
@@ -355,8 +416,13 @@ dict frame 可选字段：
 3. 做图像质量检查。
 4. 如果未配置 regions，执行完整 ROI EfficientAD。
 5. 如果配置了 regions，切分标准 ROI 并执行 region EfficientAD。
-6. 可选执行颜色一致性分支。
-7. 汇总单机位结果。
+6. 异常帧进入 Feature Calibration（Normalize → Project → Whiten → EMA Center）。
+7. Region Proposal 生成 defect patch 候选。
+8. Identity Linking 跨帧关联。
+9. Cascading Budget 调度 Filter 推理（full/partial/skip_all/emergency）。
+10. Filter Classifier 三模态推理 + Proposal Aggregation。
+11. 规则引擎后处理。
+12. 汇总单机位结果。
 
 多机位流程：
 

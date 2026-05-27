@@ -38,10 +38,10 @@ flowchart TB
         direction LR
         CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
         YOLO --> PC["EfficientAD<br/>异常评分 + 特征提取"]
-        PC --> BC["Budget Ctrl<br/>自适应阈值+延迟SLA"]
+        PC --> CAL["Feature Calibration<br/>Normalize→Project→Whiten"]
+        CAL --> BC["Cascading Budget<br/>Proposal+Filter 级联预算"]
         BC --> RP["Region Proposal<br/>热力图→连通域→裁剪"]
         RP --> IL["Identity Linking<br/>Kalman+特征匹配"]
-        IL --> AP["Align Project<br/>EAD→DINOv2空间"]
         RP --> FC["Three-Modal Filter<br/>图像+EAD+Unified Emb 三模态"]
         FC --> AG["Proposal Aggregation<br/>加权聚合判定"]
         AG --> RE["规则引擎<br/>后处理"]
@@ -144,11 +144,12 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Budget Ctrl</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Align Project</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
         <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher 多层特征 + Student-Teacher 差异，保留 anomaly representation 而非仅 score</li>
+        <li><b>Feature Calibration Layer</b>：CameraNormalizer (机位级 per-channel 标准化) → EmbeddingProjector (多尺度特征 → PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → EMAFeatureCenter (缺陷类型特征中心 EMA 追踪)，跨机位统一特征空间</li>
         <li><b>Region Proposal Refinement</b>：热力图 → 自适应阈值 → 形态学清理 → 连通域 → 区域裁剪，每个 defect patch 独立送入 Filter</li>
         <li><b>Three-Modal Filter</b>：MobileNetV3-Small (448²) 图像分支 + EfficientAD 特征分支 + Unified Embedding (384d) → 768d Fusion → 二分类，Feature Dropout 保证 fallback</li>
-        <li><b>Budget Controller</b>：三态自适应阈值 (Normal/Emergency/Optimization)，延迟 SLA 保证 (target 15ms / hard 20ms)</li>
+        <li><b>Cascading Budget Controller</b>：两级预算（Proposal + Filter 级联），自适应阈值 + 动态 per-patch 过滤调度 (full/partial/skip_all/emergency)，延迟 SLA 保证 (target 15ms / hard 20ms)</li>
         <li><b>Identity Linking</b>：6态生命周期 + Kalman/特征余弦级联匹配 + 4类冲突解决策略，跨帧去重，跨相机关联</li>
         <li><b>Proposal Aggregation</b>：加权聚合 (area^0.5 × score)，Generation 优化 Recall，Aggregation 优化 Precision</li>
         <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
@@ -247,21 +248,22 @@ flowchart TB
   </tr>
   <tr>
     <td width="50%">
-      <h3>🎛 Budget Controller + Identity Linking</h3>
+      <h3>🎛 Cascading Budget + Identity Linking</h3>
       <ul>
-        <li><b>三态预算控制</b>：Normal (自适应阈值) / Emergency (硬上限兜底) / Optimization (长期噪声自适应)</li>
+        <li><b>两级预算控制</b>：Proposal Budget (自适应阈值 + K 上限) + Filter Budget (动态 per-patch 调度 full/partial/skip_all/emergency)，Filter EMA 耗时估计</li>
         <li><b>DefectTracker</b>：6态生命周期 (BIRTH→ACTIVE→TENTATIVE→MATURE→LOST→DEAD)，Kalman + 特征余弦级联匹配</li>
         <li><b>冲突解决</b>：Best Match Wins (1:N) / NMS Merge (N:1) / Feature Tiebreaker (N:M) / Hungarian (Race)</li>
         <li>MATURE identity (≥5帧) 触发上传，后续帧 PATCH 更新，跨相机 identity 合并去重</li>
       </ul>
     </td>
     <td width="50%">
-      <h3>📐 Unified Embedding Space</h3>
+      <h3>📐 Unified Embedding Space + Calibration</h3>
       <ul>
         <li><b>EmbeddingSpaceContract</b>：协议层 representation standard (384d, L2, cosine, DINOv2 geometry)</li>
-        <li><b>AlignmentProjector</b>：EAD features → Transformer Encoder → 384d L2，InfoNCE 对比学习训练</li>
-        <li><b>三模态 Filter</b>：image + EAD raw + unified_emb → 768d fusion → 二分类</li>
+        <li><b>Feature Calibration Layer</b>：CameraNormalizer (per-camera per-channel 标准化) → EmbeddingProjector (EAD features → PCA 384d) → WhiteningTransform (ZCA 去相关) → EMAFeatureCenter (缺陷中心追踪)</li>
+        <li><b>三模态 Filter</b>：image + EAD raw + unified_emb → 768d fusion → 二分类，Feature Dropout 保证 fallback</li>
         <li>离线聚类 (DINOv2) 与在线推理 (EAD projected) 共享同一 embedding geometry</li>
+        <li>EMA 特征中心：跨机位 defect_type 中心追踪，支持 KNN 检索 + 新缺陷发现 (is_novel)</li>
       </ul>
     </td>
   </tr>
@@ -386,6 +388,13 @@ seat_defect_core/
 ├── fusion.py                         # 多机位融合判定
 ├── serialization.py                  # 检测结果序列化（含 filter_result）
 ├── api.py                            # SeatDefectInspector 入口，含自动上传调度
+├── calibration/                      # 🎯 特征校准层（跨机位特征统一）
+│   ├── camera_normalizer.py          #   CameraNormalizer — 机位级 per-channel 标准化
+│   ├── projector.py                  #   EmbeddingProjector — EAD 多尺度特征 → 384-dim
+│   ├── whitening.py                  #   WhiteningTransform — ZCA 白化去相关
+│   ├── feature_center.py             #   EMAFeatureCenter — 缺陷类型特征中心 EMA
+│   ├── registry.py                   #   CalibrationRegistry — 统一校准入口
+│   └── config.py                     #   CalibrationConfig
 ├── classifier/
 │   ├── __init__.py
 │   └── engine.py                     # DualModalFilter 推理引擎：图像+特征双模态 + 故障安全
@@ -694,6 +703,7 @@ mkdir -p sample_images
 | 原则 | 实践 |
 |---|---|
 | **统一数据协议** | `seat_defect_core/_protocol/` 定义 `PatchProposal` 统一数据契约，内嵌于在线核心，在线推理和离线训练共享同一套数据结构 |
+| **特征校准层** | `seat_defect_core/calibration/` 跨机位特征统一：Normalize → Project → Whiten → EMA Center，消除机位间特征分布差异 |
 | **严格分层架构** | API 层只处理 HTTP，零数据库访问、零业务逻辑 |
 | **Protocol 接口抽象** | `EmbeddingExtractor` 和 `VLMAnalyzer` 采用 Protocol 定义，替换模型无需改动业务代码 |
 | **全链路异步** | Async FastAPI + async SQLAlchemy + async MinIO，CPU/GPU 密集型任务全部交 Celery Worker 异步执行 |
