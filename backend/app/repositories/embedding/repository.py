@@ -37,6 +37,9 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         top_k: int = 20,
         threshold: float = 0.7,
     ) -> list[dict[str, object]]:
+        # pgvector <=> 运算符要求向量以字符串形式传入（如 '[1.0, 2.0, 3.0]'），
+        # 直接传 Python list 或 numpy ndarray 会导致 asyncpg DataError
+        vec_str = str(list(query_vector))
         stmt = text("""
             SELECT ev.id AS embedding_id,
                    ev.anomaly_id,
@@ -53,7 +56,7 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         result = await self._session.execute(
             stmt,
             {
-                "query_vec": query_vector,
+                "query_vec": vec_str,
                 "threshold": threshold,
                 "top_k": top_k,
             },
@@ -70,8 +73,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         source = await self.get_by_anomaly_id(anomaly_id)
         if source is None:
             return []
+        # source.embedding 是 pgvector Vector（numpy ndarray），需转为 list[float] 才能被 asyncpg 正确序列化
+        query_vec = source.embedding.tolist() if hasattr(source.embedding, "tolist") else list(source.embedding)
         return await self.find_similar(
-            query_vector=source.embedding,
+            query_vector=query_vec,
             top_k=top_k,
             threshold=threshold,
         )
