@@ -135,7 +135,7 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
 - `[seat_defect_inspection]`：顶层路径、开关、默认工件等字段
 - `[fusion]`：整件融合策略
 - `[camera.<camera_id>]`：顶层单机位
-- `[camera.<camera_id>.detection]`、`roi`、`roi.alignment`、`efficientad`、`color_branch`
+- `[camera.<camera_id>.detection]`、`roi`、`roi.alignment`、`efficientad`、`filter_classifier`、`rule_engine`
 - `[seat_model.<seat_model_id>]` 和 `[seat_model.<seat_model_id>.camera.<camera_id>]`：多型号配置
 
 示例：
@@ -257,8 +257,7 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
 
 - `debug_artifacts_enabled` 设置为 `false`，避免保存大量调试图片拖慢检测。
 - `output_json_path` 和 `debug_dir` 放到外部项目可写目录。
-- `backbone_device` 根据现场硬件设为 `cpu`、`cuda:0` 或 `mps`。
-- 若现场不能联网下载 torchvision 权重，配置 `backbone_weights_path` 指向本地预训练权重，或提前准备 `.torch_cache`。
+- `device` 根据现场硬件设为 `cpu`、`cuda:0` 或 `mps`。
 
 ## 输入格式
 
@@ -360,10 +359,9 @@ dict frame 可选字段：
 
 - `all_checks_passed`
 - `texture_anomaly`
-- `color_anomaly`
 - `target_not_found`
 - `target_mask_missing`
-- `low_valid_patch_ratio`
+- `low_valid_pixel_ratio`
 - `missing_external_frame`
 - `image_read_failed`
 - `pipeline_failed`
@@ -429,7 +427,7 @@ EfficientAD 模型中保存了训练时的上游 pipeline signature。运行时�
 
 1. `debug_artifacts_enabled` 是否为 `false`。
 2. `timings_ms.cameras` 和各机位 `timings_ms.anomaly`。
-3. `backbone_device` 是否符合现场硬件。
+3. `device` 是否符合现场硬件。
 5. 是否每次请求都重新创建 `SeatDefectInspector`。
 
 ## 最佳检测效果配置
@@ -491,30 +489,29 @@ Calibration 需要离线拟合参数，训练脚本位于 `ml/alignment/trainer.
 
 ### 准备训练数据
 
-按机位和区域组织正常图像：
+按机位组织正常图像，每个机位一个 `good/` 目录：
 
 ```
 training_data/
   cam_back/
-    upper/       # 上区域正常图像（各 50-200 张）
+    good/        # 正常图像（各 50-200 张）
       0001.jpg
       0002.jpg
-    middle/      # 中区域
-      0001.jpg
-      ...
-    lower/       # 下区域
-      0001.jpg
       ...
   cam_front/
-    upper/
-    middle/
-    lower/
+    good/
+      0001.jpg
+      0002.jpg
+      ...
+  cam_left/
+    good/
+      ...
 ```
 
 **数据要求：**
 - 只包含正常（无缺陷）座椅图像
 - 覆盖产线正常波动（光照变化、座椅颜色/材质差异、轻微位置偏移）
-- 每个区域至少 50 张，推荐 100-200 张
+- 每个机位至少 50 张，推荐 100-200 张
 - 图像应为 ROI 对齐后的裁剪（256×256 或与 `input_size` 一致）
 
 ### 单机位训练
@@ -523,8 +520,8 @@ training_data/
 python -m seat_defect_core train-efficientad \
   --config config.best.json \
   --camera-id cam_back \
-  --good-images ./training_data/cam_back/upper/ \
-  --output ./models/seat_model_a/cam_back_upper_efficientad.pt
+  --good-images ./training_data/cam_back/good/ \
+  --output ./models/seat_model_a/cam_back_efficientad.pt
 ```
 
 ### 批量训练全部机位
@@ -575,7 +572,7 @@ python -m seat_defect_core batch-train \
 - [ ] `debug_artifacts_enabled` 设为 `false`
 - [ ] 所有 `device` 字段与现场硬件一致（`cpu`/`cuda`/`mps`）
 - [ ] YOLO 模型路径和分类名确认正确
-- [ ] 每个机位/区域的 EfficientAD 模型已训练并路径正确
+- [ ] 每个机位的 EfficientAD 模型已训练并路径正确
 - [ ] Filter Classifier 已部署且路径正确
 - [ ] 规则引擎 deployed_rules_path 指向最新部署规则
 - [ ] Calibration `.npz` 文件已拟合并路径正确
@@ -595,6 +592,6 @@ python -m seat_defect_core batch-train \
 - EfficientAD 模型文件。
 - Python、torch、torchvision、ultralytics 版本。
 
-LabVIEW 公共机建议固定 Python `3.8.5`，使用 CPU 版依赖，并在配置中设置 `backbone_device = cpu`。如果后续改用 GPU/CUDA，需要单独验证对应的 torch、torchvision 和驱动版本。
+LabVIEW 公共机建议固定 Python `3.8.5`，使用 CPU 版依赖，并在配置中设置 `device = cpu`。如果后续改用 GPU/CUDA，需要单独验证对应的 torch、torchvision 和驱动版本。
 
 上线后不要直接替换模型或配置。任何模型或 ROI 配置调整，都应先在离线样本集上回归验证。
