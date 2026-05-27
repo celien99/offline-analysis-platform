@@ -78,41 +78,6 @@ class FilterClassifierResult:
 
 
 @dataclass
-class RegionAnomalyResult:
-    """单个局部区域的异常检测输出。"""
-
-    region_id: str
-    """区域 ID。"""
-
-    status: str
-    """区域状态：OK / NG / REJECT。"""
-
-    reason: str
-    """区域状态原因。"""
-
-    box: BoundingBox
-    """标准 ROI 坐标系下的区域矩形框。"""
-
-    texture_result: Optional[TextureAnomalyResult] = None
-    """该区域的纹理异常结果。"""
-
-    efficientad_model_path: Optional[str] = None
-    """该区域使用的 EfficientAD 模型路径。"""
-
-    artifact_paths: Dict[str, str] = field(default_factory=dict)
-    """该区域关联的调试产物路径。"""
-
-    timings_ms: Dict[str, float] = field(default_factory=dict)
-    """该区域各阶段耗时，单位毫秒。"""
-
-    error: Optional[InspectionError] = None
-    """该区域结构化错误。"""
-
-    sample: Optional[Any] = field(default=None, repr=False, compare=False)
-    """运行时复用的区域 ROI 样本，不参与公开序列化。"""
-
-
-@dataclass
 class CameraInspectionResult:
     """单机位最终检测结果。"""
 
@@ -144,10 +109,7 @@ class CameraInspectionResult:
     """YOLO 检测结果。"""
 
     texture_result: Optional[TextureAnomalyResult] = None
-    """完整 ROI 模式下的纹理异常结果。"""
-
-    region_results: List[RegionAnomalyResult] = field(default_factory=list)
-    """regions 模式下的区域检测结果。"""
+    """纹理异常检测结果。"""
 
     filter_result: Optional[FilterClassifierResult] = None
     """过滤器分类器分支结果。"""
@@ -265,6 +227,5 @@ __all__ = [
     "InspectionError",
     "InspectionResponse",
     "InspectionResult",
-    "RegionAnomalyResult",
     "TextureAnomalyResult",
 ]

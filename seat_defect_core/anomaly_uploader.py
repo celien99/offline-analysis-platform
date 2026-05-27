@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-import base64
-import io
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -99,15 +97,6 @@ def upload_camera_result(
     # 异常分数
     if result.texture_result is not None:
         data["anomaly_score"] = float(result.texture_result.score)
-    elif result.region_results:
-        # 区域模式下从 region_results 收集最高异常分数
-        region_scores = [
-            r.texture_result.score
-            for r in result.region_results
-            if r.texture_result is not None
-        ]
-        if region_scores:
-            data["anomaly_score"] = float(max(region_scores))
 
     # 原图：用户/产线上传到 inspection 的原始大图，不含热力图叠加。
     if result.original_image is not None:
@@ -240,15 +229,11 @@ def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | 
 def _extract_anomaly_crop(result: CameraInspectionResult) -> list[np.ndarray]:
     """利用热力图定位异常高响应区域，从 ROI 图中裁剪出异常部位。
 
-    一张图可能存在多处缺陷 → 提取热力图中所有显著连通域，
-    按面积降序排列。regions 模式下遍历所有 NG region 各自裁剪。
+    提取热力图中所有显著连通域，按面积降序排列。
 
     Returns:
-        异常区域 BGR 裁剪图列表（按面积降序，跨 region 合并）。
+        异常区域 BGR 裁剪图列表（按面积降序）。
     """
-    all_crops: list[np.ndarray] = []
-
-    # 完整 ROI 模式：heatmap + roi_aligned_image 同坐标系
     if (
         result.texture_result is not None
         and result.texture_result.heatmap is not None
@@ -260,29 +245,8 @@ def _extract_anomaly_crop(result: CameraInspectionResult) -> list[np.ndarray]:
             else result.roi_image
         )
         if crop_base is not None:
-            all_crops.extend(_crop_by_heatmap(heatmap, crop_base))
-
-    # regions 模式：遍历所有 NG region，各自从其热力图和局部图像中裁剪
-    elif result.region_results:
-        ng_regions = [
-            r for r in result.region_results
-            if r.status == "NG" and r.texture_result is not None and r.texture_result.heatmap is not None
-        ]
-        for region in ng_regions:
-            heatmap = np.asarray(region.texture_result.heatmap, dtype=np.float32)
-            crop_base = (
-                np.asarray(region.sample.image)
-                if region.sample is not None and region.sample.image is not None
-                else (
-                    result.roi_aligned_image
-                    if result.roi_aligned_image is not None
-                    else result.roi_image
-                )
-            )
-            if heatmap is not None and crop_base is not None:
-                all_crops.extend(_crop_by_heatmap(heatmap, crop_base))
-
-    return all_crops
+            return _crop_by_heatmap(heatmap, crop_base)
+    return []
 
 
 def _crop_by_heatmap(

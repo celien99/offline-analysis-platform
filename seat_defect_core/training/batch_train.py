@@ -1,19 +1,16 @@
 """批量训练多机位 EfficientAD 模型。
 
-从按机位和区域组织的正常图像目录中，批量训练 EfficientAD 模型。
-训练完成后将模型路径和阈值写回配置文件。
+从按机位组织的正常图像目录中，批量训练 EfficientAD 模型。
 
 目录结构要求：
     <good_images_root>/
       <camera_id>/
-        good/              # 全 ROI 正常图像（无 region 模式时使用）
-          *.jpg
-        <region_id>/        # 子区域正常图像（region 模式时使用）
+        good/              # 全 ROI 正常图像
           *.jpg
 
 用法：
     # CLI
-    python -m seat_defect_core.train.batch_train \\
+    python -m seat_defect_core batch-train \\
       --config config.best.json \\
       --good-images-root ./training_data/ \\
       --output-root ./models/seat_model_a/
@@ -43,14 +40,14 @@ def batch_train_all(
 
     Args:
         config_path: 检测配置文件路径。
-        good_images_root: 正常图像根目录，按 camera_id/region_id 组织。
+        good_images_root: 正常图像根目录，按 camera_id/good/ 组织。
         output_root: 模型输出根目录。
         cameras: 限定要训练的机位列表，为 None 则训练全部。
         mlflow_tracking_uri: MLflow tracking URI。
         dry_run: True 时只打印训练计划，不实际训练。
 
     Returns:
-        dict: {status, results: [{camera_id, region_id, status, artifact_path, image_threshold}]}
+        dict: {status, results: [{camera_id, status, artifact_path, image_threshold}]}
     """
     from seat_defect_core.config import InspectionConfig
     from seat_defect_core.config_file import resolve_config
@@ -76,8 +73,7 @@ def batch_train_all(
 
     print(f"\n{'[DRY RUN] ' if dry_run else ''}发现 {len(training_tasks)} 个训练任务:")
     for task in training_tasks:
-        region_label = f" / region={task['region_id']}" if task["region_id"] else ""
-        print(f"  - camera={task['camera_id']}{region_label}: {task['image_count']} 张正常图像")
+        print(f"  - camera={task['camera_id']}: {task['image_count']} 张正常图像")
 
     if dry_run:
         return {"status": "dry_run", "tasks": training_tasks}
@@ -87,12 +83,9 @@ def batch_train_all(
     total = len(training_tasks)
     for i, task in enumerate(training_tasks):
         camera_id = task["camera_id"]
-        region_id = task.get("region_id")
-        region_label = f"/{region_id}" if region_id else ""
-        task_name = f"{camera_id}{region_label}"
 
         print(f"\n{'='*60}")
-        print(f"[{i+1}/{total}] 训练 {task_name} ({task['image_count']} 张图像)")
+        print(f"[{i+1}/{total}] 训练 {camera_id} ({task['image_count']} 张图像)")
         print(f"{'='*60}")
 
         try:
@@ -103,17 +96,14 @@ def batch_train_all(
                 output_path=task["output_path"],
                 mlflow_tracking_uri=mlflow_tracking_uri,
                 mlflow_experiment="efficientad",
-                region_id=region_id,
             )
             result["camera_id"] = camera_id
-            result["region_id"] = region_id
             results.append(result)
             print(f"  结果: {result['status']}, threshold={result['image_threshold']}")
         except Exception as e:
             print(f"  失败: {e}")
             results.append({
                 "camera_id": camera_id,
-                "region_id": region_id,
                 "status": "failed",
                 "error": str(e),
             })
@@ -126,11 +116,11 @@ def batch_train_all(
     if succeeded:
         print("成功模型:")
         for r in succeeded:
-            print(f"  {r['camera_id']}/{r.get('region_id', '__full__')}: {r['artifact_path']}")
+            print(f"  {r['camera_id']}: {r['artifact_path']}")
     if failed:
         print("失败任务:")
         for r in failed:
-            print(f"  {r['camera_id']}/{r.get('region_id', '__full__')}: {r.get('error', 'unknown')}")
+            print(f"  {r['camera_id']}: {r.get('error', 'unknown')}")
 
     return {"status": "completed" if not failed else "partial", "results": results}
 
@@ -159,53 +149,24 @@ def _build_training_tasks(
 
         cam_good_dir = good_root / cam.camera_id
 
-        # 判断是否有 region 配置
-        active_regions = [r for r in (cam.regions or []) if r.enabled]
-        if active_regions:
-            # Region 模式：每个 region 单独训练
-            for region in active_regions:
-                region_img_dir = cam_good_dir / region.region_id
-                if not region_img_dir.is_dir():
-                    print(f"  跳过 {cam.camera_id}/{region.region_id}: 目录不存在 {region_img_dir}")
-                    continue
+        full_img_dir = cam_good_dir / "good"
+        if not full_img_dir.is_dir():
+            print(f"  跳过 {cam.camera_id}: 目录不存在 {full_img_dir}")
+            continue
 
-                image_paths = _collect_images(region_img_dir)
-                if len(image_paths) < 2:
-                    print(f"  跳过 {cam.camera_id}/{region.region_id}: 图像不足 ({len(image_paths)} 张)")
-                    continue
+        image_paths = _collect_images(full_img_dir)
+        if len(image_paths) < 2:
+            print(f"  跳过 {cam.camera_id}: 图像不足 ({len(image_paths)} 张)")
+            continue
 
-                output_dir = output_root / cam.camera_id
-                output_dir.mkdir(parents=True, exist_ok=True)
-                output_path = output_dir / f"{cam.camera_id}_{region.region_id}_efficientad.pt"
+        output_path = output_root / f"{cam.camera_id}_efficientad.pt"
 
-                tasks.append({
-                    "camera_id": cam.camera_id,
-                    "region_id": region.region_id,
-                    "image_paths": image_paths,
-                    "image_count": len(image_paths),
-                    "output_path": str(output_path),
-                })
-        else:
-            # 全 ROI 模式：整个机位使用单个 EfficientAD 模型
-            full_img_dir = cam_good_dir / "good"
-            if not full_img_dir.is_dir():
-                print(f"  跳过 {cam.camera_id}: 目录不存在 {full_img_dir}")
-                continue
-
-            image_paths = _collect_images(full_img_dir)
-            if len(image_paths) < 2:
-                print(f"  跳过 {cam.camera_id}: 图像不足 ({len(image_paths)} 张)")
-                continue
-
-            output_path = output_root / f"{cam.camera_id}_efficientad.pt"
-
-            tasks.append({
-                "camera_id": cam.camera_id,
-                "region_id": None,
-                "image_paths": image_paths,
-                "image_count": len(image_paths),
-                "output_path": str(output_path),
-            })
+        tasks.append({
+            "camera_id": cam.camera_id,
+            "image_paths": image_paths,
+            "image_count": len(image_paths),
+            "output_path": str(output_path),
+        })
 
     return tasks
 

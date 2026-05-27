@@ -21,22 +21,14 @@ def generate_overlay_image(
     frame_packet: Any,
     prepared: Any,
     texture_result: Optional[Any] = None,
-    region_results: Optional[Any] = None,
 ) -> Optional[np.ndarray]:
     """Generate the BGR overlay image for one camera result.
 
     Returns None when no heatmap data is available (e.g. REJECT/error paths).
     """
-    if prepared.roi is None:
+    if prepared.roi is None or texture_result is None:
         return None
-    if texture_result is None and not region_results:
-        return None
-    heatmap = (
-        texture_result.heatmap
-        if texture_result is not None
-        else _stitch_region_heatmap(prepared.roi, region_results)
-    )
-    return _overlay_heatmap_on_frame(frame_packet.image, prepared.roi, heatmap)
+    return _overlay_heatmap_on_frame(frame_packet.image, prepared.roi, texture_result.heatmap)
 
 
 def save_debug_artifacts(
@@ -47,7 +39,6 @@ def save_debug_artifacts(
     prepared: Any,
     texture_result: Optional[Any],
     seat_model_id: Optional[str],
-    region_results: Optional[Any] = None,
 ) -> Dict[str, str]:
     """Persist the selected debug artifacts for one camera result."""
     selected_artifacts = _normalize_artifact_names(artifact_names)
@@ -63,14 +54,11 @@ def save_debug_artifacts(
     camera_dir.mkdir(parents=True, exist_ok=True)
     artifact_paths: Dict[str, str] = {}
 
-    if prepared.roi is not None and (
-        texture_result is not None or region_results
-    ):
+    if prepared.roi is not None and texture_result is not None:
         overlay = generate_overlay_image(
             frame_packet,
             prepared,
             texture_result=texture_result,
-            region_results=region_results,
         )
         if overlay is not None and "overlay" in selected_artifacts:
             _save_artifact_image(
@@ -94,48 +82,6 @@ def _normalize_artifact_names(
         formatted = ", ".join(f"`{item}`" for item in unexpected)
         raise ValueError(f"debug_artifact_names 包含不支持的调试产物: {formatted}")
     return frozenset(requested)
-
-
-def _stitch_region_heatmap(roi, region_results) -> np.ndarray:
-    """Merge region-level texture anomaly heatmaps back into full ROI coordinates."""
-    height, width = select_texture_input(roi).shape[:2]
-    stitched = np.zeros((height, width), dtype=np.float32)
-    for region_result in region_results or []:
-        texture_result = getattr(region_result, "texture_result", None)
-        if texture_result is None:
-            continue
-        x1, y1, x2, y2 = _region_box_to_pixels(region_result.box, width, height)
-        if x2 <= x1 or y2 <= y1:
-            continue
-        region_heatmap = np.clip(
-            np.asarray(texture_result.heatmap, dtype=np.float32),
-            0.0,
-            1.0,
-        )
-        if region_heatmap.shape != (y2 - y1, x2 - x1):
-            region_heatmap = cv2.resize(
-                region_heatmap,
-                (x2 - x1, y2 - y1),
-                interpolation=cv2.INTER_LINEAR,
-            )
-        stitched[y1:y2, x1:x2] = np.maximum(
-            stitched[y1:y2, x1:x2],
-            region_heatmap,
-        )
-    return stitched
-
-
-def _region_box_to_pixels(box, width: int, height: int) -> Tuple[int, int, int, int]:
-    x1 = int(round(float(box.x1)))
-    y1 = int(round(float(box.y1)))
-    x2 = int(round(float(box.x2)))
-    y2 = int(round(float(box.y2)))
-    return (
-        min(max(x1, 0), width),
-        min(max(y1, 0), height),
-        min(max(x2, 0), width),
-        min(max(y2, 0), height),
-    )
 
 
 def _save_artifact_image(

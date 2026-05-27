@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 from .core_types import BoundingBox, CameraInspectionResult, InspectionError, InspectionResult
 
@@ -40,20 +40,6 @@ def camera_result_to_dict(result: CameraInspectionResult) -> Dict[str, Any]:
         "target_box": resolve_target_box(result),
         "crop_box": box_to_dict(result.crop_box),
         "texture_result": texture_result_to_dict(result.texture_result),
-        "region_results": [
-            {
-                "region_id": item.region_id,
-                "status": item.status,
-                "reason": item.reason,
-                "box": box_to_dict(item.box),
-                "efficientad_model_path": item.efficientad_model_path,
-                "texture_result": texture_result_to_dict(item.texture_result),
-                "artifact_paths": dict(item.artifact_paths),
-                "timings_ms": dict(item.timings_ms),
-                "error": error_to_dict(item.error),
-            }
-            for item in result.region_results
-        ],
         "filter_result": filter_result_to_dict(result.filter_result),
         "artifact_paths": dict(result.artifact_paths),
     }

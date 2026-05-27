@@ -40,7 +40,7 @@ _validate_inspection_config = validate_inspection_config
 
 
 def _validate_camera_configs(cameras: List[CameraConfig], *, scope: str) -> None:
-    """检查机位 ID 冲突，并校验区域配置。"""
+    """检查机位 ID 冲突。"""
     duplicates: Set[str] = set()
     seen: Set[str] = set()
     for camera in cameras:
@@ -51,20 +51,3 @@ def _validate_camera_configs(cameras: List[CameraConfig], *, scope: str) -> None
     if duplicates:
         duplicated_ids = ", ".join(f"`{camera_id}`" for camera_id in sorted(duplicates))
         raise ValueError(f"{scope} 存在重复 camera_id: {duplicated_ids}")
-
-    for camera in cameras:
-        _validate_region_configs(camera, scope=scope)
-
-
-def _validate_region_configs(camera: CameraConfig, *, scope: str) -> None:
-    """校验单机位内局部区域配置（region_id 唯一性）。"""
-    duplicates: Set[str] = set()
-    seen: Set[str] = set()
-    for region in camera.regions:
-        if region.region_id in seen:
-            duplicates.add(region.region_id)
-        else:
-            seen.add(region.region_id)
-    if duplicates:
-        duplicated_ids = ", ".join(f"`{region_id}`" for region_id in sorted(duplicates))
-        raise ValueError(f"{scope} 中 camera `{camera.camera_id}` 存在重复 region_id: {duplicated_ids}")

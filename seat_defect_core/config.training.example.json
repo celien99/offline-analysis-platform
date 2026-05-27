@@ -10,7 +10,6 @@
         "roi": {},
         "filter_classifier": {},
         "rule_engine": {},
-        "regions": [],
         "efficientad_model_path": "",
         "efficientad": {
           "model_path": "",
