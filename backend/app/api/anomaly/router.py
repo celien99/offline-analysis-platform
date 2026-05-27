@@ -124,37 +124,6 @@ async def list_anomalies(
 
 
 @router.get(
-    "/{anomaly_id}",
-    response_model=AnomalyResponse,
-    responses={404: {"model": ErrorResponse}},
-)
-async def get_anomaly(
-    anomaly_id: str,
-    session: AsyncSession = Depends(get_session),
-    minio: MinIOClient = Depends(get_minio),
-) -> AnomalyResponse:
-    service = AnomalyService(session, minio)
-    record = await service.get_anomaly(anomaly_id)
-    response = await _to_response(record, minio)
-    # 查询该 anomaly 所属的 cluster
-    membership_repo = ClusterMembershipRepository(session)
-    cluster_ids = await membership_repo.get_cluster_ids_by_anomaly(anomaly_id)
-    response.cluster_id = cluster_ids[0] if cluster_ids else None
-    return response
-
-
-@router.post("/{anomaly_id}/reprocess")
-async def reprocess_anomaly(
-    anomaly_id: str,
-    session: AsyncSession = Depends(get_session),
-    minio: MinIOClient = Depends(get_minio),
-) -> dict[str, str]:
-    service = AnomalyService(session, minio)
-    await service.reprocess_anomaly(anomaly_id)
-    return {"status": "queued", "anomaly_id": anomaly_id}
-
-
-@router.get(
     "/noise",
     response_model=dict,
 )
@@ -246,6 +215,37 @@ async def get_filter_classifier_stats(
         },
         "filter_vs_human_review": review_breakdown,
     }
+
+
+@router.get(
+    "/{anomaly_id}",
+    response_model=AnomalyResponse,
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_anomaly(
+    anomaly_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> AnomalyResponse:
+    service = AnomalyService(session, minio)
+    record = await service.get_anomaly(anomaly_id)
+    response = await _to_response(record, minio)
+    # 查询该 anomaly 所属的 cluster
+    membership_repo = ClusterMembershipRepository(session)
+    cluster_ids = await membership_repo.get_cluster_ids_by_anomaly(anomaly_id)
+    response.cluster_id = cluster_ids[0] if cluster_ids else None
+    return response
+
+
+@router.post("/{anomaly_id}/reprocess")
+async def reprocess_anomaly(
+    anomaly_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> dict[str, str]:
+    service = AnomalyService(session, minio)
+    await service.reprocess_anomaly(anomaly_id)
+    return {"status": "queued", "anomaly_id": anomaly_id}
 
 
 @router.delete(

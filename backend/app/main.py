@@ -69,7 +69,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         content=ErrorResponse(
             code=exc.code,
             message=exc.message,
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 
