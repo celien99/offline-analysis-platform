@@ -141,7 +141,8 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            }
+            },
+            "efficientad_model_path": "../models/seat_model_a/cam_back_efficientad.pt"
           },
           {
             "camera_id": "cam_front",
@@ -263,7 +264,8 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            }
+            },
+            "efficientad_model_path": "../models/seat_model_a/cam_front_efficientad.pt"
           },
           {
             "camera_id": "cam_left",
@@ -385,7 +387,8 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            }
+            },
+            "efficientad_model_path": "../models/seat_model_a/cam_left_efficientad.pt"
           },
           {
             "camera_id": "cam_right",
@@ -507,7 +510,8 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            }
+            },
+            "efficientad_model_path": "../models/seat_model_a/cam_right_efficientad.pt"
           },
           {
             "camera_id": "cam_top",
@@ -629,11 +633,11 @@
               "nms_iou_threshold": 0.5,
               "cross_camera_cosine_threshold": 0.9,
               "epipolar_distance_threshold": 50.0
-            }
+            },
+            "efficientad_model_path": "../models/seat_model_a/cam_top_efficientad.pt"
           }
         ]
       }
-    ],
-    "$comment": "seat_defect_core 最佳检测效果配置。启用全部特性：Calibration + Cascading Budget + Tracking + Filter Classifier + Rule Engine。"
+    ]
   }
 }
