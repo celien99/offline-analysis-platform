@@ -154,7 +154,7 @@ flowchart TB
         <li><b>Proposal Aggregation</b>：加权聚合 (area^0.5 × score)，Generation 优化 Recall，Aggregation 优化 Precision</li>
         <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
         <li>规则引擎后处理：可配置阈值规则，支持 suppress_to_ok / flag_for_review</li>
-        <li>多区域 EfficientAD 支持，按区域独立判定 + 合并状态逻辑</li>
+        <li>全 ROI 单模型 EfficientAD + Proposal + Filter 级联判定</li>
       </ul>
     </td>
     <td width="50%">
