@@ -36,7 +36,7 @@ def batch_train_all(
     mlflow_tracking_uri: Optional[str] = None,
     dry_run: bool = False,
 ) -> dict:
-    """批量为配置中的所有机位和区域训练 EfficientAD 模型。
+    """批量为配置中的所有机位训练 EfficientAD 模型。
 
     Args:
         config_path: 检测配置文件路径。
@@ -192,7 +192,7 @@ def batch_train_cli() -> None:
     parser.add_argument(
         "--good-images-root",
         required=True,
-        help="正常图像根目录（结构: <root>/<camera_id>/<region_id>/*.jpg）",
+        help="正常图像根目录（结构: <root>/<camera_id>/good/*.jpg）",
     )
     parser.add_argument("--output-root", required=True, help="模型输出根目录")
     parser.add_argument("--cameras", default=None, help="限定训练机位，逗号分隔，不传则全部训练")
