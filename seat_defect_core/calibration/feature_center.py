@@ -65,11 +65,12 @@ class EMAFeatureCenter:
             self._centers[defect_type] = center
             return center
 
+        emb = np.asarray(embedding, dtype=np.float32)
+        old_center = existing.center
+        diff = emb - old_center
         existing.center = (
-            self.alpha * existing.center
-            + (1.0 - self.alpha) * embedding.astype(np.float32)
+            self.alpha * old_center + (1.0 - self.alpha) * emb
         )
-        diff = embedding.astype(np.float32) - existing.center
         existing.variance = (
             self.alpha * existing.variance
             + (1.0 - self.alpha) * (diff * diff)
@@ -81,7 +82,10 @@ class EMAFeatureCenter:
     def query_nearest(
         self, embedding: np.ndarray, top_k: int = 5
     ) -> list[tuple[str, float]]:
-        """返回距离最近的 top_k 个 defect_type 及余弦距离。"""
+        """返回距离最近的 top_k 个 defect_type 及余弦距离。
+
+        要求调用方保证 embedding 是 L2 归一化向量（||x||_2 ≈ 1.0）。
+        """
         if not self._centers:
             return []
         emb = embedding.astype(np.float32)
