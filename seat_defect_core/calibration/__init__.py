@@ -13,6 +13,10 @@ from .config import (
     ProjectionConfig,
     WhiteningConfig,
 )
+from .feature_center import (
+    DefectCenter,
+    EMAFeatureCenter,
+)
 from .projector import (
     EmbeddingProjector,
     ProjectionParams,
@@ -26,7 +30,9 @@ __all__ = [
     "CameraNormConfig",
     "CameraNormalizer",
     "CameraNormStats",
+    "DefectCenter",
     "EmbeddingProjector",
+    "EMAFeatureCenter",
     "EMACenterConfig",
     "ProjectionConfig",
     "ProjectionParams",
