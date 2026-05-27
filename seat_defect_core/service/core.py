@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..calibration import CalibrationConfig, CalibrationRegistry
 from ..classifier.engine import FilterClassifierService
 from ..config import CameraConfig, InspectionConfig, RegionConfig
 from ..cvops import ImageQualityGuard, RoiRefineEngine
@@ -102,6 +103,24 @@ class InspectionService:
         self._model_cache = AnomalyModelCache(self)
         self._anomaly_predictor = EfficientADPredictor()
         self._trackers: Dict[str, Any] = {}
+        self._calibration_registry = self._init_calibration()
+
+    def _init_calibration(self) -> Optional[CalibrationRegistry]:
+        """从配置中初始化 CalibrationRegistry。"""
+        # 从 CameraConfig 中查找 calibration 配置
+        for camera in self.config.cameras:
+            if camera.calibration is not None:
+                return CalibrationRegistry(camera.calibration)
+        # 检查 seat_models 中的 camera 配置
+        for seat_model in self.config.seat_models:
+            for camera in seat_model.cameras:
+                if camera.calibration is not None:
+                    return CalibrationRegistry(camera.calibration)
+        return CalibrationRegistry(CalibrationConfig())
+
+    @property
+    def calibration(self) -> Optional[CalibrationRegistry]:
+        return self._calibration_registry
 
     def resolve_context(self, seat_model_id: Optional[str]) -> ResolvedInspectionContext:
         resolved_seat_model_id, cameras = self._resolve_active_cameras(seat_model_id)
