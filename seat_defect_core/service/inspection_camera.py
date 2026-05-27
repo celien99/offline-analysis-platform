@@ -168,7 +168,7 @@ def inspect_prepared_camera(
     proposals: list[Any] = []
 
     if texture_result.is_anomaly:
-        filter_svc = getattr(service, 'filter_service', None)
+        filter_svc = service.load_filter_classifier(camera, seat_model_id)
         if filter_svc is not None:
             try:
                 proposal_cfg = getattr(camera, 'proposal', None) or ProposalConfig()
@@ -209,7 +209,7 @@ def inspect_prepared_camera(
 
                 # --- Calibration: normalize + project + whiten ---
                 unified_emb: Optional[np.ndarray] = None
-                calibration = getattr(service, 'calibration', None)
+                calibration = service.calibration
                 if calibration is not None and texture_result.features:
                     calibrated = calibration.calibrate(camera.camera_id, texture_result.features)
                     if calibrated is not None:
