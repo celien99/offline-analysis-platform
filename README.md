@@ -145,8 +145,8 @@ flowchart TB
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
         <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
-        <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher 多层特征 + Student-Teacher 差异，保留 anomaly representation 而非仅 score</li>
-        <li><b>Feature Calibration Layer</b>：CameraNormalizer (机位级 per-channel 标准化) → EmbeddingProjector (多尺度特征 → PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → EMAFeatureCenter (缺陷类型特征中心 EMA 追踪)，跨机位统一特征空间</li>
+        <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher/Student 完整输出 (384d/768d) + Teacher-Student 差异特征 (384d)，保留 anomaly representation 而非仅 score</li>
+        <li><b>Feature Calibration Layer</b>：CameraNormalizer (机位级 per-channel 标准化，teacher/student/difference 三组特征) → EmbeddingProjector (多尺度特征 → PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → EMAFeatureCenter (缺陷类型特征中心 EMA 追踪)，跨机位统一特征空间</li>
         <li><b>Region Proposal Refinement</b>：热力图 → 自适应阈值 → 形态学清理 → 连通域 → 区域裁剪，每个 defect patch 独立送入 Filter</li>
         <li><b>Three-Modal Filter</b>：MobileNetV3-Small (448²) 图像分支 + EfficientAD 特征分支 + Unified Embedding (384d) → 768d Fusion → 二分类，Feature Dropout 保证 fallback</li>
         <li><b>Cascading Budget Controller</b>：两级预算（Proposal + Filter 级联），自适应阈值 + 动态 per-patch 过滤调度 (full/partial/skip_all/emergency)，延迟 SLA 保证 (target 15ms / hard 20ms)</li>
@@ -261,7 +261,7 @@ flowchart TB
       <ul>
         <li><b>EmbeddingSpaceContract</b>：协议层 representation standard (384d, L2, cosine, DINOv2 geometry)</li>
         <li><b>Feature Calibration Layer</b>：CameraNormalizer (per-camera per-channel 标准化) → EmbeddingProjector (EAD features → PCA 384d) → WhiteningTransform (ZCA 去相关) → EMAFeatureCenter (缺陷中心追踪)</li>
-        <li><b>三模态 Filter</b>：image + EAD raw + unified_emb → 768d fusion → 二分类，Feature Dropout 保证 fallback</li>
+        <li><b>三模态 Filter</b>：MobileNetV3-Small 图像分支 (256d) + EAD 特征投影 (teacher/student/difference → 384d → 256d) + Unified Embedding (384d → 256d) → 768d Fusion → 二分类，Feature Dropout 保证 fallback</li>
         <li>离线聚类 (DINOv2) 与在线推理 (EAD projected) 共享同一 embedding geometry</li>
         <li>EMA 特征中心：跨机位 defect_type 中心追踪，支持 KNN 检索 + 新缺陷发现 (is_novel)</li>
       </ul>
@@ -397,7 +397,7 @@ seat_defect_core/
 │   └── config.py                     #   CalibrationConfig
 ├── classifier/
 │   ├── __init__.py
-│   └── engine.py                     # DualModalFilter 推理引擎：图像+特征双模态 + 故障安全
+│   └── engine.py                     # Three-Modal Filter 推理引擎：图像+EAD特征+Unified Emb 三模态 + 故障安全
 ├── proposal/                         # 🔬 Region Proposal 模块
 │   ├── generator.py                  #   热力图→连通域→区域裁剪
 │   ├── budget.py                     #   BudgetController（三态自适应阈值）
