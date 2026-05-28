@@ -276,6 +276,84 @@ class EfficientADService:
 
         return result
 
+    def extract_features_batch(
+        self, input_batch: torch.Tensor
+    ) -> list[dict[str, np.ndarray]]:
+        """批量提取 teacher/student 特征图及差异。
+
+        对一批已预处理（ImageNet normalize）的图像同时提取多尺度特征，
+        返回 per-image 的特征字典列表，用于 calibration 的批量计算。
+
+        Args:
+            input_batch: (B, 3, H, W) 已做 ImageNet normalize 的 tensor。
+
+        Returns:
+            list[dict]: 每张图的特征字典，key 为 teacher/student/difference。
+        """
+        if self._feature_model is None:
+            return [{} for _ in range(input_batch.shape[0])]
+
+        features: dict[str, torch.Tensor] = {}
+        handles: list[torch.utils.hooks.RemovableHandle] = []
+
+        def _make_hook(name: str) -> Callable[[torch.nn.Module, torch.Tensor, torch.Tensor], None]:
+            def hook(_module: torch.nn.Module, _input: torch.Tensor, output: torch.Tensor) -> None:
+                features[name] = output.detach()
+
+            return hook
+
+        if hasattr(self._feature_model, "teacher"):
+            handles.append(
+                self._feature_model.teacher.register_forward_hook(_make_hook("teacher"))
+            )
+        if hasattr(self._feature_model, "student"):
+            handles.append(
+                self._feature_model.student.register_forward_hook(_make_hook("student"))
+            )
+
+        # _feature_model 内部自行做 ImageNet normalize，需先还原到 [0, 1]
+        dev = input_batch.device
+        unnorm_input = (
+            input_batch * IMAGENET_STD_TS.to(dev) + IMAGENET_MEAN_TS.to(dev)
+        ).clamp(0.0, 1.0)
+        try:
+            with torch.inference_mode():
+                self._feature_model(unnorm_input)
+        except Exception:
+            _logger.warning("efficientad_feature_extraction_batch_failed", exc_info=True)
+            return None
+        finally:
+            for h in handles:
+                h.remove()
+
+        if not features:
+            return [{} for _ in range(input_batch.shape[0])]
+
+        batch_size = input_batch.shape[0]
+        results: list[dict[str, np.ndarray]] = []
+        for i in range(batch_size):
+            per_image: dict[str, np.ndarray] = {}
+            for key, tensor in features.items():
+                per_image[key] = tensor[i].permute(1, 2, 0).cpu().float().numpy()
+
+            if "teacher" in per_image and "student" in per_image:
+                t_out = per_image["teacher"]
+                s_out = per_image["student"]
+                teacher_channels = min(t_out.shape[2], s_out.shape[2])
+                t_aligned = t_out[:, :, :teacher_channels]
+                s_aligned = s_out[:, :, :teacher_channels]
+                if t_aligned.shape[:2] != s_aligned.shape[:2]:
+                    s_aligned = cv2.resize(
+                        s_aligned,
+                        (t_aligned.shape[1], t_aligned.shape[0]),
+                        interpolation=cv2.INTER_LINEAR,
+                    )
+                per_image["difference"] = (t_aligned - s_aligned).astype(np.float32)
+
+            results.append(per_image)
+
+        return results
+
     @classmethod
     def load_bundle(cls, model_path: str | Path) -> "EfficientADService":
         """从路径加载 EfficientAD 模型。"""

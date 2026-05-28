@@ -90,6 +90,10 @@ def train_efficientad(
 
     device = _resolve_train_device(efficientad_cfg.device)
 
+    # GPU 性能优化：针对 RTX 4060 (Ada Lovelace) 及以上架构
+    if device.type == "cuda":
+        _configure_gpu()
+
     # 只使用正常图训练时，Folder 数据模块可以直接从 train/good 中拆分验证集。
     try:
         from anomalib.data import Folder as FolderDataModule
@@ -147,17 +151,25 @@ def train_efficientad(
         )
 
         # 训练
-        engine = Engine(
-            max_epochs=efficientad_cfg.epochs,
-            devices=1 if device.type != "cpu" else 0,
-            accelerator="gpu" if device.type == "cuda" else "cpu",
-            default_root_dir=str(tmp_dir / "results"),
-        )
-
+        # EfficientAD 架构要求 train_batch_size=1，这是模型设计的硬约束
+        # （teacher-student 知识蒸馏 + 特征统计依赖 per-image 处理）
+        # 通过 gradient_accumulation 增大有效 batch size，减少 optimizer step 开销
         train_batch_size = 1
-        eval_batch_size = efficientad_cfg.batch_size
-        num_workers = 4
-        datamodule_kwargs = {
+        engine_kwargs: dict = {
+            "max_epochs": efficientad_cfg.epochs,
+            "devices": 1 if device.type != "cpu" else 0,
+            "accelerator": "gpu" if device.type == "cuda" else "cpu",
+            "default_root_dir": str(tmp_dir / "results"),
+        }
+        if device.type == "cuda":
+            engine_kwargs["precision"] = "16-mixed"
+            # 每 4 步更新一次权重，等效 batch_size=4，减少 optimizer CPU-GPU 同步开销
+            engine_kwargs["accumulate_grad_batches"] = 4
+        engine = Engine(**engine_kwargs)
+
+        eval_batch_size = max(16, efficientad_cfg.batch_size)
+        num_workers = 8
+        datamodule_kwargs: dict = {
             "normal_dir": str(good_dir),
             "normal_test_dir": str(test_good_dir),
             "train_batch_size": train_batch_size,
@@ -172,12 +184,16 @@ def train_efficientad(
             datamodule_kwargs["root"] = None
         if "val_split_ratio" in datamodule_parameters:
             datamodule_kwargs["val_split_ratio"] = 0.5
-        # anomalib 1.x 支持 image_size；2.x 将尺寸放到 transforms 中，避免传入未知参数。
         if "image_size" in datamodule_parameters:
             datamodule_kwargs["image_size"] = (
                 efficientad_cfg.input_size,
                 efficientad_cfg.input_size,
             )
+        # GPU 训练时优化 DataLoader：pin_memory 加速 CPU→GPU 传输，persistent_workers 复用 worker 进程
+        if "pin_memory" in datamodule_parameters:
+            datamodule_kwargs["pin_memory"] = (device.type == "cuda")
+        if "persistent_workers" in datamodule_parameters:
+            datamodule_kwargs["persistent_workers"] = True
         datamodule = datamodule_cls(**datamodule_kwargs)
 
         engine.fit(model=model, datamodule=datamodule)
@@ -287,39 +303,45 @@ def _compute_threshold(
     device: torch.device,
     input_size: int,
     percentile: float = 99.7,
+    batch_size: int = 32,
 ) -> float:
-    """在正常图像上计算异常分数阈值。
+    """在正常图像上计算异常分数阈值（GPU 批量推理）。
 
-    对给定的正常图像集合逐一推理，收集 anomaly score，
-    然后以指定分位数（默认 99.7%，对应 3-sigma）作为检测阈值。
-    高于此阈值的图像将被判定为异常。
+    将全部正常图像分批送 GPU 并行推理，收集 anomaly score 后取指定分位数
+    （默认 99.7%，对应 3-sigma）作为检测阈值。
+
+    Args:
+        batch_size: 阈值计算的 GPU 推理 batch size，RTX 4060 8GB 推荐 32-64。
     """
     model.eval()
-    scores: list[float] = []
+    all_scores: list[float] = []
+
+    # 预处理全部图像为 tensor
+    tensors: list[torch.Tensor] = []
+    for img in images:
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_resized = cv2.resize(img_rgb, (input_size, input_size))
+        t = torch.from_numpy(img_resized).float().permute(2, 0, 1) / 255.0
+        tensors.append(t)
+
+    # 分批 GPU 推理，减少 kernel launch 开销
     with torch.no_grad():
-        for img in images:
-            # anomalib EfficientAdModel 内部会做 ImageNet normalize，这里只转成 0-1 RGB tensor。
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img_resized = cv2.resize(img_rgb, (input_size, input_size))
-            tensor = (
-                torch.from_numpy(img_resized).float().permute(2, 0, 1).to(device) / 255.0
-            )
-            tensor = tensor.unsqueeze(0)
+        for start in range(0, len(tensors), batch_size):
+            batch = torch.stack(tensors[start : start + batch_size]).to(device)
+            output = model(batch)
+            scores = _extract_pred_score(output)
 
-            output = model(tensor)
-            score = _extract_pred_score(output)
-
-            if isinstance(score, torch.Tensor):
-                score_val = float(score.detach().cpu().item())
+            if isinstance(scores, torch.Tensor):
+                all_scores.extend(scores.detach().cpu().tolist())
+            elif isinstance(scores, (list, tuple)):
+                all_scores.extend(float(s) for s in scores)
             else:
-                score_val = float(score)
-            scores.append(score_val)
+                all_scores.append(float(scores))
 
-    if not scores:
+    if not all_scores:
         return 0.5
 
-    threshold = float(np.percentile(scores, percentile))
-    # 确保阈值不低于合理下限，避免正常波动被误检
+    threshold = float(np.percentile(all_scores, percentile))
     threshold = max(threshold, 1e-6)
     return round(threshold, 6)
 
@@ -422,3 +444,15 @@ def _resolve_train_device(requested: str) -> torch.device:
     if normalized == "mps" and torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def _configure_gpu() -> None:
+    """配置 GPU 性能选项：TF32 + cuDNN benchmark。
+
+    TF32 (TensorFloat-32)：在 RTX 4060 (Ada Lovelace) 及 Ampere 以上架构上，
+    将矩阵运算吞吐量提升约 2×，精度损失远低于 FP16。
+    cuDNN benchmark：自动搜索最优卷积算法，减少 kernel launch 开销。
+    """
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
