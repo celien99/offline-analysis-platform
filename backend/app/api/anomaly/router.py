@@ -124,37 +124,6 @@ async def list_anomalies(
 
 
 @router.get(
-    "/{anomaly_id}",
-    response_model=AnomalyResponse,
-    responses={404: {"model": ErrorResponse}},
-)
-async def get_anomaly(
-    anomaly_id: str,
-    session: AsyncSession = Depends(get_session),
-    minio: MinIOClient = Depends(get_minio),
-) -> AnomalyResponse:
-    service = AnomalyService(session, minio)
-    record = await service.get_anomaly(anomaly_id)
-    response = await _to_response(record, minio)
-    # 查询该 anomaly 所属的 cluster
-    membership_repo = ClusterMembershipRepository(session)
-    cluster_ids = await membership_repo.get_cluster_ids_by_anomaly(anomaly_id)
-    response.cluster_id = cluster_ids[0] if cluster_ids else None
-    return response
-
-
-@router.post("/{anomaly_id}/reprocess")
-async def reprocess_anomaly(
-    anomaly_id: str,
-    session: AsyncSession = Depends(get_session),
-    minio: MinIOClient = Depends(get_minio),
-) -> dict[str, str]:
-    service = AnomalyService(session, minio)
-    await service.reprocess_anomaly(anomaly_id)
-    return {"status": "queued", "anomaly_id": anomaly_id}
-
-
-@router.get(
     "/noise",
     response_model=dict,
 )
@@ -204,14 +173,13 @@ async def get_filter_classifier_stats(
     from app.repositories.anomaly.repository import AnomalyRepository
 
     since_dt = dt.now(tz=timezone.utc) - timedelta(days=days)
-    since_str = since_dt.isoformat()
     repo = AnomalyRepository(session)
 
     action_counts = await repo.get_filter_stats(
-        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
+        since=since_dt, camera_id=camera_id, seat_model_id=seat_model_id
     )
     review_breakdown = await repo.get_filter_vs_human_review(
-        since=since_str, camera_id=camera_id, seat_model_id=seat_model_id
+        since=since_dt, camera_id=camera_id, seat_model_id=seat_model_id
     )
 
     total_with_filter = sum(action_counts.values())
@@ -246,6 +214,37 @@ async def get_filter_classifier_stats(
         },
         "filter_vs_human_review": review_breakdown,
     }
+
+
+@router.get(
+    "/{anomaly_id}",
+    response_model=AnomalyResponse,
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_anomaly(
+    anomaly_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> AnomalyResponse:
+    service = AnomalyService(session, minio)
+    record = await service.get_anomaly(anomaly_id)
+    response = await _to_response(record, minio)
+    # 查询该 anomaly 所属的 cluster
+    membership_repo = ClusterMembershipRepository(session)
+    cluster_ids = await membership_repo.get_cluster_ids_by_anomaly(anomaly_id)
+    response.cluster_id = cluster_ids[0] if cluster_ids else None
+    return response
+
+
+@router.post("/{anomaly_id}/reprocess")
+async def reprocess_anomaly(
+    anomaly_id: str,
+    session: AsyncSession = Depends(get_session),
+    minio: MinIOClient = Depends(get_minio),
+) -> dict[str, str]:
+    service = AnomalyService(session, minio)
+    await service.reprocess_anomaly(anomaly_id)
+    return {"status": "queued", "anomaly_id": anomaly_id}
 
 
 @router.delete(
