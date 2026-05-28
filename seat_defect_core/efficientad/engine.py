@@ -161,8 +161,9 @@ class EfficientADService:
         else:
             anomaly_score = anomaly_score_raw
 
-        # 热力图：对 anomaly_map 做分位数归一化到 [0, 1]，确保可视化效果稳定
-        heatmap = _normalize_heatmap(anomaly_map, target_binary)
+        # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
+        # 正常区域（远低于阈值）→ dark blue，边界 → yellow，异常 → red
+        heatmap = _normalize_heatmap(anomaly_map, target_binary, self._image_threshold)
 
         # 统计强异常 patch（用于规则引擎后处理）
         strong_patch_count, strong_patch_ratio = _compute_strong_patches(
@@ -392,22 +393,30 @@ def _compute_strong_patches(
 def _normalize_heatmap(
     anomaly_map: np.ndarray,
     target_binary: np.ndarray,
-    low_percentile: float = 1.0,
-    high_percentile: float = 99.0,
+    threshold: float,
 ) -> np.ndarray:
-    """对 anomaly_map 做分位数归一化到 [0, 1]，仅统计目标区域内的值分布。
+    """以检测阈值为锚点归一化 anomaly_map 到 [0, 1]。
 
-    将目标区域像素值的 [low_percentile, high_percentile] 分位数区间线性映射到 [0, 1]，
-    越界值做 clip。这样无论 EfficientAD 输出值域如何，热力图都能稳定可视化。
+    映射规则：
+    - 0.0      → 完全正常（dark blue）
+    - threshold → 0.5 边界（yellow/green）
+    - 2*threshold → 1.0 明确异常（red）
+
+    这样正常图像上远低于阈值的区域不会产生虚假的暖色信号，
+    只有真正接近或超过阈值的区域才会在 overlay 中显示为红/黄色。
     """
     target_pixels = anomaly_map[target_binary > 0]
     if target_pixels.size == 0:
         return np.zeros_like(anomaly_map, dtype=np.float32)
 
-    vmin = float(np.percentile(target_pixels, low_percentile))
-    vmax = float(np.percentile(target_pixels, high_percentile))
-    if vmax - vmin < 1e-8:
-        return np.zeros_like(anomaly_map, dtype=np.float32)
+    if threshold > 0:
+        # 阈值锚定：threshold → 0.5
+        vmax = threshold * 2.0
+    else:
+        # 无有效阈值时，使用目标区域 99 分位数作为参考
+        vmax = float(np.percentile(target_pixels, 99.0))
+        if vmax < 1e-8:
+            vmax = 1.0
 
-    normalized = (anomaly_map - vmin) / (vmax - vmin)
+    normalized = anomaly_map / vmax
     return np.clip(normalized, 0.0, 1.0).astype(np.float32)
