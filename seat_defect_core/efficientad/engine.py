@@ -80,9 +80,13 @@ class EfficientADService:
             self._load_feature_model(str(state_dict_path))
 
     def _load_feature_model(self, state_dict_path: str) -> None:
-        """尝试从 state_dict 重建模型用于多尺度特征提取。"""
+        """尝试从 state_dict 重建模型用于多尺度特征提取。
+
+        state_dict 来自 model.model (raw EfficientAdModel)，需加载到同名 raw model，
+        而非 LightningModule wrapper（两者 state_dict key 前缀不同）。
+        """
         try:
-            from anomalib.models import EfficientAd as EfficientAdModel
+            from anomalib.models.image.efficient_ad.torch_model import EfficientAdModel
 
             state_dict = torch.load(state_dict_path, map_location=self.device, weights_only=True)
             feature_model = EfficientAdModel(
@@ -200,10 +204,11 @@ class EfficientADService:
         return [self.predict(image, target_mask, ignore_mask) for image, target_mask, ignore_mask in items]
 
     def _extract_features(self, input_tensor: torch.Tensor) -> dict[str, np.ndarray]:
-        """从 EfficientAD 模型提取多尺度 teacher/student 特征图。
+        """从 EfficientAD 模型提取 teacher/student 特征图及差异。
 
-        通过 forward hook 捕获中间层输出，返回 calibration 模块所需的特征字典。
-        如果模型结构不匹配则返回空 dict。
+        通过 forward hook 捕获 teacher 和 student 网络的完整输出，
+        返回 calibration 模块所需的特征字典。
+        特征模型不可用时返回空 dict。
         """
         if self._feature_model is None:
             return {}
@@ -217,18 +222,15 @@ class EfficientADService:
 
             return hook
 
-        # 注册 teacher 各层 hook
-        for module_name, module in self._feature_model.named_modules():
-            # teacher 特征层：layer1 / layer2 / layer3
-            if module_name.endswith("teacher.layer1"):
-                handles.append(module.register_forward_hook(_make_hook("teacher_l1")))
-            elif module_name.endswith("teacher.layer2"):
-                handles.append(module.register_forward_hook(_make_hook("teacher_l2")))
-            elif module_name.endswith("teacher.layer3"):
-                handles.append(module.register_forward_hook(_make_hook("teacher_l3")))
-            # student 特征层
-            elif module_name.endswith("student.layer1"):
-                handles.append(module.register_forward_hook(_make_hook("student_l1")))
+        # 注册 teacher 和 student 的 module-level hook（捕获整个 teacher/student 的输出）
+        if hasattr(self._feature_model, "teacher"):
+            handles.append(
+                self._feature_model.teacher.register_forward_hook(_make_hook("teacher"))
+            )
+        if hasattr(self._feature_model, "student"):
+            handles.append(
+                self._feature_model.student.register_forward_hook(_make_hook("student"))
+            )
 
         # _feature_model 是 raw anomalib EfficientAdModel，内部自行做 ImageNet normalize，
         # 而 input_tensor 已被 _prepare_input 做过一次 normalize，需要先还原到 [0, 1]
@@ -250,14 +252,18 @@ class EfficientADService:
         for key, tensor in features.items():
             result[key] = tensor.squeeze(0).permute(1, 2, 0).cpu().float().numpy()
 
-        # 计算 teacher-student 差异特征
-        if "teacher_l1" in result and "student_l1" in result:
-            t_l1 = result["teacher_l1"]
-            s_l1 = result["student_l1"]
-            # 对齐 spatial 尺寸（student 可能分辨率不同）
-            if t_l1.shape[:2] != s_l1.shape[:2]:
-                s_l1 = cv2.resize(s_l1, (t_l1.shape[1], t_l1.shape[0]), interpolation=cv2.INTER_LINEAR)
-            result["difference"] = (t_l1 - s_l1).astype(np.float32)
+        # 计算 teacher-student 差异（取 student 的前 teacher_out_channels 个通道与 teacher 对齐）
+        if "teacher" in result and "student" in result:
+            t_out = result["teacher"]
+            s_out = result["student"]
+            teacher_channels = min(t_out.shape[2], s_out.shape[2])
+            s_aligned = s_out[:, :, :teacher_channels]
+            # 对齐 spatial 尺寸（可能因 padding 不同而不同）
+            if t_out.shape[:2] != s_aligned.shape[:2]:
+                s_aligned = cv2.resize(
+                    s_aligned, (t_out.shape[1], t_out.shape[0]), interpolation=cv2.INTER_LINEAR
+                )
+            result["difference"] = (t_out - s_aligned).astype(np.float32)
 
         return result
 

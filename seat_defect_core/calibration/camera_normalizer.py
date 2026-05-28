@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 import numpy as np
 
 
@@ -33,7 +31,7 @@ class CameraNormalizer:
     推理时：调用 normalize() 查表应用，零额外开销。
     """
 
-    _FEATURE_KEYS = ("teacher_l1", "teacher_l2", "teacher_l3", "difference")
+    _FEATURE_KEYS = ("teacher", "student", "difference")
 
     def __init__(self):
         self._stats: dict[str, CameraNormStats] = {}
