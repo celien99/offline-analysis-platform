@@ -25,6 +25,10 @@ _logger = logging.getLogger(__name__)
 IMAGENET_MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
 
+# Torch tensor 版本，用于在 inference_mode 内还原 ImageNet normalize
+IMAGENET_MEAN_TS = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1) if torch is not None else None
+IMAGENET_STD_TS = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1) if torch is not None else None
+
 # ImageNet 均值灰（RGB uint8），用于填充非目标区域避免黑边引入异常响应
 IMAGENET_MEAN_GRAY_RGB = np.asarray([124, 116, 104], dtype=np.uint8)
 
@@ -57,9 +61,8 @@ class EfficientADService:
             import json
 
             meta = json.loads(meta_path.read_text("utf-8"))
-            loaded_threshold = float(meta.get("image_threshold", self._image_threshold))
-            if loaded_threshold > 0.0:
-                self._image_threshold = loaded_threshold
+            if "image_threshold" in meta:
+                self._image_threshold = float(meta["image_threshold"])
                 self._threshold_from_meta = True
         if not self._threshold_from_meta:
             _logger.warning(
@@ -81,7 +84,7 @@ class EfficientADService:
         try:
             from anomalib.models import EfficientAd as EfficientAdModel
 
-            state_dict = torch.load(state_dict_path, map_location=self.device)
+            state_dict = torch.load(state_dict_path, map_location=self.device, weights_only=True)
             feature_model = EfficientAdModel(
                 teacher_out_channels=384,
                 model_size="medium",
@@ -92,7 +95,7 @@ class EfficientADService:
             self._feature_model = feature_model
             _logger.info("efficientad_feature_model_loaded")
         except Exception:
-            _logger.debug("efficientad_feature_model_unavailable", exc_info=True)
+            _logger.warning("efficientad_feature_model_unavailable", exc_info=True)
 
     @property
     def image_threshold(self) -> float:
@@ -154,10 +157,11 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 仅从目标区域计算 image-level anomaly_score，避免 padding 区域噪声污染
+        # 仅从目标区域计算 image-level anomaly_score（使用 max 与模型 pred_score 的 amax 语义一致，
+        # 确保与训练时通过 _compute_threshold 校准的阈值可比）
         target_pixels = anomaly_map[target_binary > 0]
         if target_pixels.size > 0:
-            anomaly_score = float(target_pixels.mean())
+            anomaly_score = float(target_pixels.max())
         else:
             anomaly_score = anomaly_score_raw
 
@@ -226,11 +230,14 @@ class EfficientADService:
             elif module_name.endswith("student.layer1"):
                 handles.append(module.register_forward_hook(_make_hook("student_l1")))
 
+        # _feature_model 是 raw anomalib EfficientAdModel，内部自行做 ImageNet normalize，
+        # 而 input_tensor 已被 _prepare_input 做过一次 normalize，需要先还原到 [0, 1]
+        unnorm_input = (input_tensor * IMAGENET_STD_TS + IMAGENET_MEAN_TS).clamp(0.0, 1.0)
         try:
             with torch.inference_mode():
-                self._feature_model(input_tensor)
+                self._feature_model(unnorm_input)
         except Exception:
-            _logger.debug("efficientad_feature_extraction_failed", exc_info=True)
+            _logger.warning("efficientad_feature_extraction_failed", exc_info=True)
             return {}
         finally:
             for h in handles:
