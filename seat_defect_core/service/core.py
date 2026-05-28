@@ -212,7 +212,9 @@ class AnomalyModelCache:
         if bundle is not None:
             return bundle
 
-        loaded = EfficientADService.load_bundle(camera.efficientad_model_path)
+        efficientad_config = camera.efficientad
+        efficientad_config.model_path = camera.efficientad_model_path
+        loaded = EfficientADService(efficientad_config)
         self._cache[cache_key] = loaded
         return loaded
 

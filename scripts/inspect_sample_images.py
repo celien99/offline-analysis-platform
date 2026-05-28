@@ -37,7 +37,7 @@ def main() -> int:
     parser.add_argument("--warmup", action="store_true", help="Preload models before inspection.")
     args = parser.parse_args()
 
-    workspace = Path.cwd()
+    workspace = WORKSPACE_ROOT
     config_path = _resolve_path(workspace, args.config)
     images_root = _resolve_path(workspace, args.images_root)
     models_root = _resolve_path(workspace, args.models_root)
