@@ -1,6 +1,7 @@
 """批量训练多机位 EfficientAD 模型。
 
-从按机位组织的正常图像目录中，批量训练 EfficientAD 模型。
+从按机位组织的正常图像目录中，批量训练 EfficientAD 模型，
+同时自动计算 CameraNormalizer + EmbeddingProjector 校准参数。
 
 目录结构要求：
     <good_images_root>/
@@ -23,8 +24,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional
+
+import cv2
+import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 
 def batch_train_all(
@@ -122,7 +129,24 @@ def batch_train_all(
         for r in failed:
             print(f"  {r['camera_id']}: {r.get('error', 'unknown')}")
 
-    return {"status": "completed" if not failed else "partial", "results": results}
+    # ── 自动计算 Calibration Stats ──
+    calibration_result = {}
+    if succeeded:
+        try:
+            calibration_result = _compute_calibration_stats(
+                config=config,
+                good_root=good_root,
+                output_root=output_root_path,
+                training_results={r["camera_id"]: r for r in succeeded},
+            )
+        except Exception:
+            _logger.warning("calibration_compute_failed", exc_info=True)
+
+    return {
+        "status": "completed" if not failed else "partial",
+        "results": results,
+        "calibration": calibration_result,
+    }
 
 
 def _build_training_tasks(
@@ -135,11 +159,7 @@ def _build_training_tasks(
     tasks: list[dict] = []
 
     # 收集所有 camera config
-    camera_configs: list = []
-    if config.cameras:
-        camera_configs.extend(config.cameras)
-    for sm in getattr(config, "seat_models", []) or []:
-        camera_configs.extend(getattr(sm, "cameras", []) or [])
+    camera_configs: list = _collect_all_cameras(config)
 
     for cam in camera_configs:
         if not cam.enabled:
@@ -217,6 +237,129 @@ def batch_train_cli() -> None:
     )
 
     print("\n" + json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _compute_calibration_stats(
+    config,
+    good_root: Path,
+    output_root: Path,
+    training_results: dict[str, dict],
+) -> dict:
+    """在训练完成后自动计算 CameraNormalizer + EmbeddingProjector。
+
+    使用同一批 good/*.jpg 正常图像，通过训练好的 EfficientAD 模型
+    提取特征，拟合 per-camera 标准化参数和跨机位 PCA 投影矩阵。
+    """
+    from seat_defect_core.efficientad import EfficientADService
+    from seat_defect_core.efficientad.config import EfficientADConfig
+    from seat_defect_core.calibration import CameraNormalizer, EmbeddingProjector
+
+    # 构建 camera_id → efficientad_model_path 映射
+    camera_model_map: dict[str, str] = {}
+    for cam in _collect_all_cameras(config):
+        if cam.camera_id in training_results:
+            camera_model_map[cam.camera_id] = training_results[cam.camera_id]["artifact_path"]
+
+    if not camera_model_map:
+        return {"status": "skipped", "reason": "no_trained_models"}
+
+    print(f"\n{'='*60}")
+    print("计算 CameraNormalizer + EmbeddingProjector...")
+    print(f"{'='*60}")
+
+    camera_features: dict[str, list[dict[str, np.ndarray]]] = {}
+    camera_normalizers: dict[str, CameraNormalizer] = {}
+
+    for camera_id, model_path in camera_model_map.items():
+        cam_good_dir = good_root / camera_id / "good"
+        if not cam_good_dir.is_dir():
+            print(f"  跳过 {camera_id}: 目录不存在 {cam_good_dir}")
+            continue
+
+        image_paths = _collect_images(cam_good_dir)
+        if len(image_paths) < 5:
+            print(f"  跳过 {camera_id}: 图像不足 ({len(image_paths)} 张)")
+            continue
+
+        print(f"\n  处理 {camera_id} ({len(image_paths)} 张图像)...")
+
+        # 加载训练好的模型
+        ead_config = EfficientADConfig(model_path=model_path, device="cpu")
+        service = EfficientADService(ead_config)
+
+        features_list: list[dict[str, np.ndarray]] = []
+        for i, img_path in enumerate(image_paths):
+            img = cv2.imread(img_path)
+            if img is None:
+                continue
+
+            try:
+                h, w = img.shape[:2]
+                target_mask = np.ones((h, w), dtype=np.uint8) * 255
+                ignore_mask = np.zeros((h, w), dtype=np.uint8)
+
+                result = service.predict(img, target_mask, ignore_mask)
+                if result.features is not None and len(result.features) >= 3:
+                    features_list.append(result.features)
+            except Exception:
+                pass
+
+            if (i + 1) % 20 == 0:
+                print(f"    已处理 {i + 1}/{len(image_paths)}...")
+
+        if len(features_list) < 5:
+            print(f"  跳过 {camera_id}: 有效特征不足 ({len(features_list)} 组)")
+            continue
+
+        # 拟合 CameraNormalizer
+        normalizer = CameraNormalizer()
+        normalizer.fit(features_list)
+        camera_features[camera_id] = features_list
+        camera_normalizers[camera_id] = normalizer
+
+        norm_path = output_root / f"{camera_id}_norm.npz"
+        normalizer.save(str(norm_path))
+        print(f"  已保存: {norm_path}")
+
+    if len(camera_features) < 1:
+        return {"status": "skipped", "reason": "insufficient_features"}
+
+    # 拟合 EmbeddingProjector（在归一化特征上）
+    print(f"\n  拟合 EmbeddingProjector（跨 {len(camera_features)} 个机位）...")
+    all_normalized: list[dict[str, np.ndarray]] = []
+    for cam_id, feats_list in camera_features.items():
+        normalizer = camera_normalizers[cam_id]
+        for feats in feats_list:
+            all_normalized.append(normalizer.normalize(feats))
+
+    projector = EmbeddingProjector.fit(all_normalized, output_dim=384)
+    projector_path = output_root / "projector.npz"
+    projector.save(str(projector_path))
+    print(f"  已保存: {projector_path}")
+
+    norm_paths = {
+        cam_id: str(output_root / f"{cam_id}_norm.npz")
+        for cam_id in camera_normalizers
+    }
+
+    print("\n  Calibration stats 计算完成:")
+    for cam_id, path in norm_paths.items():
+        print(f"    {cam_id}: {path}")
+    print(f"    projector: {projector_path}")
+
+    return {
+        "status": "completed",
+        "camera_norms": norm_paths,
+        "projector_path": str(projector_path),
+    }
+
+
+def _collect_all_cameras(config) -> list:
+    """收集配置中所有 camera config。"""
+    all_cameras: list = list(getattr(config, "cameras", []) or [])
+    for sm in getattr(config, "seat_models", []) or []:
+        all_cameras.extend(getattr(sm, "cameras", []) or [])
+    return all_cameras
 
 
 __all__ = ["batch_train_all", "batch_train_cli"]
