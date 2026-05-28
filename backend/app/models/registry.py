@@ -15,7 +15,7 @@ class ModelVersion(BaseModel):
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     model_type: Mapped[str] = mapped_column(
         String(32), nullable=False,
-        comment="filter_classifier / embedding / yolo / efficientad"
+        comment="filter_classifier / embedding / yolo / efficientad / projector / whitening_matrix"
     )
     framework: Mapped[str] = mapped_column(
         String(32), nullable=False, default="pytorch"

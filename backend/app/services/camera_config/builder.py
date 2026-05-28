@@ -129,6 +129,9 @@ class ConfigBuilder:
         *,
         part_id: str = "seat_demo",
         upload_base_url: str = "http://localhost:8000",
+        seat_yolo_path: str = "",
+        projector_path: str = "",
+        whitening_matrix_path: str = "",
     ) -> dict[str, object]:
         """生成完整的检测配置字典。
 
@@ -137,11 +140,22 @@ class ConfigBuilder:
         """
         selected_ids = set(selected_camera_ids) if selected_camera_ids else None
 
+        resolved_yolo = self._resolve_path(seat_yolo_path) if seat_yolo_path else ""
+        resolved_projector = self._resolve_path(projector_path) if projector_path else ""
+        resolved_whitening = self._resolve_path(whitening_matrix_path) if whitening_matrix_path else ""
+
         camera_configs = []
         for cam in cameras:
             if selected_ids is not None and cam.camera_id not in selected_ids:
                 continue
-            camera_configs.append(self._build_camera_config(cam, model_paths))
+            camera_configs.append(self._build_camera_config(cam, model_paths, resolved_yolo))
+
+        # 全局校准配置
+        calibration: dict[str, object] = dict(self.DEFAULT_CALIBRATION)
+        if resolved_projector:
+            calibration["projection"] = {"enabled": True, "projector_path": resolved_projector}
+        if resolved_whitening:
+            calibration["whitening"] = {"enabled": True, "matrix_path": resolved_whitening}
 
         return {
             "seat_defect_inspection": {
@@ -165,6 +179,7 @@ class ConfigBuilder:
                         "cameras": camera_configs,
                     }
                 ],
+                "calibration": calibration,
             }
         }
 
@@ -185,9 +200,8 @@ class ConfigBuilder:
         return self._resolve_path(path) if path else ""
 
     def _build_camera_config(
-        self, cam: CameraConfig, model_paths: dict[str, str]
+        self, cam: CameraConfig, model_paths: dict[str, str], yolo_path: str = ""
     ) -> dict[str, object]:
-        yolo_path = self._resolve_model_path(cam.yolo_model_version_id, model_paths)
         detection = dict(self.DEFAULT_DETECTION)
         detection["model_path"] = yolo_path
         detection["confidence"] = cam.detection_confidence

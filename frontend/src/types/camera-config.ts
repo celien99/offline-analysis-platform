@@ -13,6 +13,9 @@ export interface SeatModel {
   id: string;
   seat_model_id: string;
   display_name: string;
+  yolo_model_version_id: string | null;
+  projector_model_version_id: string | null;
+  whitening_matrix_model_version_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,12 +24,11 @@ export interface CameraConfig {
   id: string;
   camera_id: string;
   seat_model_id: string;
-  patchcore_model_version_id: string | null;
-  yolo_model_version_id: string | null;
+  efficientad_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
   detection_confidence: number;
-  patchcore_image_size: number;
-  patchcore_threshold: number;
+  efficientad_image_size: number;
+  efficientad_threshold: number;
   region_mode_enabled: boolean;
   region_upper_model_version_id: string | null;
   region_middle_model_version_id: string | null;
@@ -37,12 +39,11 @@ export interface CameraConfig {
 
 export interface CameraConfigFormData {
   camera_id: string;
-  patchcore_model_version_id: string | null;
-  yolo_model_version_id: string | null;
+  efficientad_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
   detection_confidence: number;
-  patchcore_image_size: number;
-  patchcore_threshold: number;
+  efficientad_image_size: number;
+  efficientad_threshold: number;
   region_mode_enabled: boolean;
   region_upper_model_version_id: string | null;
   region_middle_model_version_id: string | null;
@@ -52,6 +53,9 @@ export interface CameraConfigFormData {
 export interface SeatModelFormData {
   seat_model_id: string;
   display_name: string;
+  yolo_model_version_id: string | null;
+  projector_model_version_id: string | null;
+  whitening_matrix_model_version_id: string | null;
 }
 
 /** 模型选项（下拉框用） */

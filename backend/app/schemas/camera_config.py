@@ -11,17 +11,26 @@ from pydantic import BaseModel, Field
 class SeatModelCreate(BaseModel):
     seat_model_id: str = Field(..., max_length=128, description="座椅型号标识符")
     display_name: str = Field(..., max_length=256, description="显示名称")
+    yolo_model_version_id: str | None = Field(default=None, description="全局 YOLO 检测模型版本 ID")
+    projector_model_version_id: str | None = Field(default=None, description="全局 EmbeddingProjector 模型版本 ID")
+    whitening_matrix_model_version_id: str | None = Field(default=None, description="全局 WhiteningTransform 模型版本 ID")
 
 
 class SeatModelUpdate(BaseModel):
     seat_model_id: str | None = Field(default=None, max_length=128)
     display_name: str | None = Field(default=None, max_length=256)
+    yolo_model_version_id: str | None = Field(default=None, description="全局 YOLO 检测模型版本 ID")
+    projector_model_version_id: str | None = Field(default=None, description="全局 EmbeddingProjector 模型版本 ID")
+    whitening_matrix_model_version_id: str | None = Field(default=None, description="全局 WhiteningTransform 模型版本 ID")
 
 
 class SeatModelResponse(BaseModel):
     id: str
     seat_model_id: str
     display_name: str
+    yolo_model_version_id: str | None = None
+    projector_model_version_id: str | None = None
+    whitening_matrix_model_version_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -37,7 +46,6 @@ class SeatModelWithCameras(SeatModelResponse):
 class CameraConfigCreate(BaseModel):
     camera_id: str = Field(..., max_length=128, description="相机标识符")
     efficientad_model_version_id: str = Field(..., description="EfficientAD 模型版本 ID")
-    yolo_model_version_id: str = Field(..., description="YOLO 检测模型版本 ID")
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
     efficientad_image_size: int = Field(default=256, ge=64, le=1024)
     efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
@@ -51,7 +59,6 @@ class CameraConfigCreate(BaseModel):
 class CameraConfigUpdate(BaseModel):
     camera_id: str | None = Field(default=None, max_length=128)
     efficientad_model_version_id: str | None = Field(default=None)
-    yolo_model_version_id: str | None = Field(default=None)
     detection_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     efficientad_image_size: int | None = Field(default=None, ge=64, le=1024)
     efficientad_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -67,7 +74,6 @@ class CameraConfigResponse(BaseModel):
     camera_id: str
     seat_model_id: str
     efficientad_model_version_id: str | None
-    yolo_model_version_id: str | None
     filter_classifier_model_version_id: str | None
     detection_confidence: float
     efficientad_image_size: int

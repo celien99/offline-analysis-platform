@@ -72,6 +72,9 @@ async def create_seat_model(
     entity = SeatModel(
         seat_model_id=data.seat_model_id,
         display_name=data.display_name,
+        yolo_model_version_id=data.yolo_model_version_id,
+        projector_model_version_id=data.projector_model_version_id,
+        whitening_matrix_model_version_id=data.whitening_matrix_model_version_id,
     )
     await seat_repo.create(entity)
     await session.commit()
@@ -92,6 +95,12 @@ async def update_seat_model(
         entity.seat_model_id = data.seat_model_id
     if data.display_name is not None:
         entity.display_name = data.display_name
+    if data.yolo_model_version_id is not None:
+        entity.yolo_model_version_id = data.yolo_model_version_id
+    if data.projector_model_version_id is not None:
+        entity.projector_model_version_id = data.projector_model_version_id
+    if data.whitening_matrix_model_version_id is not None:
+        entity.whitening_matrix_model_version_id = data.whitening_matrix_model_version_id
     await seat_repo.update(entity)
     await session.commit()
     return SeatModelResponse.model_validate(entity)

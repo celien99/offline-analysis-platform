@@ -78,13 +78,17 @@ export default function CameraConfigPage() {
 
   // 按类型分别获取模型下拉选项
   const { data: yoloModels } = useModelOptions("yolo");
-  const { data: patchcoreModels } = useModelOptions("patchcore");
+  const { data: efficientadModels } = useModelOptions("efficientad");
   const { data: filterClassifierModels } = useModelOptions("filter_classifier");
+  const { data: projectorModels } = useModelOptions("projector");
+  const { data: whiteningMatrixModels } = useModelOptions("whitening_matrix");
   // 合并所有模型用于表格展示
   const allModels = [
     ...(yoloModels ?? []),
-    ...(patchcoreModels ?? []),
+    ...(efficientadModels ?? []),
     ...(filterClassifierModels ?? []),
+    ...(projectorModels ?? []),
+    ...(whiteningMatrixModels ?? []),
   ];
 
   const createSeatMut = useCreateSeatModel();
@@ -107,6 +111,9 @@ export default function CameraConfigPage() {
     seatForm.setFieldsValue({
       seat_model_id: record.seat_model_id,
       display_name: record.display_name,
+      yolo_model_version_id: record.yolo_model_version_id,
+      projector_model_version_id: record.projector_model_version_id,
+      whitening_matrix_model_version_id: record.whitening_matrix_model_version_id,
     });
     setSeatModalOpen(true);
   };
@@ -140,11 +147,10 @@ export default function CameraConfigPage() {
     cameraForm.resetFields();
     cameraForm.setFieldsValue({
       detection_confidence: 0.25,
-      patchcore_image_size: 256,
-      patchcore_threshold: 0.99,
+      efficientad_image_size: 256,
+      efficientad_threshold: 0.99,
       region_mode_enabled: false,
-      patchcore_model_version_id: null,
-      yolo_model_version_id: null,
+      efficientad_model_version_id: null,
       filter_classifier_model_version_id: null,
       region_upper_model_version_id: null,
       region_middle_model_version_id: null,
@@ -157,12 +163,11 @@ export default function CameraConfigPage() {
     setEditingCamera(record);
     cameraForm.setFieldsValue({
       camera_id: record.camera_id,
-      patchcore_model_version_id: record.patchcore_model_version_id,
-      yolo_model_version_id: record.yolo_model_version_id,
+      efficientad_model_version_id: record.efficientad_model_version_id,
       filter_classifier_model_version_id: record.filter_classifier_model_version_id,
       detection_confidence: record.detection_confidence,
-      patchcore_image_size: record.patchcore_image_size,
-      patchcore_threshold: record.patchcore_threshold,
+      efficientad_image_size: record.efficientad_image_size,
+      efficientad_threshold: record.efficientad_threshold,
       region_mode_enabled: record.region_mode_enabled,
       region_upper_model_version_id: record.region_upper_model_version_id,
       region_middle_model_version_id: record.region_middle_model_version_id,
@@ -217,10 +222,13 @@ export default function CameraConfigPage() {
 
       <CameraTopology
         seatModelId={selectedSeatModel ?? ""}
+        yoloModel={(() => {
+          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
+          return modelLabel(sm?.yolo_model_version_id ?? null, allModels);
+        })()}
         cameras={(cameras ?? []).map((c) => ({
           cameraId: c.camera_id,
-          yoloModel: modelLabel(c.yolo_model_version_id, allModels),
-          patchcoreModel: modelLabel(c.patchcore_model_version_id, allModels),
+          efficientadModel: modelLabel(c.efficientad_model_version_id, allModels),
           filterModel: c.filter_classifier_model_version_id
             ? modelLabel(c.filter_classifier_model_version_id, allModels)
             : undefined,
@@ -324,15 +332,8 @@ export default function CameraConfigPage() {
                 columns={[
                   { title: "相机ID", dataIndex: "camera_id", width: 100, ellipsis: true },
                   {
-                    title: "YOLO 模型",
-                    dataIndex: "yolo_model_version_id",
-                    width: 160,
-                    ellipsis: true,
-                    render: (v: string | null) => modelLabel(v, allModels),
-                  },
-                  {
-                    title: "PatchCore 模型",
-                    dataIndex: "patchcore_model_version_id",
+                    title: "EfficientAD 模型",
+                    dataIndex: "efficientad_model_version_id",
                     width: 160,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
@@ -410,6 +411,26 @@ export default function CameraConfigPage() {
           >
             <Input placeholder="如 座椅型号A" />
           </Form.Item>
+          <Typography.Title level={5}>全局模型配置</Typography.Title>
+          <Form.Item
+            name="yolo_model_version_id"
+            label="YOLO 检测模型"
+            rules={[{ required: true, message: "请选择全局 YOLO 模型" }]}
+          >
+            <ModelSelect models={yoloModels} />
+          </Form.Item>
+          <Form.Item
+            name="projector_model_version_id"
+            label="Embedding Projector 模型"
+          >
+            <ModelSelect models={projectorModels} />
+          </Form.Item>
+          <Form.Item
+            name="whitening_matrix_model_version_id"
+            label="Whitening Matrix 模型"
+          >
+            <ModelSelect models={whiteningMatrixModels} />
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -432,18 +453,11 @@ export default function CameraConfigPage() {
             <Input placeholder="如 cam_back" disabled={!!editingCamera} />
           </Form.Item>
           <Form.Item
-            name="yolo_model_version_id"
-            label="YOLO 检测模型"
-            rules={[{ required: true, message: "请选择 YOLO 模型" }]}
+            name="efficientad_model_version_id"
+            label="EfficientAD 模型"
+            rules={[{ required: true, message: "请选择 EfficientAD 模型" }]}
           >
-            <ModelSelect models={yoloModels} />
-          </Form.Item>
-          <Form.Item
-            name="patchcore_model_version_id"
-            label="PatchCore 模型"
-            rules={[{ required: true, message: "请选择 PatchCore 模型" }]}
-          >
-            <ModelSelect models={patchcoreModels} />
+            <ModelSelect models={efficientadModels} />
           </Form.Item>
           <Form.Item
             name="filter_classifier_model_version_id"
@@ -460,12 +474,12 @@ export default function CameraConfigPage() {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="patchcore_image_size" label="PatchCore 图像尺寸">
+              <Form.Item name="efficientad_image_size" label="EfficientAD 图像尺寸">
                 <InputNumber min={64} max={1024} step={32} className="w-full" />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="patchcore_threshold" label="PatchCore 阈值">
+              <Form.Item name="efficientad_threshold" label="EfficientAD 阈值">
                 <InputNumber min={0} max={1} step={0.01} className="w-full" />
               </Form.Item>
             </Col>
@@ -491,21 +505,21 @@ export default function CameraConfigPage() {
                     label="Upper 区域模型"
                     rules={[{ required: true, message: "请选择 upper 区域模型" }]}
                   >
-                    <ModelSelect models={patchcoreModels} placeholder="选择 upper 区域 PatchCore 模型" />
+                    <ModelSelect models={efficientadModels} placeholder="选择 upper 区域 EfficientAD 模型" />
                   </Form.Item>
                   <Form.Item
                     name="region_middle_model_version_id"
                     label="Middle 区域模型"
                     rules={[{ required: true, message: "请选择 middle 区域模型" }]}
                   >
-                    <ModelSelect models={patchcoreModels} placeholder="选择 middle 区域 PatchCore 模型" />
+                    <ModelSelect models={efficientadModels} placeholder="选择 middle 区域 EfficientAD 模型" />
                   </Form.Item>
                   <Form.Item
                     name="region_lower_model_version_id"
                     label="Lower 区域模型"
                     rules={[{ required: true, message: "请选择 lower 区域模型" }]}
                   >
-                    <ModelSelect models={patchcoreModels} placeholder="选择 lower 区域 PatchCore 模型" />
+                    <ModelSelect models={efficientadModels} placeholder="选择 lower 区域 EfficientAD 模型" />
                   </Form.Item>
                 </>
               ),
@@ -550,9 +564,11 @@ export default function CameraConfigPage() {
               placeholder="选择模型类型"
               options={[
                 { label: "YOLO", value: "yolo" },
-                { label: "PatchCore", value: "patchcore" },
+                { label: "EfficientAD", value: "efficientad" },
                 { label: "Filter Classifier", value: "filter_classifier" },
                 { label: "Embedding", value: "embedding" },
+                { label: "Embedding Projector", value: "projector" },
+                { label: "Whitening Matrix", value: "whitening_matrix" },
               ]}
             />
           </Form.Item>

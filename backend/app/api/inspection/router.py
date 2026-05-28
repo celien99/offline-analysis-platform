@@ -55,10 +55,16 @@ async def run_inspection_with_files(
 
     # 收集所有用到的 model_version_id，查询 artifact_path
     model_version_ids: set[str] = set()
+    for mv_id in (
+        seat_model.yolo_model_version_id,
+        seat_model.projector_model_version_id,
+        seat_model.whitening_matrix_model_version_id,
+    ):
+        if mv_id:
+            model_version_ids.add(mv_id)
     for c in cameras:
         for mv_id in (
             c.efficientad_model_version_id,
-            c.yolo_model_version_id,
             c.filter_classifier_model_version_id,
             c.region_upper_model_version_id,
             c.region_middle_model_version_id,
@@ -80,6 +86,10 @@ async def run_inspection_with_files(
     # 生成完整配置文件
     from app.services.camera_config.builder import ConfigBuilder
 
+    seat_yolo_path = model_paths.get(seat_model.yolo_model_version_id or "", "")
+    projector_path = model_paths.get(seat_model.projector_model_version_id or "", "")
+    whitening_path = model_paths.get(seat_model.whitening_matrix_model_version_id or "", "")
+
     builder = ConfigBuilder()
     config_dict = builder.build(
         seat_model_id=seat_model_id,
@@ -88,6 +98,9 @@ async def run_inspection_with_files(
         model_paths=model_paths,
         selected_camera_ids=camera_id_list,
         upload_base_url=settings.backend_base_url,
+        seat_yolo_path=seat_yolo_path,
+        projector_path=projector_path,
+        whitening_matrix_path=whitening_path,
     )
 
     # 保存图像到临时目录

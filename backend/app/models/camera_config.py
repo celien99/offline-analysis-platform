@@ -17,6 +17,20 @@ class SeatModel(BaseModel):
         String(256), nullable=False, comment="前端显示名称",
     )
 
+    # 全局模型引用 → model_versions.id
+    yolo_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="全局 YOLO 检测模型版本 ID",
+    )
+    projector_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="全局 EmbeddingProjector 模型版本 ID",
+    )
+    whitening_matrix_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="全局 WhiteningTransform 模型版本 ID",
+    )
+
 
 class CameraConfig(BaseModel):
     __tablename__ = "camera_configs"
@@ -36,10 +50,6 @@ class CameraConfig(BaseModel):
     efficientad_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
         nullable=True, comment="整体 EfficientAD 模型版本 ID",
-    )
-    yolo_model_version_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="YOLO 检测模型版本 ID",
     )
 
     detection_confidence: Mapped[float] = mapped_column(
