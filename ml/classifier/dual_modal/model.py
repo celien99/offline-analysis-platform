@@ -7,35 +7,35 @@ from torchvision import models
 
 
 class EfficientADFeatureProjector(nn.Module):
-    """Project multi-scale EfficientAD features to fixed-dim embeddings."""
+    """将 EfficientAD teacher/student/difference 特征图投影到固定维度。
+
+    接收 _extract_features() 产出的 (teacher, student, difference) 三组特征图，
+    通过 1×1 conv + global avg pool 投影到统一维度后 concat。
+    """
 
     def __init__(
         self,
-        l1_channels: int = 64,
-        l2_channels: int = 128,
-        l3_channels: int = 256,
-        diff_channels: int = 64,
-        proj_dim: int = 64,
+        teacher_channels: int = 384,
+        student_channels: int = 768,
+        diff_channels: int = 384,
+        proj_dim: int = 128,
     ):
         super().__init__()
-        self.l1_proj = nn.Conv2d(l1_channels, proj_dim, 1)
-        self.l2_proj = nn.Conv2d(l2_channels, proj_dim, 1)
-        self.l3_proj = nn.Conv2d(l3_channels, proj_dim, 1)
+        self.teacher_proj = nn.Conv2d(teacher_channels, proj_dim, 1)
+        self.student_proj = nn.Conv2d(student_channels, proj_dim, 1)
         self.diff_proj = nn.Conv2d(diff_channels, proj_dim, 1)
-        self.output_dim = proj_dim * 4  # 256
+        self.output_dim = proj_dim * 3  # 384
 
     def forward(
         self,
-        teacher_l1: torch.Tensor,
-        teacher_l2: torch.Tensor,
-        teacher_l3: torch.Tensor,
+        teacher: torch.Tensor,
+        student: torch.Tensor,
         difference: torch.Tensor,
     ) -> torch.Tensor:
-        f1 = F.adaptive_avg_pool2d(self.l1_proj(teacher_l1), 1).flatten(1)
-        f2 = F.adaptive_avg_pool2d(self.l2_proj(teacher_l2), 1).flatten(1)
-        f3 = F.adaptive_avg_pool2d(self.l3_proj(teacher_l3), 1).flatten(1)
+        ft = F.adaptive_avg_pool2d(self.teacher_proj(teacher), 1).flatten(1)
+        fs = F.adaptive_avg_pool2d(self.student_proj(student), 1).flatten(1)
         fd = F.adaptive_avg_pool2d(self.diff_proj(difference), 1).flatten(1)
-        return torch.cat([f1, f2, f3, fd], dim=1)
+        return torch.cat([ft, fs, fd], dim=1)
 
 
 class DualModalFilter(nn.Module):
@@ -59,10 +59,10 @@ class DualModalFilter(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        # EfficientAD feature branch
+        # EfficientAD feature branch (output_dim=384 for 3×128 proj)
         self.ead_projector = EfficientADFeatureProjector()
         self.ead_proj = nn.Sequential(
-            nn.Linear(256, 256),
+            nn.Linear(384, 256),
             nn.ReLU(inplace=True),
         )
 
@@ -103,9 +103,8 @@ class DualModalFilter(nn.Module):
 
         if ead_features is not None:
             ead_feat = self.ead_projector(
-                ead_features["teacher_l1"],
-                ead_features["teacher_l2"],
-                ead_features["teacher_l3"],
+                ead_features["teacher"],
+                ead_features["student"],
                 ead_features["difference"],
             )
             f_ead = self.ead_proj(ead_feat)
@@ -127,10 +126,9 @@ class DualModalFilter(nn.Module):
         self.eval()
         example_img = torch.randn(1, 3, self.image_size, self.image_size)
         example_features = {
-            "teacher_l1": torch.randn(1, 64, 56, 56),
-            "teacher_l2": torch.randn(1, 128, 28, 28),
-            "teacher_l3": torch.randn(1, 256, 14, 14),
-            "difference": torch.randn(1, 64, 224, 224),
+            "teacher": torch.randn(1, 384, 64, 64),
+            "student": torch.randn(1, 768, 64, 64),
+            "difference": torch.randn(1, 384, 64, 64),
         }
         traced = torch.jit.trace(self, (example_img, example_features))
         traced.save(output_path)

@@ -24,8 +24,8 @@ class CameraNormStats:
 class CameraNormalizer:
     """Per-camera per-channel (x - mean) / std normalization for EfficientAD features.
 
-    每个 (camera_id, model_path) 对应一组独立的 stats。
-    四个特征 key 各存一组：teacher_l1, teacher_l2, teacher_l3, difference。
+    每个 camera_id 对应一组独立的 stats。
+    三个特征 key 各存一组：teacher, student, difference。
 
     离线拟合：在正常样本（is_anomaly=False）的特征上调用 fit()。
     推理时：调用 normalize() 查表应用，零额外开销。
@@ -43,8 +43,8 @@ class CameraNormalizer:
         大规模数据集注意 O(n) 内存占用。
 
         Args:
-            features_list: 正常样本的特征字典列表，每个字典含 'teacher_l1' 等 key，
-                          每个 value 是 (H, W, C) 或 (C,) 的 numpy 数组。
+            features_list: 正常样本的特征字典列表，每个字典含 'teacher', 'student',
+                          'difference' 等 key，每个 value 是 (H, W, C) 的 numpy 数组。
         """
         accumulators: dict[str, list[np.ndarray]] = {key: [] for key in self._FEATURE_KEYS}
         for feats in features_list:

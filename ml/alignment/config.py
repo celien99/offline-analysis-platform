@@ -5,10 +5,9 @@ from dataclasses import dataclass
 
 @dataclass
 class AlignmentConfig:
-    l1_channels: int = 64
-    l2_channels: int = 128
-    l3_channels: int = 256
-    diff_channels: int = 64
+    teacher_channels: int = 384
+    student_channels: int = 768
+    diff_channels: int = 384
     per_layer_proj_dim: int = 128
     transformer_dim: int = 512
     transformer_heads: int = 4

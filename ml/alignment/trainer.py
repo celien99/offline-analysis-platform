@@ -60,8 +60,8 @@ class AlignmentTrainer:
                 dino_embs = dino_embs.to(self.device)
                 optimizer.zero_grad()
                 projected = self.model(
-                    ead_feats["teacher_l1"], ead_feats["teacher_l2"],
-                    ead_feats["teacher_l3"], ead_feats["difference"])
+                    ead_feats["teacher"], ead_feats["student"],
+                    ead_feats["difference"])
                 loss = criterion(projected, dino_embs)
                 loss.backward()
                 optimizer.step()
@@ -77,8 +77,8 @@ class AlignmentTrainer:
                     ead_feats = {k: v.to(self.device) for k, v in ead_feats.items()}
                     dino_embs = dino_embs.to(self.device)
                     projected = self.model(
-                        ead_feats["teacher_l1"], ead_feats["teacher_l2"],
-                        ead_feats["teacher_l3"], ead_feats["difference"])
+                        ead_feats["teacher"], ead_feats["student"],
+                        ead_feats["difference"])
                     val_loss += criterion(projected, dino_embs).item()
 
             val_loss /= len(val_loader)

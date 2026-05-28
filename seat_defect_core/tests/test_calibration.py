@@ -212,23 +212,28 @@ class TestEMAFeatureCenter:
 
 class TestCalibrationRegistry:
     def test_calibrate_full_pipeline(self, tmp_path):
+        # 1. 先在原始特征上拟合 normalizer（per-camera per-channel 标准化）
         normalizer = CameraNormalizer()
-        normalizer.fit([{
-            "teacher": np.random.randn(8, 8, 384).astype(np.float32),
-            "student": np.random.randn(4, 4, 768).astype(np.float32),
-            "difference": np.random.randn(8, 8, 384).astype(np.float32),
-        }])
-        norm_path = str(tmp_path / "norm.npz")
-        normalizer.save(norm_path)
-
-        # Need N >= 384 and concat_dim >= 384 for PCA to produce 384-dim output
-        proj_feats = []
-        for _ in range(500):
-            proj_feats.append({
+        raw_feats_list = []
+        for _ in range(100):
+            raw_feats_list.append({
                 "teacher": np.random.randn(8, 8, 384).astype(np.float32),
                 "student": np.random.randn(4, 4, 768).astype(np.float32),
                 "difference": np.random.randn(8, 8, 384).astype(np.float32),
             })
+        normalizer.fit(raw_feats_list)
+        norm_path = str(tmp_path / "norm.npz")
+        normalizer.save(norm_path)
+
+        # 2. 在归一化特征上拟合 projector（正确顺序：先 normalize 再 project）
+        proj_feats = []
+        for _ in range(500):
+            raw = {
+                "teacher": np.random.randn(8, 8, 384).astype(np.float32),
+                "student": np.random.randn(4, 4, 768).astype(np.float32),
+                "difference": np.random.randn(8, 8, 384).astype(np.float32),
+            }
+            proj_feats.append(normalizer.normalize(raw))
         projector = EmbeddingProjector.fit(proj_feats, output_dim=384)
         proj_path = str(tmp_path / "proj.npz")
         projector.save(proj_path)
@@ -236,9 +241,9 @@ class TestCalibrationRegistry:
         config = CalibrationConfig(
             projection=ProjectionConfig(enabled=True, projector_path=proj_path),
             whitening=WhiteningConfig(enabled=False),
+            camera_norm_paths={"cam_front": norm_path},
         )
         registry = CalibrationRegistry(config)
-        registry.register_camera("cam_front", normalizer)
 
         feats = {
             "teacher": np.random.randn(8, 8, 384).astype(np.float32),

@@ -21,9 +21,8 @@ class AlignmentDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
         base = Path(self.ead_paths[idx])
         ead_features = {
-            "teacher_l1": torch.from_numpy(np.load(base / "teacher_l1.npy")).float(),
-            "teacher_l2": torch.from_numpy(np.load(base / "teacher_l2.npy")).float(),
-            "teacher_l3": torch.from_numpy(np.load(base / "teacher_l3.npy")).float(),
+            "teacher": torch.from_numpy(np.load(base / "teacher.npy")).float(),
+            "student": torch.from_numpy(np.load(base / "student.npy")).float(),
             "difference": torch.from_numpy(np.load(base / "difference.npy")).float(),
         }
         for k in ead_features:

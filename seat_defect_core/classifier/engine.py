@@ -151,16 +151,18 @@ class FilterClassifierService:
             # Preprocess image: BGR -> RGB -> resize -> normalize
             rgb = cv2.cvtColor(patch_image, cv2.COLOR_BGR2RGB)
             resized = cv2.resize(rgb, (self.config.input_size, self.config.input_size))
-            tensor = torch.from_numpy(resized).permute(2, 0, 1).float() / 255.0
-            tensor = (tensor - torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)) / \
-                     torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-            tensor = tensor.unsqueeze(0).to(self._device)
+            tensor = torch.from_numpy(resized).permute(2, 0, 1).float().to(self._device) / 255.0
+            mean = torch.as_tensor([0.485, 0.456, 0.406], device=self._device).view(3, 1, 1)
+            std = torch.as_tensor([0.229, 0.224, 0.225], device=self._device).view(3, 1, 1)
+            tensor = (tensor - mean) / std
+            tensor = tensor.unsqueeze(0)
 
             # Preprocess EfficientAD features to torch tensors
+            # 特征键名与 efficientad/engine.py:_extract_features() 产出保持一致
             feat_tensors = None
             if ead_features is not None:
                 feat_tensors = {}
-                for key in ["teacher_l1", "teacher_l2", "teacher_l3", "difference"]:
+                for key in ["teacher", "student", "difference"]:
                     if key in ead_features:
                         arr = ead_features[key]
                         t = torch.from_numpy(arr).float().to(self._device)

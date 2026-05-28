@@ -60,9 +60,8 @@ class DualModalDataset(Dataset):
             feat_dir = self.features_dir / pid
             try:
                 ead_features = {
-                    "teacher_l1": torch.from_numpy(np.load(feat_dir / "teacher_l1.npy")),
-                    "teacher_l2": torch.from_numpy(np.load(feat_dir / "teacher_l2.npy")),
-                    "teacher_l3": torch.from_numpy(np.load(feat_dir / "teacher_l3.npy")),
+                    "teacher": torch.from_numpy(np.load(feat_dir / "teacher.npy")),
+                    "student": torch.from_numpy(np.load(feat_dir / "student.npy")),
                     "difference": torch.from_numpy(np.load(feat_dir / "difference.npy")),
                 }
             except (FileNotFoundError, OSError):

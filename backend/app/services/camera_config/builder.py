@@ -71,6 +71,47 @@ class ConfigBuilder:
         "deployed_rules_path": "backend/deployed_models/line_a/rules/rules.json",
     }
 
+    DEFAULT_PROPOSAL = {
+        "heatmap_threshold_mode": "adaptive",
+        "heatmap_adaptive_std_multiplier": 1.5,
+        "min_component_area": 16,
+        "max_proposals": 20,
+        "context_padding_ratio": 0.10,
+        "aggregation_method": "weighted_confidence",
+        "budget": {
+            "enabled": True,
+            "target_latency_ms": 15.0,
+            "hard_limit_ms": 20.0,
+        },
+    }
+
+    DEFAULT_TRACKING = {
+        "max_age": 30,
+        "min_hits": 3,
+        "iou_threshold": 0.3,
+        "feature_similarity_threshold": 0.7,
+    }
+
+    DEFAULT_CALIBRATION = {
+        "enabled": False,
+        "camera_norm": {
+            "enabled": True,
+            "stats_path": "",
+        },
+        "projection": {
+            "enabled": False,
+            "projector_path": "",
+        },
+        "whitening": {
+            "enabled": False,
+            "matrix_path": "",
+        },
+        "ema_center": {
+            "enabled": False,
+            "centers_path": "",
+        },
+    }
+
     def __init__(self, repo_root: str | None = None) -> None:
         self._repo_root = (
             Path(repo_root)
@@ -171,6 +212,10 @@ class ConfigBuilder:
         if deployed_rules:
             rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
 
+        proposal: dict[str, object] = dict(self.DEFAULT_PROPOSAL)
+        tracking: dict[str, object] = dict(self.DEFAULT_TRACKING)
+        calibration: dict[str, object] = dict(self.DEFAULT_CALIBRATION)
+
         efficientad_path = self._resolve_model_path(
             cam.efficientad_model_version_id, model_paths
         )
@@ -187,6 +232,9 @@ class ConfigBuilder:
             "efficientad": efficientad,
             "filter_classifier": filter_classifier,
             "rule_engine": rule_engine,
+            "proposal": proposal,
+            "track": tracking,
+            "calibration": calibration,
             "regions": [],
         }
 
