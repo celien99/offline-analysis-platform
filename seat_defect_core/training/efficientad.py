@@ -75,18 +75,10 @@ def train_efficientad(
     if efficientad_cfg is None:
         raise ValueError(f"相机 '{camera_id}' 未配置 efficientad 参数")
 
-    # 加载正常图像
-    images: list[np.ndarray] = []
-    for img_path in good_image_paths:
-        img_path = Path(img_path)
-        if not img_path.exists():
-            continue
-        img = cv2.imread(str(img_path))
-        if img is not None:
-            images.append(img)
-
-    if len(images) < 2:
-        raise RuntimeError(f"正常参考图像不足 ({len(images)} 张)，至少需要 2 张")
+    # 只收集文件路径，不在内存中累积高分辨率 numpy 数组，避免 cv::OutOfMemoryError
+    image_paths: list[Path] = [Path(p) for p in good_image_paths if Path(p).exists()]
+    if len(image_paths) < 2:
+        raise RuntimeError(f"正常参考图像不足 ({len(image_paths)} 张)，至少需要 2 张")
 
     device = _resolve_train_device(efficientad_cfg.device)
 
@@ -131,18 +123,18 @@ def train_efficientad(
         good_dir.mkdir(parents=True, exist_ok=True)
 
         # 划分训练集和阈值计算集 (90/10)
-        split_idx = max(1, int(len(images) * (1.0 - efficientad_cfg.validation_split)))
-        train_images = images[:split_idx]
-        threshold_images = images[split_idx:] if split_idx < len(images) else images[:1]
+        split_idx = max(1, int(len(image_paths) * (1.0 - efficientad_cfg.validation_split)))
+        train_paths = image_paths[:split_idx]
+        threshold_paths = image_paths[split_idx:] if split_idx < len(image_paths) else image_paths[:1]
 
-        for i, img in enumerate(train_images):
-            cv2.imwrite(str(good_dir / f"{i:04d}.png"), img)
+        # 直接复制原图到 anomalib 目录（保留原始格式，不做 decode→re-encode）
+        for i, src in enumerate(train_paths):
+            shutil.copy2(str(src), str(good_dir / f"{i:04d}{src.suffix}"))
 
-        # 创建测试集目录用于 anomalib 验证
         test_good_dir = tmp_dir / category / "test" / "good"
         test_good_dir.mkdir(parents=True, exist_ok=True)
-        for i, img in enumerate(threshold_images):
-            cv2.imwrite(str(test_good_dir / f"{i:04d}.png"), img)
+        for i, src in enumerate(threshold_paths):
+            shutil.copy2(str(src), str(test_good_dir / f"{i:04d}{src.suffix}"))
 
         # 配置 anomalib 模型
         model = EfficientAd(
@@ -203,7 +195,7 @@ def train_efficientad(
         # 计算最优阈值：在正常图像上推理，取分数的指定分位数作为阈值
         image_threshold = _compute_threshold(
             model=torch_model,
-            images=threshold_images,
+            image_paths=threshold_paths,
             device=device,
             input_size=efficientad_cfg.input_size,
             percentile=99.7,
@@ -241,8 +233,8 @@ def train_efficientad(
             "input_size": efficientad_cfg.input_size,
             "teacher_backbone": efficientad_cfg.teacher_backbone,
             "student_backbone": efficientad_cfg.student_backbone,
-            "train_image_count": len(train_images),
-            "threshold_image_count": len(threshold_images),
+            "train_image_count": len(train_paths),
+            "threshold_image_count": len(threshold_paths),
             "epochs": efficientad_cfg.epochs,
             "train_batch_size": train_batch_size,
             "eval_batch_size": eval_batch_size,
@@ -267,8 +259,8 @@ def train_efficientad(
                     "eval_batch_size": eval_batch_size,
                     "num_workers": num_workers,
                     "learning_rate": efficientad_cfg.learning_rate,
-                    "train_image_count": len(train_images),
-                    "threshold_image_count": len(threshold_images),
+                    "train_image_count": len(train_paths),
+                    "threshold_image_count": len(threshold_paths),
                 })
                 mlflow.log_metrics({
                     "image_threshold": image_threshold,
@@ -289,7 +281,7 @@ def train_efficientad(
             "state_dict_path": str(state_dict_path),
             "image_threshold": image_threshold,
             "pixel_threshold": pixel_threshold,
-            "train_image_count": len(train_images),
+            "train_image_count": len(train_paths),
             "train_time_s": train_time_s,
             "mlflow_run_id": mlflow_run_id,
         }
@@ -299,7 +291,7 @@ def train_efficientad(
 
 def _compute_threshold(
     model: object,
-    images: list[np.ndarray],
+    image_paths: list[Path],
     device: torch.device,
     input_size: int,
     percentile: float = 99.7,
@@ -307,27 +299,31 @@ def _compute_threshold(
 ) -> float:
     """在正常图像上计算异常分数阈值（GPU 批量推理）。
 
-    将全部正常图像分批送 GPU 并行推理，收集 anomaly score 后取指定分位数
-    （默认 99.7%，对应 3-sigma）作为检测阈值。
+    分批加载图像文件并送 GPU 并行推理，避免在内存中同时持有所有高分辨率原图。
+    每批加载后立即 resize 并转为 tensor，释放原始 numpy 数组。
 
     Args:
-        batch_size: 阈值计算的 GPU 推理 batch size，RTX 4060 8GB 推荐 32-64。
+        batch_size: GPU 推理 batch size，RTX 4060 8GB 推荐 32-64。
     """
     model.eval()
     all_scores: list[float] = []
 
-    # 预处理全部图像为 tensor
-    tensors: list[torch.Tensor] = []
-    for img in images:
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img_resized = cv2.resize(img_rgb, (input_size, input_size))
-        t = torch.from_numpy(img_resized).float().permute(2, 0, 1) / 255.0
-        tensors.append(t)
-
-    # 分批 GPU 推理，减少 kernel launch 开销
     with torch.no_grad():
-        for start in range(0, len(tensors), batch_size):
-            batch = torch.stack(tensors[start : start + batch_size]).to(device)
+        for start in range(0, len(image_paths), batch_size):
+            batch_paths = image_paths[start : start + batch_size]
+            batch_tensors: list[torch.Tensor] = []
+            for p in batch_paths:
+                img = cv2.imread(str(p))
+                if img is None:
+                    batch_tensors.append(torch.zeros(3, input_size, input_size))
+                    continue
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                del img  # 立即释放高分辨率原图，只保留 RGB
+                img_resized = cv2.resize(img_rgb, (input_size, input_size))
+                t = torch.from_numpy(img_resized).float().permute(2, 0, 1) / 255.0
+                batch_tensors.append(t)
+
+            batch = torch.stack(batch_tensors).to(device)
             output = model(batch)
             scores = _extract_pred_score(output)
 

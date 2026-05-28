@@ -351,6 +351,8 @@ def _compute_calibration_stats(
             pin_memory=(device_str == "cuda"),
         )
 
+        # 增量拟合 CameraNormalizer（Welford 算法，无需在内存中累积全部特征）
+        normalizer = CameraNormalizer()
         features_list: list[dict[str, np.ndarray]] = []
         processed = 0
         for batch in dataloader:
@@ -358,6 +360,8 @@ def _compute_calibration_stats(
             try:
                 batch_features = service.extract_features_batch(batch)
                 if batch_features is not None:
+                    for feats in batch_features:
+                        normalizer.update(feats)  # 增量更新 mean/std
                     features_list.extend(batch_features)
             except Exception:
                 _logger.warning("calibration_batch_extract_failed", exc_info=True)
@@ -370,9 +374,6 @@ def _compute_calibration_stats(
             print(f"  跳过 {camera_id}: 有效特征不足 ({len(features_list)} 组)")
             continue
 
-        # 拟合 CameraNormalizer
-        normalizer = CameraNormalizer()
-        normalizer.fit(features_list)
         camera_features[camera_id] = features_list
         camera_normalizers[camera_id] = normalizer
 
@@ -390,6 +391,8 @@ def _compute_calibration_stats(
         normalizer = camera_normalizers[cam_id]
         for feats in feats_list:
             all_normalized.append(normalizer.normalize(feats))
+        # 释放该机位的原始特征以节省内存，只保留归一化后的向量
+        camera_features[cam_id] = []
 
     projector = EmbeddingProjector.fit(all_normalized, output_dim=384)
     projector_path = output_root / "projector.npz"
