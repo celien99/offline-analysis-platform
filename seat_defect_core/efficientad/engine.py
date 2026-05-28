@@ -60,7 +60,11 @@ class EfficientADService:
         if meta_path.exists():
             import json
 
-            meta = json.loads(meta_path.read_text("utf-8"))
+            try:
+                meta = json.loads(meta_path.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                _logger.warning("efficientad_meta_invalid", exc_info=True)
+                meta = {}
             if "image_threshold" in meta:
                 self._image_threshold = float(meta["image_threshold"])
                 self._threshold_from_meta = True
@@ -181,8 +185,11 @@ class EfficientADService:
         # 异常判定
         is_anomaly = anomaly_score > self._image_threshold
 
-        # 多尺度特征提取（如果可用）
-        features = self._extract_features(input_tensor) if self._feature_model is not None else None
+        # 多尺度特征提取（如果可用；None 表示不可用或提取失败）
+        features = None
+        if self._feature_model is not None:
+            raw = self._extract_features(input_tensor)
+            features = raw if raw else None
 
         return TextureAnomalyResult(
             score=anomaly_score,
@@ -234,13 +241,14 @@ class EfficientADService:
 
         # _feature_model 是 raw anomalib EfficientAdModel，内部自行做 ImageNet normalize，
         # 而 input_tensor 已被 _prepare_input 做过一次 normalize，需要先还原到 [0, 1]
-        unnorm_input = (input_tensor * IMAGENET_STD_TS + IMAGENET_MEAN_TS).clamp(0.0, 1.0)
+        dev = input_tensor.device
+        unnorm_input = (input_tensor * IMAGENET_STD_TS.to(dev) + IMAGENET_MEAN_TS.to(dev)).clamp(0.0, 1.0)
         try:
             with torch.inference_mode():
                 self._feature_model(unnorm_input)
         except Exception:
             _logger.warning("efficientad_feature_extraction_failed", exc_info=True)
-            return {}
+            return None
         finally:
             for h in handles:
                 h.remove()
@@ -257,13 +265,14 @@ class EfficientADService:
             t_out = result["teacher"]
             s_out = result["student"]
             teacher_channels = min(t_out.shape[2], s_out.shape[2])
+            t_aligned = t_out[:, :, :teacher_channels]
             s_aligned = s_out[:, :, :teacher_channels]
             # 对齐 spatial 尺寸（可能因 padding 不同而不同）
-            if t_out.shape[:2] != s_aligned.shape[:2]:
+            if t_aligned.shape[:2] != s_aligned.shape[:2]:
                 s_aligned = cv2.resize(
-                    s_aligned, (t_out.shape[1], t_out.shape[0]), interpolation=cv2.INTER_LINEAR
+                    s_aligned, (t_aligned.shape[1], t_aligned.shape[0]), interpolation=cv2.INTER_LINEAR
                 )
-            result["difference"] = (t_out - s_aligned).astype(np.float32)
+            result["difference"] = (t_aligned - s_aligned).astype(np.float32)
 
         return result
 
@@ -431,5 +440,8 @@ def _normalize_heatmap(
         if vmax < 1e-8:
             vmax = 1.0
 
-    normalized = anomaly_map / vmax
+    # 非目标区域清零，避免背景噪声在热力图中显示为异常信号
+    masked = anomaly_map.copy()
+    masked[target_binary == 0] = 0.0
+    normalized = masked / vmax
     return np.clip(normalized, 0.0, 1.0).astype(np.float32)
