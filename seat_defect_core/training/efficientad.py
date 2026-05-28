@@ -193,7 +193,7 @@ def train_efficientad(
             percentile=99.7,
         )
 
-        # 导出 TorchScript
+        # 导出 TorchScript（推理用）
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -208,6 +208,10 @@ def train_efficientad(
         )
         traced = torch.jit.trace(export_model, example_input)
         traced.save(str(output))
+
+        # 保存原始 state_dict 供推理时多尺度特征提取
+        state_dict_path = output.with_suffix(".state_dict.pt")
+        torch.save(torch_model.state_dict(), str(state_dict_path))
 
         # 像素级阈值（取图像级阈值的 0.8 倍作为参考）
         pixel_threshold = round(image_threshold * 0.8, 6)
@@ -257,6 +261,7 @@ def train_efficientad(
                 })
                 mlflow.log_artifact(str(output))
                 mlflow.log_artifact(str(meta_path))
+                mlflow.log_artifact(str(state_dict_path))
                 mlflow_run_id = mlflow.active_run().info.run_id
                 mlflow.end_run()
             except Exception:
@@ -265,6 +270,7 @@ def train_efficientad(
         return {
             "status": "completed",
             "artifact_path": str(output),
+            "state_dict_path": str(state_dict_path),
             "image_threshold": image_threshold,
             "pixel_threshold": pixel_threshold,
             "train_image_count": len(train_images),

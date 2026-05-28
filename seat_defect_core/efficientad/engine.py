@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -19,8 +20,13 @@ except ImportError:
 from .config import EfficientADConfig
 from ..core_types import TextureAnomalyResult
 
+_logger = logging.getLogger(__name__)
+
 IMAGENET_MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
+
+# ImageNet 均值灰（RGB uint8），用于填充非目标区域避免黑边引入异常响应
+IMAGENET_MEAN_GRAY_RGB = np.asarray([124, 116, 104], dtype=np.uint8)
 
 
 class EfficientADService:
@@ -32,7 +38,9 @@ class EfficientADService:
         self.config = config
         self.device = _resolve_device(config.device)
         self.model: Optional[torch.jit.ScriptModule] = None
+        self._feature_model: Optional[torch.nn.Module] = None
         self._image_threshold = config.image_threshold
+        self._threshold_from_meta = False
         if config.model_path:
             self._load_model(config.model_path)
 
@@ -47,8 +55,53 @@ class EfficientADService:
         meta_path = path.with_suffix(".meta.json")
         if meta_path.exists():
             import json
+
             meta = json.loads(meta_path.read_text("utf-8"))
-            self._image_threshold = float(meta.get("image_threshold", self._image_threshold))
+            loaded_threshold = float(meta.get("image_threshold", self._image_threshold))
+            if loaded_threshold > 0.0:
+                self._image_threshold = loaded_threshold
+                self._threshold_from_meta = True
+        if not self._threshold_from_meta:
+            _logger.warning(
+                "efficientad_threshold_not_loaded",
+                extra={
+                    "model_path": model_path,
+                    "fallback_threshold": self._image_threshold,
+                    "hint": "请检查 .meta.json 是否与模型文件在同一目录，或重新训练生成阈值",
+                },
+            )
+
+        # 尝试加载特征提取模型（state_dict）
+        state_dict_path = path.with_suffix(".state_dict.pt")
+        if state_dict_path.exists():
+            self._load_feature_model(str(state_dict_path))
+
+    def _load_feature_model(self, state_dict_path: str) -> None:
+        """尝试从 state_dict 重建模型用于多尺度特征提取。"""
+        try:
+            from anomalib.models import EfficientAd as EfficientAdModel
+
+            state_dict = torch.load(state_dict_path, map_location=self.device)
+            feature_model = EfficientAdModel(
+                teacher_out_channels=384,
+                model_size="medium",
+            )
+            feature_model.load_state_dict(state_dict)
+            feature_model.to(self.device)
+            feature_model.eval()
+            self._feature_model = feature_model
+            _logger.info("efficientad_feature_model_loaded")
+        except Exception:
+            _logger.debug("efficientad_feature_model_unavailable", exc_info=True)
+
+    @property
+    def image_threshold(self) -> float:
+        return self._image_threshold
+
+    @property
+    def has_features(self) -> bool:
+        """是否支持多尺度特征提取。"""
+        return self._feature_model is not None
 
     def predict(
         self,
@@ -74,7 +127,7 @@ class EfficientADService:
                 valid_pixel_ratio=valid_pixel_ratio,
             )
 
-        # 预处理：BGR → RGB, resize, normalize
+        # 预处理：BGR → RGB, resize, normalize，非目标区域用 ImageNet 均值灰填充
         input_tensor = _prepare_input(image, self.config.input_size).to(self.device)
 
         with torch.inference_mode():
@@ -83,26 +136,44 @@ class EfficientADService:
         # 解析 anomalib 输出：通常是 (anomaly_map, anomaly_score)
         if isinstance(output, (tuple, list)):
             anomaly_map_tensor = output[0]
-            anomaly_score = float(output[1].item()) if len(output) > 1 else 0.0
+            anomaly_score_raw = float(output[1].item()) if len(output) > 1 else 0.0
         elif torch.is_tensor(output):
             anomaly_map_tensor = output
-            anomaly_score = float(anomaly_map_tensor.mean().item())
+            anomaly_score_raw = float(anomaly_map_tensor.mean().item())
         else:
             raise RuntimeError(f"EfficientAD 输出格式不支持: {type(output)}")
 
         # anomaly_map 双线性插值回原始 ROI 尺寸
         anomaly_map = _resize_anomaly_map(anomaly_map_tensor, original_h, original_w)
 
-        # 应用 ignore_mask 清零忽略区域
+        # 应用 ignore_mask 清零忽略区域（边缘像素）
         if ignore_mask is not None and ignore_mask.any():
             ignore_binary = _to_binary_mask(ignore_mask, (original_h, original_w))
             anomaly_map[ignore_binary > 0] = 0.0
 
-        # 热力图 = anomaly_map（直接用作可视化）
-        heatmap = anomaly_map.copy()
+        # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
+        target_binary = _to_binary_mask(target_mask, (original_h, original_w))
+
+        # 仅从目标区域计算 image-level anomaly_score，避免 padding 区域噪声污染
+        target_pixels = anomaly_map[target_binary > 0]
+        if target_pixels.size > 0:
+            anomaly_score = float(target_pixels.mean())
+        else:
+            anomaly_score = anomaly_score_raw
+
+        # 热力图：对 anomaly_map 做分位数归一化到 [0, 1]，确保可视化效果稳定
+        heatmap = _normalize_heatmap(anomaly_map, target_binary)
+
+        # 统计强异常 patch（用于规则引擎后处理）
+        strong_patch_count, strong_patch_ratio = _compute_strong_patches(
+            anomaly_map, target_binary, self._image_threshold
+        )
 
         # 异常判定
         is_anomaly = anomaly_score > self._image_threshold
+
+        # 多尺度特征提取（如果可用）
+        features = self._extract_features(input_tensor) if self._feature_model is not None else None
 
         return TextureAnomalyResult(
             score=anomaly_score,
@@ -111,6 +182,9 @@ class EfficientADService:
             heatmap=heatmap,
             anomaly_map=anomaly_map,
             valid_pixel_ratio=valid_pixel_ratio,
+            features=features,
+            strong_patch_count=strong_patch_count,
+            strong_patch_ratio=strong_patch_ratio,
         )
 
     def predict_batch(
@@ -119,6 +193,65 @@ class EfficientADService:
     ) -> List[TextureAnomalyResult]:
         """批量推理，逐张处理避免显存溢出。"""
         return [self.predict(image, target_mask, ignore_mask) for image, target_mask, ignore_mask in items]
+
+    def _extract_features(self, input_tensor: torch.Tensor) -> dict[str, np.ndarray]:
+        """从 EfficientAD 模型提取多尺度 teacher/student 特征图。
+
+        通过 forward hook 捕获中间层输出，返回 calibration 模块所需的特征字典。
+        如果模型结构不匹配则返回空 dict。
+        """
+        if self._feature_model is None:
+            return {}
+
+        features: dict[str, torch.Tensor] = {}
+        handles: list[torch.utils.hooks.RemovableHandle] = []
+
+        def _make_hook(name: str) -> Callable[[torch.nn.Module, torch.Tensor, torch.Tensor], None]:
+            def hook(_module: torch.nn.Module, _input: torch.Tensor, output: torch.Tensor) -> None:
+                features[name] = output.detach()
+
+            return hook
+
+        # 注册 teacher 各层 hook
+        for module_name, module in self._feature_model.named_modules():
+            # teacher 特征层：layer1 / layer2 / layer3
+            if module_name.endswith("teacher.layer1"):
+                handles.append(module.register_forward_hook(_make_hook("teacher_l1")))
+            elif module_name.endswith("teacher.layer2"):
+                handles.append(module.register_forward_hook(_make_hook("teacher_l2")))
+            elif module_name.endswith("teacher.layer3"):
+                handles.append(module.register_forward_hook(_make_hook("teacher_l3")))
+            # student 特征层
+            elif module_name.endswith("student.layer1"):
+                handles.append(module.register_forward_hook(_make_hook("student_l1")))
+
+        try:
+            with torch.inference_mode():
+                self._feature_model(input_tensor)
+        except Exception:
+            _logger.debug("efficientad_feature_extraction_failed", exc_info=True)
+            return {}
+        finally:
+            for h in handles:
+                h.remove()
+
+        if not features:
+            return {}
+
+        result: dict[str, np.ndarray] = {}
+        for key, tensor in features.items():
+            result[key] = tensor.squeeze(0).permute(1, 2, 0).cpu().float().numpy()
+
+        # 计算 teacher-student 差异特征
+        if "teacher_l1" in result and "student_l1" in result:
+            t_l1 = result["teacher_l1"]
+            s_l1 = result["student_l1"]
+            # 对齐 spatial 尺寸（student 可能分辨率不同）
+            if t_l1.shape[:2] != s_l1.shape[:2]:
+                s_l1 = cv2.resize(s_l1, (t_l1.shape[1], t_l1.shape[0]), interpolation=cv2.INTER_LINEAR)
+            result["difference"] = (t_l1 - s_l1).astype(np.float32)
+
+        return result
 
     @classmethod
     def load_bundle(cls, model_path: str | Path) -> "EfficientADService":
@@ -138,12 +271,44 @@ def _resolve_device(requested: str) -> torch.device:
 
 
 def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
-    """BGR 或 RGBA → RGB → resize → normalize → tensor。"""
-    if image.ndim == 3 and image.shape[2] == 4:
+    """BGR 或 BGRA → RGB → resize → 非目标区域用 ImageNet 均值灰填充 → normalize → tensor。
+
+    当输入包含 alpha 通道时，alpha=0 的区域（letterbox padding）会被填充为
+    ImageNet 均值灰，避免黑边在 EfficientAD 中产生异常响应。
+    """
+    has_alpha = image.ndim == 3 and image.shape[2] == 4
+    if has_alpha:
+        alpha = image[:, :, 3].copy()
         image = image[:, :, :3]
+
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    resized = cv2.resize(rgb, (input_size, input_size), interpolation=cv2.INTER_AREA)
-    normalized = (resized.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
+
+    # 保持宽高比的 resize（letterbox 等效：先 resize 再放 canvas 中央）
+    h, w = rgb.shape[:2]
+    scale = min(float(input_size) / float(h), float(input_size) / float(w))
+    new_h = max(1, int(round(h * scale)))
+    new_w = max(1, int(round(w * scale)))
+    resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # 放在 ImageNet 均值灰画布中央
+    canvas = np.full(
+        (input_size, input_size, 3),
+        IMAGENET_MEAN_GRAY_RGB,
+        dtype=np.uint8,
+    )
+    offset_y = (input_size - new_h) // 2
+    offset_x = (input_size - new_w) // 2
+    canvas[offset_y : offset_y + new_h, offset_x : offset_x + new_w] = resized
+
+    # 如果原图有 alpha 通道，将 alpha=0 的 padding 也填充为均值灰
+    if has_alpha:
+        alpha_resized = cv2.resize(alpha, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+        alpha_canvas = np.zeros((input_size, input_size), dtype=np.uint8)
+        alpha_canvas[offset_y : offset_y + new_h, offset_x : offset_x + new_w] = alpha_resized
+        non_target_mask = alpha_canvas == 0
+        canvas[non_target_mask] = IMAGENET_MEAN_GRAY_RGB
+
+    normalized = (canvas.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
     tensor = torch.from_numpy(np.transpose(normalized, (2, 0, 1))).unsqueeze(0).float()
     return tensor
 
@@ -175,7 +340,11 @@ def _compute_valid_pixel_ratio(
     total = target_binary.sum()
     if total == 0:
         return 0.0
-    ignore_binary = _to_binary_mask(ignore_mask, shape) if ignore_mask is not None and ignore_mask.any() else np.zeros(shape, dtype=np.uint8)
+    ignore_binary = (
+        _to_binary_mask(ignore_mask, shape)
+        if ignore_mask is not None and ignore_mask.any()
+        else np.zeros(shape, dtype=np.uint8)
+    )
     valid = total - (ignore_binary * target_binary).sum()
     return float(valid / total)
 
@@ -192,3 +361,53 @@ def _to_binary_mask(mask: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     if binary.shape != shape:
         binary = cv2.resize(binary, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
     return binary
+
+
+def _compute_strong_patches(
+    anomaly_map: np.ndarray,
+    target_binary: np.ndarray,
+    threshold: float,
+) -> Tuple[int, float]:
+    """统计目标区域内超过阈值的强异常连通域数量和面积比例。"""
+    target_pixels = target_binary.sum()
+    if target_pixels == 0:
+        return 0, 0.0
+
+    strong_binary: np.ndarray = (anomaly_map > threshold).astype(np.uint8)
+    strong_mask: np.ndarray = strong_binary * target_binary
+    strong_area: int = int(strong_mask.sum())
+    if strong_area == 0:
+        return 0, 0.0
+
+    # 连通域分析
+    num_labels, labels, _stats, _centroids = cv2.connectedComponentsWithStats(
+        strong_mask, connectivity=8
+    )
+    # 减去背景标签
+    patch_count = max(0, num_labels - 1)
+    patch_ratio = float(strong_area / target_pixels)
+    return patch_count, patch_ratio
+
+
+def _normalize_heatmap(
+    anomaly_map: np.ndarray,
+    target_binary: np.ndarray,
+    low_percentile: float = 1.0,
+    high_percentile: float = 99.0,
+) -> np.ndarray:
+    """对 anomaly_map 做分位数归一化到 [0, 1]，仅统计目标区域内的值分布。
+
+    将目标区域像素值的 [low_percentile, high_percentile] 分位数区间线性映射到 [0, 1]，
+    越界值做 clip。这样无论 EfficientAD 输出值域如何，热力图都能稳定可视化。
+    """
+    target_pixels = anomaly_map[target_binary > 0]
+    if target_pixels.size == 0:
+        return np.zeros_like(anomaly_map, dtype=np.float32)
+
+    vmin = float(np.percentile(target_pixels, low_percentile))
+    vmax = float(np.percentile(target_pixels, high_percentile))
+    if vmax - vmin < 1e-8:
+        return np.zeros_like(anomaly_map, dtype=np.float32)
+
+    normalized = (anomaly_map - vmin) / (vmax - vmin)
+    return np.clip(normalized, 0.0, 1.0).astype(np.float32)
