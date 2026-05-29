@@ -38,16 +38,17 @@ class _EfficientADExportWrapper(torch.nn.Module):
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """返回 (anomaly_map, dummy_score)。
+        """返回 (anomaly_map, pred_score)。
 
-        anomaly_map 为 raw ST distance map（未 mask，未 grid pool）。
-        实际 scoring 由 EfficientADService.predict 完成，会结合 target_mask
-        做空间 mask 后再算 grid-pooled score，避免 mask 填充边界干扰。
+        anomaly_map: raw ST distance map（全图，未 mask）
+        pred_score: 全图 grid-pooled max（用于训练时阈值计算）。
+          推理时 EfficientADService.predict 会用 target_mask 重新做 masked
+          grid-pooled scoring，但训练时没有 mask，全图 scoring 作为近似。
         """
         # 线上 EfficientADService 已做 ImageNet normalize，还原到 [0,1] 像素值
         batch = (batch * self.std + self.mean).clamp(0.0, 1.0)
 
-        # 仅计算 ST distance map（不触发 AE 推理）
+        # 仅计算 ST distance map
         _student_output, distance_st = self.model.compute_student_teacher_distance(batch)
         map_st = torch.mean(distance_st, dim=1, keepdim=True)
 
@@ -59,8 +60,11 @@ class _EfficientADExportWrapper(torch.nn.Module):
             map_st, size=image_size, mode="bilinear",
         )
 
-        # 返回 dummy score（实际 score 在 Service 层 mask 后计算）
-        return anomaly_map, torch.zeros(anomaly_map.shape[0], 1)
+        # 全图 grid-pooled score（训练时无 target_mask，用全图近似）
+        pooled = torch.nn.functional.adaptive_avg_pool2d(anomaly_map, (8, 8))
+        pred_score = pooled.amax(dim=(1, 2, 3))
+
+        return anomaly_map, pred_score
 
 
 def train_efficientad(
@@ -331,15 +335,13 @@ def _compute_threshold(
 ) -> float:
     """在正常图像上计算异常分数阈值。
 
-    输入预处理与线上推理一致：resize → ImageNet normalize → 送入 _EfficientADExportWrapper。
-    适配新旧两种模型输出格式（tuple 或 InferenceBatch）。
+    预处理与线上推理一致（使用 _prepare_input），确保阈值在部署环境中有效。
+    model 为 _EfficientADExportWrapper，输出 (anomaly_map, pred_score)。
     """
+    from ..efficientad.engine import _prepare_input
+
     model.eval()
     all_scores: list[float] = []
-
-    # ImageNet 统计量，与 _prepare_input 保持一致
-    imagenet_mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
-    imagenet_std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
 
     with torch.no_grad():
         for start in range(0, len(image_paths), batch_size):
@@ -350,12 +352,9 @@ def _compute_threshold(
                 if img is None:
                     batch_tensors.append(torch.zeros(3, input_size, input_size))
                     continue
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                del img
-                img_resized = cv2.resize(img_rgb, (input_size, input_size))
-                # 与线上 _prepare_input 一致：/255 → ImageNet normalize
-                t = torch.from_numpy(img_resized).float().permute(2, 0, 1) / 255.0
-                t = (t - imagenet_mean.squeeze(0)) / imagenet_std.squeeze(0)
+                # 使用与线上推理完全相同的预处理（BGR→RGB, aspect-ratio resize,
+                # gray canvas letterbox, ImageNet normalize）
+                t = _prepare_input(img, input_size).squeeze(0)
                 batch_tensors.append(t)
 
             batch = torch.stack(batch_tensors).to(device)
@@ -493,16 +492,24 @@ def _configure_gpu() -> None:
     torch.backends.cudnn.allow_tf32 = True
 
 
-def re_export_cpu(state_dict_path: str, output_path: str, *, input_size: int = 256) -> str:
+def re_export_cpu(
+    state_dict_path: str,
+    output_path: str,
+    *,
+    input_size: int = 256,
+    image_threshold: float | None = None,
+) -> str:
     """将 CUDA traced 的 EfficientAD 模型重新导出为 CPU 兼容版本。
 
     从训练时保存的 state_dict 加载权重，在 CPU 上 trace 并保存。
-    解决模型在 Windows+CUDA 上训练后无法在 Mac/Linux CPU 环境运行的问题。
+    如果提供 image_threshold，会同时更新 meta.json。
 
     Args:
         state_dict_path: 训练时保存的 .state_dict.pt 文件路径
         output_path: 输出 TorchScript .pt 文件路径
         input_size: 模型输入尺寸（需与训练时一致）
+        image_threshold: 异常分数阈值。为 None 则保留 meta.json 中的旧值。
+            注意：新 scoring 管线的阈值与旧管线不兼容，建议重新计算。
 
     Returns:
         str: 输出文件路径
@@ -526,4 +533,15 @@ def re_export_cpu(state_dict_path: str, output_path: str, *, input_size: int = 2
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(out))
+
+    # 更新 meta.json 中的阈值
+    if image_threshold is not None:
+        meta_path = out.with_suffix(".meta.json")
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text("utf-8"))
+        else:
+            meta = {}
+        meta["image_threshold"] = round(image_threshold, 6)
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+
     return str(out)

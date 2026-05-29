@@ -213,13 +213,11 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 对目标区域做空间网格池化计算 anomaly_score
-        # 网格均值捕获缺陷空间聚集特征，比单像素 max 对暗表面缺陷鲁棒得多
-        target_pixels = anomaly_map[target_binary > 0]
-        if target_pixels.size > 0:
-            anomaly_score = _grid_pool_score(anomaly_map, target_binary)
-        else:
-            anomaly_score = anomaly_score_raw
+        # 使用模型内置的 pred_score（全图 grid-pooled），与训练时 _compute_threshold
+        # 的 scoring 方法完全一致，确保阈值跨训练/推理可比。
+        # masked scoring (_grid_pool_score) 仅在 target_binary 存在且需要
+        # 排除背景区域时使用，但阈值的语义需要匹配。
+        anomaly_score = anomaly_score_raw
 
         # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
         # 正常区域（远低于阈值）→ dark blue，边界 → yellow，异常 → red
