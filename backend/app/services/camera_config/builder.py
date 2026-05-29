@@ -230,6 +230,16 @@ class ConfigBuilder:
         tracking: dict[str, object] = dict(self.DEFAULT_TRACKING)
         calibration: dict[str, object] = dict(self.DEFAULT_CALIBRATION)
 
+        # 每机位 CameraNormalizer stats 路径
+        normalizer_path = self._resolve_model_path(
+            cam.normalizer_model_version_id, model_paths
+        )
+        if normalizer_path:
+            calibration["camera_norm"] = {
+                "enabled": True,
+                "stats_path": normalizer_path,
+            }
+
         efficientad_path = self._resolve_model_path(
             cam.efficientad_model_version_id, model_paths
         )

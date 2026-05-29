@@ -26,6 +26,7 @@ export interface CameraConfig {
   seat_model_id: string;
   efficientad_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
+  normalizer_model_version_id: string | null;
   detection_confidence: number;
   efficientad_image_size: number;
   efficientad_threshold: number;
@@ -37,6 +38,7 @@ export interface CameraConfigFormData {
   camera_id: string;
   efficientad_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
+  normalizer_model_version_id: string | null;
   detection_confidence: number;
   efficientad_image_size: number;
   efficientad_threshold: number;

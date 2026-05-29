@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import Float, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
 
@@ -66,4 +66,10 @@ class CameraConfig(BaseModel):
     filter_classifier_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
         nullable=True, comment="Filter Classifier 模型版本 ID",
+    )
+
+    # CameraNormalizer stats 引用（每机位独立）
+    normalizer_model_version_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True, comment="CameraNormalizer stats 模型版本 ID (per-camera mean/std .npz)",
     )

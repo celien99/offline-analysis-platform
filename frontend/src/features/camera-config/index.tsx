@@ -37,6 +37,7 @@ import {
   useDeleteCamera,
   useModelOptions,
   useRegisterModel,
+  useImportBatchTrain,
 } from "../../hooks/queries";
 import type {
   CameraConfigFormData,
@@ -67,9 +68,12 @@ export default function CameraConfigPage() {
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<CameraConfig | null>(null);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
   const [seatForm] = Form.useForm<SeatModelFormData>();
   const [cameraForm] = Form.useForm<CameraConfigFormData>();
   const [registerForm] = Form.useForm<ModelRegisterData>();
+  const [importForm] = Form.useForm<{ output_root: string }>();
 
   const { data: seatModels, isLoading: seatLoading } = useSeatModels(page, PAGE_SIZE);
   const { data: cameras, isLoading: camerasLoading } = useCameras(selectedSeatModel);
@@ -80,6 +84,7 @@ export default function CameraConfigPage() {
   const { data: filterClassifierModels } = useModelOptions("filter_classifier");
   const { data: projectorModels } = useModelOptions("projector");
   const { data: whiteningMatrixModels } = useModelOptions("whitening_matrix");
+  const { data: normalizerModels } = useModelOptions("camera_normalizer");
   // 合并所有模型用于表格展示
   const allModels = [
     ...(yoloModels ?? []),
@@ -87,6 +92,7 @@ export default function CameraConfigPage() {
     ...(filterClassifierModels ?? []),
     ...(projectorModels ?? []),
     ...(whiteningMatrixModels ?? []),
+    ...(normalizerModels ?? []),
   ];
 
   const createSeatMut = useCreateSeatModel();
@@ -96,6 +102,7 @@ export default function CameraConfigPage() {
   const updateCamMut = useUpdateCamera();
   const deleteCamMut = useDeleteCamera();
   const registerModelMut = useRegisterModel();
+  const importBatchTrainMut = useImportBatchTrain();
 
   // ── Seat Model handlers ──
   const openSeatCreate = () => {
@@ -149,6 +156,7 @@ export default function CameraConfigPage() {
       efficientad_threshold: 0.99,
       efficientad_model_version_id: null,
       filter_classifier_model_version_id: null,
+      normalizer_model_version_id: null,
     });
     setCameraModalOpen(true);
   };
@@ -159,6 +167,7 @@ export default function CameraConfigPage() {
       camera_id: record.camera_id,
       efficientad_model_version_id: record.efficientad_model_version_id,
       filter_classifier_model_version_id: record.filter_classifier_model_version_id,
+      normalizer_model_version_id: record.normalizer_model_version_id,
       detection_confidence: record.detection_confidence,
       efficientad_image_size: record.efficientad_image_size,
       efficientad_threshold: record.efficientad_threshold,
@@ -204,6 +213,27 @@ export default function CameraConfigPage() {
     registerForm.resetFields();
   };
 
+  const handleImportBatchTrain = async () => {
+    if (!selectedSeatModel) {
+      message.error("请先选择左侧座椅型号");
+      return;
+    }
+    const values = await importForm.validateFields();
+    try {
+      const result = await importBatchTrainMut.mutateAsync({
+        output_root: values.output_root,
+        seat_model_id: selectedSeatModel,
+        auto_bind: true,
+      });
+      setImportResult(result as unknown as Record<string, unknown>);
+      message.success(
+        `导入完成: ${(result as unknown as Record<string, unknown>).imported instanceof Array ? (result as unknown as { imported: unknown[] }).imported.length : 0} 个模型`
+      );
+    } catch {
+      // error handled by mutation
+    }
+  };
+
   return (
     <div>
       <PageHeader title="相机配置" />
@@ -214,9 +244,18 @@ export default function CameraConfigPage() {
           const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
           return modelLabel(sm?.yolo_model_version_id ?? null, allModels);
         })()}
+        projectorModel={(() => {
+          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
+          return modelLabel(sm?.projector_model_version_id ?? null, allModels);
+        })()}
+        whiteningModel={(() => {
+          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
+          return modelLabel(sm?.whitening_matrix_model_version_id ?? null, allModels);
+        })()}
         cameras={(cameras ?? []).map((c) => ({
           cameraId: c.camera_id,
           efficientadModel: modelLabel(c.efficientad_model_version_id, allModels),
+          normalizerModel: modelLabel(c.normalizer_model_version_id, allModels),
           filterModel: c.filter_classifier_model_version_id
             ? modelLabel(c.filter_classifier_model_version_id, allModels)
             : undefined,
@@ -300,6 +339,16 @@ export default function CameraConfigPage() {
                   <Button size="small" onClick={() => setRegisterModalOpen(true)}>
                     注册模型
                   </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      importForm.resetFields();
+                      setImportResult(null);
+                      setImportModalOpen(true);
+                    }}
+                  >
+                    导入训练产物
+                  </Button>
                 </Space>
               )
             }
@@ -322,14 +371,21 @@ export default function CameraConfigPage() {
                   {
                     title: "EfficientAD 模型",
                     dataIndex: "efficientad_model_version_id",
-                    width: 160,
+                    width: 140,
+                    ellipsis: true,
+                    render: (v: string | null) => modelLabel(v, allModels),
+                  },
+                  {
+                    title: "Normalizer",
+                    dataIndex: "normalizer_model_version_id",
+                    width: 110,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
                     title: "Filter Classifier",
                     dataIndex: "filter_classifier_model_version_id",
-                    width: 150,
+                    width: 140,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
@@ -438,6 +494,12 @@ export default function CameraConfigPage() {
             <ModelSelect models={efficientadModels} />
           </Form.Item>
           <Form.Item
+            name="normalizer_model_version_id"
+            label="Camera Normalizer"
+          >
+            <ModelSelect models={normalizerModels} />
+          </Form.Item>
+          <Form.Item
             name="filter_classifier_model_version_id"
             label="Filter Classifier 模型"
           >
@@ -503,6 +565,7 @@ export default function CameraConfigPage() {
                 { label: "YOLO", value: "yolo" },
                 { label: "EfficientAD", value: "efficientad" },
                 { label: "Filter Classifier", value: "filter_classifier" },
+                { label: "Camera Normalizer", value: "camera_normalizer" },
                 { label: "Embedding", value: "embedding" },
                 { label: "Embedding Projector", value: "projector" },
                 { label: "Whitening Matrix", value: "whitening_matrix" },
@@ -518,6 +581,65 @@ export default function CameraConfigPage() {
             <Input placeholder="/data/models/yolo/best.pt" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 导入 batch_train 产物 Modal */}
+      <Modal
+        title="导入训练产物"
+        open={importModalOpen}
+        onOk={handleImportBatchTrain}
+        onCancel={() => {
+          setImportModalOpen(false);
+          setImportResult(null);
+          importForm.resetFields();
+        }}
+        confirmLoading={importBatchTrainMut.isPending}
+        width={600}
+        destroyOnClose
+      >
+        <Form form={importForm} layout="vertical">
+          <Form.Item
+            name="output_root"
+            label="batch_train 输出目录"
+            rules={[{ required: true, message: "请输入输出目录的绝对路径" }]}
+            extra={
+              <span>
+                目录应包含 *_efficientad.pt, *_norm.npz, projector.npz 等文件。
+                导入后将自动注册并绑定到当前座椅型号的同名相机。
+              </span>
+            }
+          >
+            <Input placeholder="/data/models/seat_model_a/" />
+          </Form.Item>
+        </Form>
+        {importResult && (
+          <div className="mt-3">
+            <Typography.Text strong>导入结果:</Typography.Text>
+            <div className="text-sm mt-1">
+              {(importResult.imported as Array<Record<string, unknown>>)?.length > 0 ? (
+                <ul className="list-disc pl-4">
+                  {(importResult.imported as Array<Record<string, unknown>>).map(
+                    (item: Record<string, unknown>, i: number) => (
+                      <li key={i}>
+                        {item.file as string} → {item.model_type as string}
+                        {item.bound ? " (已绑定)" : " (未绑定)"}
+                      </li>
+                    )
+                  )}
+                </ul>
+              ) : (
+                <span className="text-gray-400">未发现可导入的模型文件</span>
+              )}
+              {(importResult.errors as string[])?.length > 0 && (
+                <div className="mt-2 text-red-500">
+                  {(importResult.errors as string[]).map((e: string, i: number) => (
+                    <div key={i}>{e}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -467,6 +467,19 @@ export function useRegisterModel() {
   });
 }
 
+export function useImportBatchTrain() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { output_root: string; seat_model_id: string; auto_bind?: boolean }) =>
+      modelApi.importBatchTrain(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["model", "options"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-models"] });
+      queryClient.invalidateQueries({ queryKey: ["cameras"] });
+    },
+  });
+}
+
 // ── Gate hooks ──
 
 export function useGateStatus(modelVersionId: string | null) {

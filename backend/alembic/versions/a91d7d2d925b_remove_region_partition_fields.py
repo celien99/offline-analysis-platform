@@ -31,7 +31,7 @@ def upgrade() -> None:
     op.drop_index('ix_clusters_region_id', table_name='clusters')
     op.drop_column('clusters', 'region_id')
 
-    op.drop_index('ix_training_runs_region_id', table_name='training_runs')
+    op.execute("DROP INDEX IF EXISTS ix_training_runs_region_id")
     op.drop_column('training_runs', 'region_id')
 
     # 移除 camera_configs 的三分区字段

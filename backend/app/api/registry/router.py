@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
@@ -8,6 +13,7 @@ from app.common.logging import get_logger
 from app.schemas.common import StatusResponse
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.repositories.camera_config import CameraConfigRepository, SeatModelRepository
 from app.schemas.registry import (
     DeploymentResponse,
     ModelDeployRequest,
@@ -188,3 +194,181 @@ async def register_model(
         model_type=model.model_type,
         artifact_path=model.artifact_path,
     )
+
+
+class BatchTrainImportRequest(BaseModel):
+    output_root: str = Field(..., description="batch_train 输出根目录的绝对路径")
+    seat_model_id: str = Field(..., description="目标座椅型号 seat_model_id")
+    auto_bind: bool = Field(default=True, description="是否自动绑定到同名 CameraConfig")
+
+
+class BatchTrainImportResult(BaseModel):
+    status: str  # "completed" | "partial"
+    imported: list[dict[str, Any]]  # [{camera_id, model_type, model_id, model_name, bound}]
+    errors: list[str]
+
+
+@router.post("/import-batch-train", response_model=BatchTrainImportResult)
+async def import_batch_train_artifacts(
+    request: BatchTrainImportRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BatchTrainImportResult:
+    """扫描 batch_train 的 output_root 目录，自动注册模型并绑定到 CameraConfig。
+
+    识别并导入以下产物：
+    - {camera_id}_efficientad.pt → 注册为 efficientad 类型
+    - {camera_id}_norm.npz → 注册为 camera_normalizer 类型
+    - projector.npz → 注册为 projector 类型
+
+    当 auto_bind=True 时，自动将 camera_id 匹配的模型绑定到对应 CameraConfig。
+    全局模型（projector）绑定到 SeatModel。
+    """
+    output_root = Path(request.output_root)
+    if not output_root.is_dir():
+        raise HTTPException(status_code=400, detail=f"目录不存在: {request.output_root}")
+
+    seat_repo = SeatModelRepository(session)
+    seat_model = await seat_repo.get_by_seat_model_id(request.seat_model_id)
+    if not seat_model:
+        raise HTTPException(status_code=404, detail=f"座椅型号不存在: {request.seat_model_id}")
+
+    cam_repo = CameraConfigRepository(session)
+    train_svc = TrainingService(session)
+
+    imported: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    # 扫描 output_root 目录
+    pt_files: dict[str, Path] = {}       # camera_id → .pt 路径
+    norm_files: dict[str, Path] = {}     # camera_id → _norm.npz 路径
+    projector_path: Optional[Path] = None
+
+    for f in sorted(output_root.iterdir()):
+        if not f.is_file():
+            continue
+        name = f.name
+        if name == "projector.npz":
+            projector_path = f
+        elif name.endswith("_efficientad.pt") and not name.endswith(".state_dict.pt"):
+            # {camera_id}_efficientad.pt
+            camera_id = name[: -len("_efficientad.pt")]
+            pt_files[camera_id] = f
+        elif name.endswith("_norm.npz"):
+            # {camera_id}_norm.npz
+            camera_id = name[: -len("_norm.npz")]
+            norm_files[camera_id] = f
+
+    # 按 camera_id 导入 EfficientAD 模型 + Normalizer
+    all_camera_ids = set(pt_files.keys()) | set(norm_files.keys())
+    for camera_id in sorted(all_camera_ids):
+        pt_path = pt_files.get(camera_id)
+        norm_path = norm_files.get(camera_id)
+
+        # 读取 meta.json 获取版本信息
+        version = _build_timestamp_version()
+        if pt_path:
+            meta_path = pt_path.with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    json.loads(meta_path.read_text("utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        # 注册 EfficientAD 模型
+        if pt_path:
+            try:
+                model_name = f"efficientad_{camera_id}"
+                model = await train_svc.create_model_version(
+                    model_name=model_name,
+                    version=version,
+                    model_type="efficientad",
+                    artifact_path=str(pt_path.absolute()),
+                )
+                imported.append({
+                    "camera_id": camera_id,
+                    "model_type": "efficientad",
+                    "model_id": model.id,
+                    "model_name": model_name,
+                    "file": pt_path.name,
+                })
+
+                if request.auto_bind:
+                    cam = await cam_repo.get_by_camera_id(request.seat_model_id, camera_id)
+                    if cam:
+                        cam.efficientad_model_version_id = model.id
+                        await cam_repo.update(cam)
+                        imported[-1]["bound"] = True
+                    else:
+                        imported[-1]["bound"] = False
+                        errors.append(f"CameraConfig 不存在: {camera_id}，EfficientAD 模型未绑定")
+            except Exception as exc:
+                errors.append(f"注册 {pt_path.name} 失败: {exc}")
+
+        # 注册 CameraNormalizer
+        if norm_path:
+            try:
+                model_name = f"camera_normalizer_{camera_id}"
+                model = await train_svc.create_model_version(
+                    model_name=model_name,
+                    version=version,
+                    model_type="camera_normalizer",
+                    artifact_path=str(norm_path.absolute()),
+                )
+                imported.append({
+                    "camera_id": camera_id,
+                    "model_type": "camera_normalizer",
+                    "model_id": model.id,
+                    "model_name": model_name,
+                    "file": norm_path.name,
+                })
+
+                if request.auto_bind:
+                    cam = await cam_repo.get_by_camera_id(request.seat_model_id, camera_id)
+                    if cam:
+                        cam.normalizer_model_version_id = model.id
+                        await cam_repo.update(cam)
+                        imported[-1]["bound"] = True
+                    else:
+                        imported[-1]["bound"] = False
+            except Exception as exc:
+                errors.append(f"注册 {norm_path.name} 失败: {exc}")
+
+    # 注册 EmbeddingProjector（全局共享）
+    if projector_path:
+        try:
+            model_name = "embedding_projector"
+            model = await train_svc.create_model_version(
+                model_name=model_name,
+                version=version,
+                model_type="projector",
+                artifact_path=str(projector_path.absolute()),
+            )
+            imported.append({
+                "camera_id": "global",
+                "model_type": "projector",
+                "model_id": model.id,
+                "model_name": model_name,
+                "file": projector_path.name,
+            })
+
+            if request.auto_bind and seat_model.projector_model_version_id is None:
+                seat_model.projector_model_version_id = model.id
+                await seat_repo.update(seat_model)
+                imported[-1]["bound"] = True
+            else:
+                imported[-1]["bound"] = False
+        except Exception as exc:
+            errors.append(f"注册 projector.npz 失败: {exc}")
+
+    await session.commit()
+
+    return BatchTrainImportResult(
+        status="completed" if not errors else "partial",
+        imported=imported,
+        errors=errors,
+    )
+
+
+def _build_timestamp_version() -> str:
+    from datetime import datetime
+    return datetime.utcnow().strftime("%Y%m%d%H%M%S")

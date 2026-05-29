@@ -50,6 +50,7 @@ class CameraConfigCreate(BaseModel):
     efficientad_image_size: int = Field(default=256, ge=64, le=1024)
     efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
     filter_classifier_model_version_id: str | None = Field(default=None, description="Filter Classifier 模型版本 ID")
+    normalizer_model_version_id: str | None = Field(default=None, description="CameraNormalizer stats 模型版本 ID")
 
 
 class CameraConfigUpdate(BaseModel):
@@ -59,6 +60,7 @@ class CameraConfigUpdate(BaseModel):
     efficientad_image_size: int | None = Field(default=None, ge=64, le=1024)
     efficientad_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     filter_classifier_model_version_id: str | None = Field(default=None)
+    normalizer_model_version_id: str | None = Field(default=None, description="CameraNormalizer stats 模型版本 ID")
 
 
 class CameraConfigResponse(BaseModel):
@@ -67,6 +69,7 @@ class CameraConfigResponse(BaseModel):
     seat_model_id: str
     efficientad_model_version_id: str | None
     filter_classifier_model_version_id: str | None
+    normalizer_model_version_id: str | None = None
     detection_confidence: float
     efficientad_image_size: int
     efficientad_threshold: float
