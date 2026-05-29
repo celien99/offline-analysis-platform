@@ -74,7 +74,7 @@ class EfficientADService:
                 _ = jit_model(dummy)
             self.model = jit_model
             jit_ok = True
-            _logger.info("efficientad_jit_loaded", model_path=model_path)
+            _logger.info("efficientad_jit_loaded model_path=%s", model_path)
         except Exception:
             _logger.warning("efficientad_jit_failed_fallback_state_dict", exc_info=True)
 
@@ -93,7 +93,7 @@ class EfficientADService:
 
                 eager_model = _EfficientADExportWrapper(raw_model).to(self.device).eval()
                 self.model = eager_model
-                _logger.info("efficientad_eager_loaded", model_path=model_path)
+                _logger.info("efficientad_eager_loaded model_path=%s", model_path)
             except Exception:
                 _logger.error("efficientad_state_dict_load_failed", exc_info=True)
 
@@ -192,7 +192,7 @@ class EfficientADService:
         with torch.inference_mode():
             output = self.model(input_tensor)
 
-        # 解析 anomalib 输出：通常是 (anomaly_map, anomaly_score)
+        # 解析模型输出：(anomaly_map, pred_score)
         if isinstance(output, (tuple, list)):
             anomaly_map_tensor = output[0]
             anomaly_score_raw = float(output[1].item()) if len(output) > 1 else 0.0
@@ -213,11 +213,11 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 仅从目标区域计算 image-level anomaly_score（使用 max 与模型 pred_score 的 amax 语义一致，
-        # 确保与训练时通过 _compute_threshold 校准的阈值可比）
+        # 对目标区域做空间网格池化计算 anomaly_score
+        # 网格均值捕获缺陷空间聚集特征，比单像素 max 对暗表面缺陷鲁棒得多
         target_pixels = anomaly_map[target_binary > 0]
         if target_pixels.size > 0:
-            anomaly_score = float(target_pixels.max())
+            anomaly_score = _grid_pool_score(anomaly_map, target_binary)
         else:
             anomaly_score = anomaly_score_raw
 
@@ -460,6 +460,30 @@ def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
     normalized = (canvas.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
     tensor = torch.from_numpy(np.transpose(normalized, (2, 0, 1))).unsqueeze(0).float()
     return tensor
+
+
+def _grid_pool_score(anomaly_map: np.ndarray, target_binary: np.ndarray, grid_size: int = 8) -> float:
+    """对 masked anomaly_map 做空间网格池化，取最高网格均值作为异常分数。
+
+    相比 amax 单像素，网格均值：
+    - 不被边缘/噪声单点干扰
+    - 捕获缺陷的空间聚集特征
+    - 对暗表面微弱缺陷的分离度远优于 amax
+    """
+    masked = anomaly_map * target_binary.astype(np.float32)
+    h, w = masked.shape
+    gh = max(1, h // grid_size)
+    gw = max(1, w // grid_size)
+    cell_means = []
+    for y in range(0, h, gh):
+        for x in range(0, w, gw):
+            cell = masked[y : y + gh, x : x + gw]
+            cell_target = target_binary[y : y + gh, x : x + gw]
+            if cell_target.sum() > 0:
+                cell_means.append(float(cell[cell_target > 0].mean()))
+    if not cell_means:
+        return 0.0
+    return float(np.max(cell_means))
 
 
 def _resize_anomaly_map(

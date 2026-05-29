@@ -18,7 +18,18 @@ import torch
 
 
 class _EfficientADExportWrapper(torch.nn.Module):
-    """把 anomalib InferenceBatch 规范化为推理服务期望的 TorchScript 输出。"""
+    """把 anomalib 模型包装为推理服务期望的输出格式。
+
+    scoring 策略（针对暗表面缺陷优化）：
+    - 仅使用 student-teacher (ST) distance map，禁用 AE map 混合。
+      AE 在暗表面上重建过强，会稀释 ST 的缺陷信号。
+    - 禁用 quantile normalization。anomalib 默认的 0.1*(raw-qa)/(qb-qa)
+      将动态范围压缩 5-10 倍，导致微弱缺陷信号被淹没。
+    - 使用空间网格池化 (adaptive_avg_pool2d + amax) 替代全局 amax。
+      全局 amax 取单一最热像素，易被边缘/轮廓噪声支配。
+      网格池化取每个局部区域 (如 32x32) 的均值后再取最大值，
+      既能捕获缺陷的空间聚集特征，又不被单像素噪声干扰。
+    """
 
     def __init__(self, model: torch.nn.Module) -> None:
         super().__init__()
@@ -27,10 +38,29 @@ class _EfficientADExportWrapper(torch.nn.Module):
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # 线上 EfficientADService 已做 ImageNet normalize；anomalib 内部模型会自行 normalize。
+        """返回 (anomaly_map, dummy_score)。
+
+        anomaly_map 为 raw ST distance map（未 mask，未 grid pool）。
+        实际 scoring 由 EfficientADService.predict 完成，会结合 target_mask
+        做空间 mask 后再算 grid-pooled score，避免 mask 填充边界干扰。
+        """
+        # 线上 EfficientADService 已做 ImageNet normalize，还原到 [0,1] 像素值
         batch = (batch * self.std + self.mean).clamp(0.0, 1.0)
-        output = self.model(batch)
-        return output.anomaly_map, output.pred_score
+
+        # 仅计算 ST distance map（不触发 AE 推理）
+        _student_output, distance_st = self.model.compute_student_teacher_distance(batch)
+        map_st = torch.mean(distance_st, dim=1, keepdim=True)
+
+        # 上采样到输入分辨率
+        image_size = batch.shape[-2:]
+        if getattr(self.model, 'pad_maps', False):
+            map_st = torch.nn.functional.pad(map_st, (4, 4, 4, 4))
+        anomaly_map = torch.nn.functional.interpolate(
+            map_st, size=image_size, mode="bilinear",
+        )
+
+        # 返回 dummy score（实际 score 在 Service 层 mask 后计算）
+        return anomaly_map, torch.zeros(anomaly_map.shape[0], 1)
 
 
 def train_efficientad(
@@ -192,22 +222,28 @@ def train_efficientad(
         model.to(device)
         torch_model = model.model.to(device).eval()
 
-        # 计算最优阈值：在正常图像上推理，取分数的指定分位数作为阈值
+        # 保存 state_dict（在任何设备迁移之前保存训练后的权重）
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        state_dict_path = output.with_suffix(".state_dict.pt")
+        torch.save(torch_model.state_dict(), str(state_dict_path))
+
+        # 创建推理 wrapper 并移到 CPU（确保阈值计算和 trace 都在 CPU 上，
+        # 避免 CUDA 设备常量泄漏到 TorchScript 图，同时保证跨平台阈值一致性）
+        model.eval()
+        export_model = _EfficientADExportWrapper(torch_model).cpu().eval()
+
+        # 计算最优阈值：使用与线上推理完全一致的 wrapper + scoring 方法，
+        # 在 CPU 上计算，确保训练环境 (CUDA) 和部署环境 (CPU/Mac) 阈值一致
         image_threshold = _compute_threshold(
-            model=torch_model,
+            model=export_model,
             image_paths=threshold_paths,
-            device=device,
+            device=torch.device("cpu"),
             input_size=efficientad_cfg.input_size,
             percentile=99.7,
         )
 
-        # 导出 TorchScript（推理用）
-        # 必须在 CPU 上 trace，否则图中会硬编码 cuda:0 导致 CPU-only 环境无法运行
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-
-        model.eval()
-        export_model = _EfficientADExportWrapper(torch_model).cpu().eval()
+        # 导出 TorchScript（CPU trace，确保跨平台兼容）
         example_input = torch.randn(
             1,
             3,
@@ -216,10 +252,6 @@ def train_efficientad(
         )
         traced = torch.jit.trace(export_model, example_input)
         traced.save(str(output))
-
-        # 保存原始 state_dict 供推理时多尺度特征提取
-        state_dict_path = output.with_suffix(".state_dict.pt")
-        torch.save(torch_model.state_dict(), str(state_dict_path))
 
         # 像素级阈值（取图像级阈值的 0.8 倍作为参考）
         pixel_threshold = round(image_threshold * 0.8, 6)
@@ -297,16 +329,17 @@ def _compute_threshold(
     percentile: float = 99.7,
     batch_size: int = 32,
 ) -> float:
-    """在正常图像上计算异常分数阈值（GPU 批量推理）。
+    """在正常图像上计算异常分数阈值。
 
-    分批加载图像文件并送 GPU 并行推理，避免在内存中同时持有所有高分辨率原图。
-    每批加载后立即 resize 并转为 tensor，释放原始 numpy 数组。
-
-    Args:
-        batch_size: GPU 推理 batch size，RTX 4060 8GB 推荐 32-64。
+    输入预处理与线上推理一致：resize → ImageNet normalize → 送入 _EfficientADExportWrapper。
+    适配新旧两种模型输出格式（tuple 或 InferenceBatch）。
     """
     model.eval()
     all_scores: list[float] = []
+
+    # ImageNet 统计量，与 _prepare_input 保持一致
+    imagenet_mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
+    imagenet_std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
 
     with torch.no_grad():
         for start in range(0, len(image_paths), batch_size):
@@ -318,21 +351,24 @@ def _compute_threshold(
                     batch_tensors.append(torch.zeros(3, input_size, input_size))
                     continue
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                del img  # 立即释放高分辨率原图，只保留 RGB
+                del img
                 img_resized = cv2.resize(img_rgb, (input_size, input_size))
+                # 与线上 _prepare_input 一致：/255 → ImageNet normalize
                 t = torch.from_numpy(img_resized).float().permute(2, 0, 1) / 255.0
+                t = (t - imagenet_mean.squeeze(0)) / imagenet_std.squeeze(0)
                 batch_tensors.append(t)
 
             batch = torch.stack(batch_tensors).to(device)
             output = model(batch)
-            scores = _extract_pred_score(output)
+            pred_score = _extract_pred_score(output)
 
-            if isinstance(scores, torch.Tensor):
-                all_scores.extend(scores.detach().cpu().tolist())
-            elif isinstance(scores, (list, tuple)):
-                all_scores.extend(float(s) for s in scores)
+            if isinstance(pred_score, torch.Tensor):
+                # flatten 处理 (B,1) 和 (B,) 两种 shape
+                all_scores.extend(pred_score.detach().cpu().flatten().tolist())
+            elif isinstance(pred_score, (list, tuple)):
+                all_scores.extend(float(s) for s in pred_score)
             else:
-                all_scores.append(float(scores))
+                all_scores.append(float(pred_score))
 
     if not all_scores:
         return 0.5
@@ -343,16 +379,19 @@ def _compute_threshold(
 
 
 def _extract_pred_score(output: object) -> torch.Tensor | float:
-    """从 anomalib 1.x/2.x 输出中提取图像级异常分数。"""
+    """从模型输出中提取图像级异常分数。
+
+    兼容两种格式：
+    - _EfficientADExportWrapper：tuple (anomaly_map, pred_score)
+    - anomalib EfficientAdModel：InferenceBatch 含 .pred_score 属性
+    """
+    if isinstance(output, (tuple, list)) and len(output) >= 2:
+        # wrapper 输出 (anomaly_map, pred_score)
+        return output[1]
     if hasattr(output, "pred_score"):
         return getattr(output, "pred_score")
     if isinstance(output, dict) and "pred_score" in output:
         return output["pred_score"]
-    if isinstance(output, (tuple, list)):
-        if len(output) >= 3 and torch.is_tensor(output[2]):
-            return output[0]
-        if len(output) >= 2:
-            return output[1]
     if torch.is_tensor(output):
         return output.mean()
     raise RuntimeError(f"EfficientAD 输出格式不支持: {type(output)}")
