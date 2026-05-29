@@ -43,10 +43,10 @@
               "segmentation_hole_fill_max_area_ratio": 0.08
             },
             "roi": {
-              "crop_expand_ratio": 0.0,
+              "crop_expand_ratio": 0.1,
               "crop_shrink_ratio": 0.0,
               "mask_erode_pixels": 3,
-              "edge_ignore_pixels": 12,
+              "edge_ignore_pixels": 6,
               "alignment": {
                 "output_width": 256,
                 "output_height": 256
