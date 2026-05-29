@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>370+ 源文件</b> · <b>65+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>8 个前端页面</b> · <b>11 个 ML 模块</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
+  <b>360+ 源文件</b> · <b>75+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>10 个前端页面</b> · <b>24 个 ML 模块文件</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
 </p>
 
 ---
@@ -53,7 +53,7 @@ flowchart TB
         INGEST["📥 异常样本<br/>收集缓冲"] --> ISOLATION["🔒 数据隔离<br/>seat_model+camera+region"]
         ISOLATION --> MASK["🧹 Mask Refinement<br/>背景消除/标准化"]
         MASK --> DUAL["🔀 双轨对比<br/>Raw vs Refined Embedding"]
-        DUAL --> EMBED["🧬 Embedding<br/>DINOv2-S · 384维"]
+        DUAL --> EMBED["🧬 Embedding<br/>DINOv2-S · 384 维"]
         EMBED --> CLUSTER["🔬 聚类分析<br/>UMAP + HDBSCAN"]
         CLUSTER --> GRAPH["🕸 相似度图谱<br/>KNN Graph Builder"]
         CLUSTER --> VLM["🤖 多模态解释<br/>Qwen2.5-VL"]
@@ -144,7 +144,9 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>特征提取</b>) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>ST-only 异常评分</b> + grid pooling) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li><b>EfficientAD 评分管线</b>：ST-only 评分（去除 AE 双分支噪声）→ 无 quantile 归一化 → adaptive_avg_pool2d(8×8) grid pooling 替换单像素 amax，暗表面缺陷检测能力从 0 提升至可用</li>
+        <li><b>跨平台 TorchScript</b>：CPU trace 导出 + JIT warmup 校验 + state_dict eager 回退，兼容有无 CUDA 环境</li>
         <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher/Student 完整输出 (384d/768d) + Teacher-Student 差异特征 (384d)，保留 anomaly representation 而非仅 score</li>
         <li><b>Feature Calibration Layer</b>：CameraNormalizer (机位级 per-channel 标准化，teacher/student/difference 三组特征) → EmbeddingProjector (多尺度特征 → PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → EMAFeatureCenter (缺陷类型特征中心 EMA 追踪)，跨机位统一特征空间</li>
         <li><b>Region Proposal Refinement</b>：热力图 → 自适应阈值 → 形态学清理 → 连通域 → 区域裁剪，每个 defect patch 独立送入 Filter</li>
@@ -267,6 +269,28 @@ flowchart TB
       </ul>
     </td>
   </tr>
+  <tr>
+    <td width="50%">
+      <h3>📷 相机配置管理 + batch_train</h3>
+      <ul>
+        <li><b>SeatModel 级别全局模型</b>：YOLO (ROI 检测) + EmbeddingProjector + WhiteningTransform，所有机位共享</li>
+        <li><b>Camera 级别模型</b>：EfficientAD (异常检测) + Filter Classifier (误报抑制)，每机位独立配置</li>
+        <li><b>ConfigBuilder 动态构建</b>：从数据库读取配置 → 自动生成 seat_defect_core 运行时 config.json，默认值对齐 config.best.json</li>
+        <li><b>batch_train 产物导入</b>：训练完成后自动导入 CameraNormalizer + EmbeddingProjector + WhiteningTransform 产物至数据库</li>
+        <li><b>前端可视化</b>：SeatModel 列表状态标签 (模型绑定/ROI 配置完整性) · 全局模型配置卡片 · 机位参数表单</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🧬 EfficientAD 训练管线</h3>
+      <ul>
+        <li><b>_EfficientADExportWrapper</b>：封装 anomalib EfficientAD 模型，统一评分接口（ST distance → grid pool → pred_score）</li>
+        <li><b>CPU 优先导出</b>：训练完成后在 CPU 上 trace → TorchScript 导出，保证跨平台兼容</li>
+        <li><b>阈值自动计算</b>：在正常样本上运行 wrapper → 取 pred_score 的 99.0 percentile 作为 image_threshold</li>
+        <li><b>训练/推理一致性</b>：_compute_threshold 与 predict() 共享 _prepare_input 预处理 + wrapper.forward() 评分逻辑</li>
+        <li><b>Celery 异步训练</b>：通过 API 触发 → Celery Worker 执行 → MLflow 注册 → 自动回写 camera_config</li>
+      </ul>
+    </td>
+  </tr>
 </table>
 
 ---
@@ -295,9 +319,9 @@ flowchart TB
 
 ```
 offline-analysis-platform/
-├── backend/                          # Python 后端（160+ 文件）
+├── backend/                          # Python 后端（200 文件）
 │   ├── app/
-│   │   ├── api/                      # 17 个 FastAPI 路由，65+ 端点
+│   │   ├── api/                      # 19 个 FastAPI 路由，75+ 端点
 │   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
 │   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
 │   │   │   ├── review/               #   提交复核 · 查询历史
@@ -305,15 +329,20 @@ offline-analysis-platform/
 │   │   │   ├── knowledge/            #   增删改查 · 全文搜索 · 按簇查询
 │   │   │   ├── rules/                #   增删改查 · 在线评估 · 开关 · 从知识库生成
 │   │   │   ├── training/             #   分类器训练 · 度量学习训练 · 状态查询
+│   │   │   ├── efficientad_training/ #   🧬 EfficientAD 训练 · 状态查询
 │   │   │   ├── registry/             #   部署 · 回滚 · 部署历史
 │   │   │   ├── multimodal/           #   VLM 单簇 · 批量 · 单异常分析
 │   │   │   ├── taxonomy/             #   🌳 缺陷分类树 · 统计 · 自动分类
 │   │   │   ├── graph/                #   🕸 相似度图谱 · 邻居 · 路径 · 子图
 │   │   │   ├── mask_refinement/      #   🧹 背景消除 · 图像标准化
 │   │   │   ├── gate/                 #   🛡 门禁状态 · 评估报告 · 手动触发
-│   │   │   └── hot_reload/           #   🔴 热重载信号 · A/B 切换 · 回滚
+│   │   │   ├── hot_reload/           #   🔴 热重载信号 · A/B 切换 · 回滚
+│   │   │   ├── inspection/           #   🔍 在线检测任务分发 · 结果查询
+│   │   │   ├── camera_config/        #   📷 座椅型号 + 机位配置 CRUD · batch_train 产物导入
+│   │   │   └── reference/            #   📎 参考数据管理
 │   │   ├── domain/                   # 8 个领域模型 + Protocol 接口
-│   │   ├── services/                 # 16 个业务服务模块
+│   │   ├── services/                 # 17 个业务服务模块
+│   │   │   ├── camera_config/         #   📷 相机配置构建 (ConfigBuilder)
 │   │   │   ├── gate/                 #   🛡 模型门禁评估（召回率/抑制率/分层）
 │   │   │   ├── mask_refinement/      #   🧹 背景消除 + 🔀 双轨对比
 │   │   │   └── ...
@@ -321,6 +350,8 @@ offline-analysis-platform/
 │   │   ├── models/                   # 14 个 SQLAlchemy ORM 表（含 pgvector）
 │   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
 │   │   ├── workers/                  # 14 个 Celery Worker 模块
+│   │   │   ├── efficientad_training_worker/  # 🧬 EfficientAD 训练任务
+│   │   │   ├── inspection_worker/    #   🔍 在线检测任务
 │   │   │   ├── gate_worker/          #   🛡 门禁评估任务
 │   │   │   └── ...
 │   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
@@ -332,7 +363,7 @@ offline-analysis-platform/
 │   ├── Dockerfile                    # API 镜像
 │   ├── Dockerfile.worker             # GPU Worker 镜像
 │   └── pyproject.toml                # 依赖与工具配置
-├── frontend/                         # React 前端（33+ 源文件）
+├── frontend/                         # React 前端（71 源文件）
 │   ├── index.html                    # Vite 入口 HTML
 │   ├── vite.config.ts                # Vite 配置 + API 代理
 │   ├── tailwind.config.js            # TailwindCSS 配置
@@ -342,17 +373,18 @@ offline-analysis-platform/
 │       │   ├── dashboard/            #   看板：UMAP 散点图 · 复核柱状图 · 统计卡片
 │       │   ├── cluster-review/       #   聚类复核：列表 · 详情弹窗 · 复核弹窗
 │       │   ├── anomaly-browser/      #   异常浏览：筛选 · 列表 · 详情 · 相似检索
-│       │   ├── anomaly-upload/       #   异常上传：JSON元数据 · multipart文件上传
 │       │   ├── knowledge-base/       #   知识库：增删改查 · 全文搜索 · 创建表单
 │       │   ├── rules-engine/         #   规则引擎：启停开关 · 评估模拟器 · 创建表单
 │       │   ├── training/             #   训练管理：模型列表 · 启动训练 · 状态轮询
-│       │   └── model-deploy/         #   模型部署：部署历史 · 部署操作 · 回滚确认
+│       │   ├── model-deploy/         #   模型部署：部署历史 · 部署操作 · 回滚确认
+│       │   ├── inspection/           #   🔍 在线检测：选型号+机位 → 上传图片 → 查看结果
+│       │   └── camera-config/        #   📷 相机配置：座椅型号+机位模型绑定与参数配置
 │       ├── api/                      # Axios API 客户端（按 domain 拆分）
 │       ├── types/                    # TypeScript 类型定义（按 domain 拆分）
 │       ├── hooks/                    # useApi 通用 hook
 │       ├── components/ui/            # PageHeader 等共享 UI 组件
 │       └── lib/                      # constants 等共享常量
-└── ml/                               # ML 模块（18 文件）
+└── ml/                               # ML 模块（24 文件）
     ├── embedding/                    # DINOv2-S 提取器（384 维）
     ├── clustering/                   # UMAP + HDBSCAN Pipeline
     ├── classifier/                   # Filter Classifier
@@ -416,9 +448,14 @@ seat_defect_core/
 │   └── ...
 ├── types/                            # 类型定义（FramePacket, CameraInspectionResult 等）
 ├── yolo/                             # YOLO 检测模块
-├── efficientad/                       # EfficientAD 异常检测模块
+├── efficientad/                       # EfficientAD 异常检测引擎（ST-only 评分 + grid pooling + JIT/state_dict 双加载）
 ├── cvops/                            # 图像预处理（ROI / 质量 / 区域分割）
-└── artifacts/                        # 调试产物生成
+├── training/                         # 🧬 模型训练
+│   ├── efficientad.py               #   _EfficientADExportWrapper（CPU 导出 + 阈值计算）
+│   └── batch_train.py               #   批量训练脚本
+├── core_types/                       # 核心类型定义（geometry / input / pipeline / results）
+├── artifacts/                        # 调试产物生成
+└── tests/                            # 标定模块测试
 ```
 
 ---
@@ -525,6 +562,16 @@ cd seat_defect_core && uv sync && cd ..
                      POST   /api/training/start                    🎯 模型训练
                      GET    /api/training/status/{task_id}
 
+                     POST   /api/efficientad-training/start     🧬 EfficientAD 训练
+                     GET    /api/efficientad-training/status/{task_id}
+
+                     POST   /api/inspection/run-with-files      🔍 在线检测（调用 seat_defect_core）
+                     GET    /api/inspection/result/{task_id}
+
+                     CRUD   /api/camera-config/seat-models      📷 座椅型号管理
+                     CRUD   /api/camera-config/cameras          机位配置管理
+                     POST   /api/camera-config/cameras/import-artifacts  batch_train 产物导入
+
                      GET    /api/gates/status/{model_version_id}  🛡 模型门禁
                      GET    /api/gates/report/{model_version_id}
                      POST   /api/gates/evaluate
@@ -571,11 +618,12 @@ cd seat_defect_core && uv sync && cd ..
 | **Dashboard** | `/` | Plotly UMAP 散点图 · 复核状态分布柱状图 · 4 个统计指标卡片 |
 | **Cluster Review** | `/clusters` | 聚类列表筛选 (seat_model/camera/region) · 详情弹窗 · 双轨对比弹窗 · 一键复核 |
 | **Anomaly Browser** | `/anomalies` | seat_model/camera/region/状态筛选 · PhotoView 图片浏览（缩放/旋转） · 相似检索 |
-| **Anomaly Upload** | `/upload` | JSON 元数据提交 · multipart 文件上传（原图/ROI/热力图/裁剪图） |
 | **Knowledge Base** | `/knowledge` | 条目增删改查 · 全文搜索 · 按分类/缺陷类型筛选 · 一键生成规则 |
 | **Rules Engine** | `/rules` | 规则增删改查 · 启停开关 · 在线评估模拟器 · 从知识库生成规则 |
 | **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） · 🛡 门禁状态 + 详细报告弹窗 |
 | **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 🔴 热重载状态面板 (Checksum/完整性/Canary/回滚) |
+| **Inspection** | `/inspection` | 选择座椅型号+机位 → 上传图片 → 调用 seat_defect_core 在线检测 → 展示 NG/OK 结果与异常分数 |
+| **Camera Config** | `/cameras` | 座椅型号管理 (YOLO/Projector/Whitening 全局模型) · 机位配置 (EfficientAD/Filter Classifier/ROI/标定参数) · batch_train 产物导入 |
 
 ---
 
@@ -651,15 +699,47 @@ mkdir -p sample_images
 ```json
 {
   "seat_defect_inspection": {
+    "seat_model_id": "seat_model_A",
     "upload_base_url": "http://offline-platform:8000",
+    "yolo": {
+      "model_path": "./models/seat_model_A/yolo/model.pt",
+      "device": "cpu",
+      "confidence_threshold": 0.15
+    },
+    "projector": {
+      "model_path": "./models/seat_model_A/projector/model.pt"
+    },
+    "whitening_transform": {
+      "matrix_path": "./models/seat_model_A/whitening/whitening_matrix.npy"
+    },
     "cameras": [{
-      "camera_id": "line_a_cam_01",
+      "camera_id": "cam_front",
+      "roi": {
+        "polygon": [[100, 200], [800, 200], [800, 600], [100, 600]],
+        "edge_ignore": 12,
+        "mask_erode": 3
+      },
+      "efficientad": {
+        "enabled": true,
+        "model_path": "./models/seat_model_A/cam_front/efficientad/model.pt",
+        "device": "cpu",
+        "input_size": 256,
+        "batch_size": 1,
+        "min_valid_pixel_ratio": 0.2,
+        "use_st_only": true
+      },
       "filter_classifier": {
         "enabled": true,
-        "model_path": "./deployed_models/line_a/filter_classifier/",
-        "device": "cuda",
+        "model_path": "./models/seat_model_A/cam_front/filter_classifier/model.pt",
+        "device": "cpu",
         "input_size": 448,
         "confidence_threshold": 0.5
+      },
+      "calibration": {
+        "enabled": true,
+        "camera_normalizer_path": "./models/seat_model_A/cam_front/calib/normalizer.pkl",
+        "projector_path": "./models/seat_model_A/projector/model.pt",
+        "whitening_matrix_path": "./models/seat_model_A/whitening/whitening_matrix.npy"
       },
       "proposal": {
         "heatmap_threshold_mode": "adaptive",
@@ -671,21 +751,14 @@ mkdir -p sample_images
       },
       "rule_engine": {
         "enabled": true,
-        "rules": [
-          {
-            "name": "low_evidence_false_alarm",
-            "max_anomaly_score": 0.8,
-            "require_filter_false_alarm": true,
-            "action": "suppress_to_ok"
-          }
-        ]
+        "rules": []
       }
     }]
   }
 }
 ```
 
-> **关键设计**：Three-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+EAD特征+Unified Embedding 三模态判定，若判定为误报则降级为 OK，绝不将 OK 改为 NG。Feature Dropout 保证 fallback。推理失败时默认 `is_real_defect=True`（故障安全）。Region Proposal 将 ROI 拆分为独立 defect patch，加权聚合得出最终判定。
+> **关键设计**：EfficientAD 采用 ST-only 评分（去噪 AE 分支）+ adaptive_avg_pool2d(8×8) grid pooling 替代单像素 amax，大幅提升暗表面缺陷检测能力。Three-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+EAD特征+Unified Embedding 三模态判定，若判定为误报则降级为 OK。Feature Dropout 保证 fallback，推理失败默认 `is_real_defect=True`（故障安全）。
 
 ---
 
