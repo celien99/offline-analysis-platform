@@ -202,17 +202,17 @@ def train_efficientad(
         )
 
         # 导出 TorchScript（推理用）
+        # 必须在 CPU 上 trace，否则图中会硬编码 cuda:0 导致 CPU-only 环境无法运行
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
         model.eval()
-        export_model = _EfficientADExportWrapper(torch_model).to(device).eval()
+        export_model = _EfficientADExportWrapper(torch_model).cpu().eval()
         example_input = torch.randn(
             1,
             3,
             efficientad_cfg.input_size,
             efficientad_cfg.input_size,
-            device=device,
         )
         traced = torch.jit.trace(export_model, example_input)
         traced.save(str(output))
@@ -452,3 +452,39 @@ def _configure_gpu() -> None:
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+
+
+def re_export_cpu(state_dict_path: str, output_path: str, *, input_size: int = 256) -> str:
+    """将 CUDA traced 的 EfficientAD 模型重新导出为 CPU 兼容版本。
+
+    从训练时保存的 state_dict 加载权重，在 CPU 上 trace 并保存。
+    解决模型在 Windows+CUDA 上训练后无法在 Mac/Linux CPU 环境运行的问题。
+
+    Args:
+        state_dict_path: 训练时保存的 .state_dict.pt 文件路径
+        output_path: 输出 TorchScript .pt 文件路径
+        input_size: 模型输入尺寸（需与训练时一致）
+
+    Returns:
+        str: 输出文件路径
+    """
+    import torch as _torch
+
+    from anomalib.models import EfficientAd as _EfficientAd
+
+    state_dict = _torch.load(state_dict_path, map_location="cpu", weights_only=True)
+    model = _EfficientAd(teacher_out_channels=384, model_size="medium")
+    model.model.load_state_dict(state_dict)
+    model.model.eval()
+
+    export_model = _EfficientADExportWrapper(model.model).cpu().eval()
+    example_input = _torch.randn(1, 3, input_size, input_size)
+    traced = _torch.jit.trace(export_model, example_input)
+
+    # 验证导出结果能在 CPU 上正常推理
+    _ = traced(example_input)
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    traced.save(str(out))
+    return str(out)
