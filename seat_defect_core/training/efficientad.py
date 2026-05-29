@@ -330,7 +330,7 @@ def _compute_threshold(
     image_paths: list[Path],
     device: torch.device,
     input_size: int,
-    percentile: float = 99.7,
+    percentile: float = 99.0,
     batch_size: int = 32,
 ) -> float:
     """在正常图像上计算异常分数阈值。
