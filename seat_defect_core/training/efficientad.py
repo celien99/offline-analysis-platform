@@ -244,7 +244,7 @@ def train_efficientad(
             image_paths=threshold_paths,
             device=torch.device("cpu"),
             input_size=efficientad_cfg.input_size,
-            percentile=99.7,
+            percentile=99.0,
         )
 
         # 导出 TorchScript（CPU trace，确保跨平台兼容）
@@ -545,3 +545,72 @@ def re_export_cpu(
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
 
     return str(out)
+
+
+def recompute_threshold(
+    state_dict_path: str,
+    image_dir: str,
+    *,
+    input_size: int = 256,
+    percentile: float = 99.0,
+    batch_size: int = 32,
+    device: str = "cpu",
+) -> dict:
+    """从 state_dict 重建模型，在给定正常图像上重新计算异常分数阈值。
+
+    用于以下场景：
+    - 训练时 _prepare_input 使用了旧版 gray canvas letterbox，
+      需要在新版 reflection padding 上重算阈值。
+    - 阈值与推理环境不一致时需要重新校准。
+
+    Args:
+        state_dict_path: 训练时保存的 .state_dict.pt 文件路径。
+        image_dir: 正常参考图像目录（支持 jpg/png/bmp）。
+        input_size: 模型输入尺寸，需与训练时一致。
+        percentile: 阈值百分位数，默认 99.0。
+        batch_size: 批量推理大小。
+        device: 推理设备 (cpu/cuda/mps)。
+
+    Returns:
+        dict: {image_threshold, pixel_threshold, image_count, scores_percentiles}
+    """
+    import torch as _torch
+    from pathlib import Path as _Path
+
+    from anomalib.models import EfficientAd as _EfficientAd
+
+    _device = _torch.device(device)
+    if _device.type == "cuda" and not _torch.cuda.is_available():
+        _device = _torch.device("cpu")
+    if _device.type == "mps" and not _torch.backends.mps.is_available():
+        _device = _torch.device("cpu")
+
+    state_dict = _torch.load(state_dict_path, map_location="cpu", weights_only=True)
+    model = _EfficientAd(teacher_out_channels=384, model_size="medium")
+    model.model.load_state_dict(state_dict)
+    model.model.eval()
+
+    export_model = _EfficientADExportWrapper(model.model).to(_device).eval()
+
+    image_dir_path = _Path(image_dir)
+    image_paths: list[_Path] = []
+    for ext in ("*.jpg", "*.jpeg", "*.png", "*.bmp"):
+        image_paths.extend(sorted(image_dir_path.glob(ext)))
+    if not image_paths:
+        raise FileNotFoundError(f"{image_dir} 中未找到图像文件")
+
+    image_threshold = _compute_threshold(
+        model=export_model,
+        image_paths=image_paths,
+        device=_device,
+        input_size=input_size,
+        percentile=percentile,
+        batch_size=batch_size,
+    )
+    pixel_threshold = round(image_threshold * 0.8, 6)
+
+    return {
+        "image_threshold": image_threshold,
+        "pixel_threshold": pixel_threshold,
+        "image_count": len(image_paths),
+    }

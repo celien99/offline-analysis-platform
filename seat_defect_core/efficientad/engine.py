@@ -418,10 +418,13 @@ def _resolve_device(requested: str) -> torch.device:
 
 
 def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
-    """BGR 或 BGRA → RGB → resize → 非目标区域用 ImageNet 均值灰填充 → normalize → tensor。
+    """BGR 或 BGRA → RGB → resize → reflection pad → normalize → tensor。
 
-    当输入包含 alpha 通道时，alpha=0 的区域（letterbox padding）会被填充为
-    ImageNet 均值灰，避免黑边在 EfficientAD 中产生异常响应。
+    padding 使用 cv2.BORDER_REFLECT_101（镜像反射），避免 ImageNet 均值灰
+    在 EfficientAD 中产生虚假的高 ST distance 响应。
+
+    当输入包含 alpha 通道时，alpha=0 的区域同样用反射填充补齐，
+    而非均值灰，保证整个输入的特征响应一致。
     """
     has_alpha = image.ndim == 3 and image.shape[2] == 4
     if has_alpha:
@@ -430,32 +433,41 @@ def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
 
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # 保持宽高比的 resize（letterbox 等效：先 resize 再放 canvas 中央）
+    # 保持宽高比的 resize，不足部分用反射填充补齐
     h, w = rgb.shape[:2]
     scale = min(float(input_size) / float(h), float(input_size) / float(w))
     new_h = max(1, int(round(h * scale)))
     new_w = max(1, int(round(w * scale)))
     resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    # 放在 ImageNet 均值灰画布中央
-    canvas = np.full(
-        (input_size, input_size, 3),
-        IMAGENET_MEAN_GRAY_RGB,
-        dtype=np.uint8,
-    )
-    offset_y = (input_size - new_h) // 2
-    offset_x = (input_size - new_w) // 2
-    canvas[offset_y : offset_y + new_h, offset_x : offset_x + new_w] = resized
-
-    # 如果原图有 alpha 通道，将 alpha=0 的 padding 也填充为均值灰
+    # alpha 通道同步 resize
     if has_alpha:
         alpha_resized = cv2.resize(alpha, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-        alpha_canvas = np.zeros((input_size, input_size), dtype=np.uint8)
-        alpha_canvas[offset_y : offset_y + new_h, offset_x : offset_x + new_w] = alpha_resized
-        non_target_mask = alpha_canvas == 0
-        canvas[non_target_mask] = IMAGENET_MEAN_GRAY_RGB
+        # 将 alpha 作为第 4 通道合并，统一反射填充
+        resized_bgra = cv2.cvtColor(resized, cv2.COLOR_RGB2BGRA)
+        resized_bgra[:, :, 3] = alpha_resized
+        pad_top = (input_size - new_h) // 2
+        pad_bottom = input_size - new_h - pad_top
+        pad_left = (input_size - new_w) // 2
+        pad_right = input_size - new_w - pad_left
+        padded_bgra = cv2.copyMakeBorder(
+            resized_bgra, pad_top, pad_bottom, pad_left, pad_right,
+            cv2.BORDER_REFLECT_101,
+        )
+        # 还原 alpha=0 区域：反射填充无法为透明区域生成有意义的像素，
+        # 但透明区域本就不参与 scoring（由 target_mask 排除），填边缘像素即可
+        padded = cv2.cvtColor(padded_bgra[:, :, :3], cv2.COLOR_BGR2RGB)
+    else:
+        pad_top = (input_size - new_h) // 2
+        pad_bottom = input_size - new_h - pad_top
+        pad_left = (input_size - new_w) // 2
+        pad_right = input_size - new_w - pad_left
+        padded = cv2.copyMakeBorder(
+            resized, pad_top, pad_bottom, pad_left, pad_right,
+            cv2.BORDER_REFLECT_101,
+        )
 
-    normalized = (canvas.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
+    normalized = (padded.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
     tensor = torch.from_numpy(np.transpose(normalized, (2, 0, 1))).unsqueeze(0).float()
     return tensor
 
