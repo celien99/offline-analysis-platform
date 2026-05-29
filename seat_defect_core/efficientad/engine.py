@@ -548,16 +548,13 @@ def _normalize_heatmap(
     target_binary: np.ndarray,
     threshold: float,
 ) -> np.ndarray:
-    """以检测阈值为锚点归一化 anomaly_map 到 [0, 1]。
+    """两段分段线性归一化 anomaly_map 到 [0, 1]。
 
-    映射规则：
-    - 0.0           → 完全正常（dark blue）
-    - threshold      → ~0.5 边界（yellow/green）
-    - target_max     → 1.0 明确异常（red），当存在超阈值像素时
+    映射规则（当存在超阈值像素时）：
+    - [0, threshold]   → [0, 0.3]      blue → teal（正常区域保持冷色）
+    - [threshold, peak] → [0.3, 1.0]    teal → red（异常区域充分展开）
 
-    存在超阈值异常像素时，使用实际最大像素值作为 vmax，
-    确保缺陷热点一定显示为红色。无超阈值像素时保持不变，
-    避免正常图像上产生虚假暖色信号。
+    无超阈值像素时使用单段线性，锚定 threshold → 0.5。
     """
     target_pixels = anomaly_map[target_binary > 0]
     if target_pixels.size == 0:
@@ -565,20 +562,29 @@ def _normalize_heatmap(
 
     target_max = float(target_pixels.max())
 
-    if threshold > 0 and target_max > threshold:
-        # 存在超阈值异常 → 让最热点映射到 1.0
-        vmax = max(target_max, threshold * 1.5)
-    elif threshold > 0:
-        # 全部低于阈值 → 锚定阈值到 0.5，避免正常区域出现暖色
-        vmax = threshold * 2.0
-    else:
-        # 无有效阈值时，使用目标区域 99 分位数作为参考
-        vmax = float(np.percentile(target_pixels, 99.0))
-        if vmax < 1e-8:
-            vmax = 1.0
-
-    # 非目标区域清零，避免背景噪声在热力图中显示为异常信号
+    # 非目标区域清零
     masked = anomaly_map.copy()
     masked[target_binary == 0] = 0.0
-    normalized = masked / vmax
-    return np.clip(normalized, 0.0, 1.0).astype(np.float32)
+
+    if threshold > 0 and target_max > threshold:
+        # 两段分段：阈值以下压缩到 [0, 0.3]，阈值以上展开到 [0.3, 1.0]
+        below = masked <= threshold
+        above = masked > threshold
+        normalized = np.zeros_like(masked, dtype=np.float32)
+        normalized[below] = (masked[below] / threshold) * 0.3
+        span = target_max - threshold
+        if span > 1e-8:
+            normalized[above] = 0.3 + 0.7 * (masked[above] - threshold) / span
+        else:
+            normalized[above] = 0.3
+        return normalized
+
+    if threshold > 0:
+        # 全部低于阈值 → 单段线性，threshold → 0.5
+        return np.clip(masked / (threshold * 2.0), 0.0, 1.0).astype(np.float32)
+
+    # 无有效阈值 → 以 99 分位数为参考
+    vmax = float(np.percentile(target_pixels, 99.0))
+    if vmax < 1e-8:
+        vmax = 1.0
+    return np.clip(masked / vmax, 0.0, 1.0).astype(np.float32)
