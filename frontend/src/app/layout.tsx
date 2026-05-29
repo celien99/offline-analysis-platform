@@ -128,7 +128,7 @@ export default function AppLayout({ children }: Props) {
             </div>
           </div>
         </Header>
-        <Content style={{ overflowY: "auto" }} className="m-6">{children}</Content>
+        <Content className="p-6 overflow-y-auto">{children}</Content>
       </Layout>
     </Layout>
   );
