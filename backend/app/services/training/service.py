@@ -26,7 +26,6 @@ class TrainingService:
     async def get_training_readiness(
         self, seat_model_id: str | None = None,
         camera_id: str | None = None,
-        region_id: str | None = None,
     ) -> dict[str, object]:
         """检查是否有足够的新审核标签触发自动训练。支持隔离键过滤。"""
         from app.core.config import settings
@@ -44,12 +43,10 @@ class TrainingService:
         total_reviewed = await self._cluster_repo.count_reviewed(
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
         new_reviewed = await self._cluster_repo.count_reviewed_since(
             since, seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
 
         ready = (
@@ -65,7 +62,6 @@ class TrainingService:
             last_trained_at=str(latest_run.started_at) if latest_run else None,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
         return {
             "ready": ready,
@@ -80,7 +76,6 @@ class TrainingService:
         anomaly_ids: list[str] | None = None,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
-        region_id: str | None = None,
     ) -> dict[str, list[str]]:
         training_data: dict[str, list[str]] = {
             "real_defect": [],
@@ -91,7 +86,6 @@ class TrainingService:
             "reviewed", offset=0, limit=10000,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
 
         membership_repo = ClusterMembershipRepository(self._session)

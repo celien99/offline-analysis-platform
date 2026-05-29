@@ -106,27 +106,25 @@ class InspectionService:
         self._calibration_registry = self._init_calibration()
 
     def _init_calibration(self) -> Optional[CalibrationRegistry]:
-        """从配置中初始化 CalibrationRegistry，收集所有 per-camera normalizer 路径。"""
+        """从配置中初始化 CalibrationRegistry，合并顶层 calibration 和 per-camera normalizer 路径。"""
         all_cameras: list[CameraConfig] = list(self.config.cameras)
         for seat_model in self.config.seat_models:
             all_cameras.extend(seat_model.cameras)
 
-        # 收集所有 camera 的 normalizer 路径
-        norm_paths: dict[str, str] = {}
-        cal_cfg: CalibrationConfig | None = None
+        # 以顶层 calibration 为基础，浅拷贝 camera_norm_paths 避免污染原配置
+        if self.config.calibration is not None:
+            cal_cfg = self.config.calibration
+            cal_cfg.camera_norm_paths = dict(cal_cfg.camera_norm_paths)
+        else:
+            cal_cfg = CalibrationConfig()
+
+        # 收集所有 per-camera normalizer 路径
         for camera in all_cameras:
             if camera.calibration is not None:
-                if cal_cfg is None:
-                    cal_cfg = camera.calibration
                 stats_path = camera.calibration.camera_norm.stats_path
                 if stats_path:
-                    norm_paths[camera.camera_id] = stats_path
+                    cal_cfg.camera_norm_paths[camera.camera_id] = stats_path
 
-        if cal_cfg is None:
-            cal_cfg = CalibrationConfig()
-        # 将收集到的 per-camera normalizer 路径合并进配置
-        if norm_paths:
-            cal_cfg.camera_norm_paths = norm_paths
         return CalibrationRegistry(cal_cfg)
 
     @property

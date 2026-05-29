@@ -31,19 +31,17 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
             logger.info("pipeline_no_pending_anomalies")
             return {"status": "skipped", "reason": "no_pending"}
 
-        # 按 seat_model_id + camera_id + region_id 三级隔离分组
-        # 分组键格式: "model::camera::region"，None 用 __unknown__ 占位
+        # 按 seat_model_id + camera_id 二级隔离分组
+        # 分组键格式: "model::camera"，None 用 __unknown__ 占位
         def _build_group_key(a: object) -> str:
             sm = a.seat_model_id or "__unknown__"
             cam = a.camera_id or "__unknown__"
-            reg = a.region_id or "__unknown__"
-            return f"{sm}::{cam}::{reg}"
+            return f"{sm}::{cam}"
 
         groups: dict[str, dict[str, object]] = defaultdict(lambda: {
             "anomalies": [],
             "seat_model_id": None,
             "camera_id": None,
-            "region_id": None,
         })
         for a in pending:
             if a.crop_path:
@@ -56,15 +54,13 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
                     groups[key]["seat_model_id"] = a.seat_model_id
                 if a.camera_id:
                     groups[key]["camera_id"] = a.camera_id
-                if a.region_id:
-                    groups[key]["region_id"] = a.region_id
 
         if not groups:
             logger.info("pipeline_no_crops")
             return {"status": "skipped", "reason": "no_crop_path"}
 
         # 解析分组键，按 seat_model_id 聚合 celery chain
-        # 同一个 seat_model_id 下可能有多个 camera/region 分组
+        # 同一个 seat_model_id 下可能有多个 camera 分组
         from collections import defaultdict as dd
         sm_groups: dict[str, list[dict[str, object]]] = dd(list)
         for key, group_data in groups.items():
@@ -73,7 +69,6 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
                 "key": key,
                 "batch": group_data["anomalies"],
                 "camera_id": group_data["camera_id"],
-                "region_id": group_data["region_id"],
             })
 
         task_ids: list[str] = []
@@ -91,7 +86,6 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
                         kwargs={
                             "seat_model_id": sm_id if sm_id != "__unknown__" else None,
                             "camera_id": sub["camera_id"],
-                            "region_id": sub["region_id"],
                         },
                         immutable=True,
                     ),
@@ -104,7 +98,6 @@ def process_new_anomalies(limit: int = 500) -> dict[str, object]:
                     task_id=result.id,
                     seat_model_id=sm_id,
                     camera_id=sub["camera_id"],
-                    region_id=sub["region_id"],
                     anomaly_count=len(sub["batch"]),
                 )
 

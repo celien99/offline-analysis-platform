@@ -17,7 +17,6 @@ const FIELD_OPTIONS = [
   { value: "defect_type", label: "缺陷类型" },
   { value: "anomaly_score", label: "异常分数" },
   { value: "classifier_prediction", label: "分类器预测" },
-  { value: "region_id", label: "区域ID" },
 ];
 
 const OPERATOR_OPTIONS: Record<string, { value: string; label: string }[]> = {

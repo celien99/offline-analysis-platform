@@ -22,14 +22,12 @@ export default function ClusterReview() {
   const [comment, setComment] = useState("");
   const [seatModelFilter, setSeatModelFilter] = useState<string | undefined>();
   const [cameraFilter, setCameraFilter] = useState<string | undefined>();
-  const [regionFilter, setRegionFilter] = useState<string | undefined>();
   const [compareVisible, setCompareVisible] = useState(false);
 
   // 双轨对比
   const { data: compareData, refetch: refetchCompare, isFetching: compareLoading } = useDualTrackComparison({
     seat_model_id: seatModelFilter,
     camera_id: cameraFilter,
-    region_id: regionFilter,
   });
 
   // URL 携带 cluster_id 时自动打开详情
@@ -43,7 +41,6 @@ export default function ClusterReview() {
   const { data: listData, isLoading, refetch } = useClusterList(page, {
     seatModelId: seatModelFilter,
     cameraId: cameraFilter,
-    regionId: regionFilter,
   });
   const { data: selectedCluster } = useClusterDetail(selectedClusterId);
   const reviewMutation = useClusterReview();
@@ -99,13 +96,6 @@ export default function ClusterReview() {
               style={{ width: 120 }}
               value={cameraFilter}
               onChange={(e) => setCameraFilter(e.target.value || undefined)}
-            />
-            <Input
-              placeholder="区域ID"
-              allowClear
-              style={{ width: 120 }}
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value || undefined)}
             />
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
             <Button onClick={() => { setCompareVisible(true); refetchCompare(); }}>双轨对比</Button>

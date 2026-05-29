@@ -2,9 +2,9 @@ import { get, post } from "./client";
 import type { ClusterListResponse, ClusterDetail, ClusterVizData, ReviewSubmit, AnomalySummary } from "../types";
 
 export const clusterApi = {
-  list: (page = 1, pageSize = 20, status?: string, seatModelId?: string, cameraId?: string, regionId?: string, signal?: AbortSignal) =>
+  list: (page = 1, pageSize = 20, status?: string, seatModelId?: string, cameraId?: string, signal?: AbortSignal) =>
     get<ClusterListResponse>("/cluster/list", {
-      params: { page, page_size: pageSize, status, seat_model_id: seatModelId, camera_id: cameraId, region_id: regionId },
+      params: { page, page_size: pageSize, status, seat_model_id: seatModelId, camera_id: cameraId },
       signal,
     }),
 
@@ -24,12 +24,11 @@ export const clusterApi = {
     anomaly_ids?: string[];
     seat_model_id?: string;
     camera_id?: string;
-    region_id?: string;
   }, signal?: AbortSignal) => post("/cluster/trigger", params, { signal }),
 
-  visualization: (seatModelId?: string, cameraId?: string, regionId?: string, signal?: AbortSignal) =>
+  visualization: (seatModelId?: string, cameraId?: string, signal?: AbortSignal) =>
     get<ClusterVizData>("/cluster/visualization", {
-      params: { seat_model_id: seatModelId, camera_id: cameraId, region_id: regionId },
+      params: { seat_model_id: seatModelId, camera_id: cameraId },
       signal,
     }),
 };

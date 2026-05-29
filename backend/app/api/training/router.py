@@ -30,7 +30,6 @@ async def start_training(
         anomaly_ids=request.anomaly_ids,
         seat_model_id=request.seat_model_id,
         camera_id=request.camera_id,
-        region_id=request.region_id,
     )
     logger.info(
         "training_started",
@@ -58,7 +57,6 @@ async def start_metric_training(
         anomaly_ids=request.anomaly_ids,
         seat_model_id=request.seat_model_id,
         camera_id=request.camera_id,
-        region_id=request.region_id,
     )
     logger.info(
         "metric_training_dispatched",

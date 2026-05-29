@@ -29,7 +29,6 @@ logger = get_logger(__name__)
 async def upload_anomaly_with_files(
     camera_id: str = Form(..., max_length=64),
     seat_model_id: str | None = Form(default=None, max_length=128),
-    region_id: str | None = Form(default=None, max_length=64),
     source: str = Form(
         default="efficientad", pattern=r"^(efficientad|filter_classifier|rule_engine)$"
     ),
@@ -63,7 +62,6 @@ async def upload_anomaly_with_files(
     anomalies = await service.create_anomaly_with_files(
         camera_id=camera_id,
         seat_model_id=seat_model_id,
-        region_id=region_id,
         source=source,
         anomaly_score=anomaly_score,
         date_folder=date_folder,
@@ -94,7 +92,6 @@ async def upload_anomaly_with_files(
 async def list_anomalies(
     camera_id: str | None = Query(default=None),
     seat_model_id: str | None = Query(default=None),
-    region_id: str | None = Query(default=None),
     source: str | None = Query(default=None),
     status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -107,7 +104,6 @@ async def list_anomalies(
     records, total = await service.list_anomalies(
         camera_id=camera_id,
         seat_model_id=seat_model_id,
-        region_id=region_id,
         source=source,
         status=status,
         offset=offset,
@@ -130,7 +126,6 @@ async def list_anomalies(
 async def list_noise_anomalies(
     seat_model_id: str | None = Query(default=None),
     camera_id: str | None = Query(default=None),
-    region_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -145,7 +140,6 @@ async def list_noise_anomalies(
         offset=offset, limit=page_size,
         seat_model_id=seat_model_id,
         camera_id=camera_id,
-        region_id=region_id,
     )
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     return {
@@ -288,7 +282,6 @@ async def _to_response(record: AnomalyRecord, minio: MinIOClient) -> AnomalyResp
         anomaly_id=record.id,
         camera_id=record.camera_id,
         seat_model_id=record.seat_model_id,
-        region_id=record.region_id,
         source=record.source,
         anomaly_score=record.anomaly_score,
         date_folder=record.date_folder,

@@ -56,7 +56,6 @@ async def list_clusters(
     defect_type: str | None = Query(default=None),
     seat_model_id: str | None = Query(default=None),
     camera_id: str | None = Query(default=None),
-    region_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -70,7 +69,6 @@ async def list_clusters(
         defect_type=defect_type,
         seat_model_id=seat_model_id,
         camera_id=camera_id,
-        region_id=region_id,
         offset=offset,
         limit=page_size,
     )
@@ -83,7 +81,6 @@ async def list_clusters(
             cluster_id=c.id,
             seat_model_id=c.seat_model_id,
             camera_id=c.camera_id,
-            region_id=c.region_id,
             name=c.name,
             sample_count=c.sample_count,
             possible_type=c.possible_type,
@@ -194,7 +191,6 @@ async def get_cluster_detail(
         defect_type=cluster.defect_type,
         seat_model_id=cluster.seat_model_id,
         camera_id=cluster.camera_id,
-        region_id=cluster.region_id,
         representative_ids=rep_ids,
         representative_image_urls=urls,
         centroid=centroid,
@@ -266,7 +262,6 @@ async def trigger_clustering(
         anomaly_ids=request.anomaly_ids,
         seat_model_id=request.seat_model_id,
         camera_id=request.camera_id,
-        region_id=request.region_id,
     )
     logger.info("clustering_triggered", task_id=task.id)
     return StatusResponse(

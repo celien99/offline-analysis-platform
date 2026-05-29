@@ -28,7 +28,6 @@ class ClusterResult:
     status: str = "pending_review"
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
 
 
 @dataclass

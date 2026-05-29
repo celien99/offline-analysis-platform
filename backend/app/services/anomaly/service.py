@@ -30,7 +30,6 @@ class AnomalyService:
         *,
         camera_id: str,
         seat_model_id: str | None = None,
-        region_id: str | None = None,
         source: str = "efficientad",
         anomaly_score: float | None = None,
         date_folder: str,
@@ -88,7 +87,6 @@ class AnomalyService:
                 id=anomaly_id,
                 camera_id=camera_id,
                 seat_model_id=seat_model_id,
-                region_id=region_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -115,7 +113,6 @@ class AnomalyService:
                 id=anomaly_id,
                 camera_id=camera_id,
                 seat_model_id=seat_model_id,
-                region_id=region_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -157,7 +154,6 @@ class AnomalyService:
         *,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
-        region_id: str | None = None,
         source: str | None = None,
         status: str | None = None,
         offset: int = 0,
@@ -166,7 +162,6 @@ class AnomalyService:
         records = await self._repo.list_all(
             camera_id=camera_id,
             seat_model_id=seat_model_id,
-            region_id=region_id,
             source=source,
             status=status,
             offset=offset,
@@ -175,7 +170,6 @@ class AnomalyService:
         total = await self._repo.count(
             camera_id=camera_id,
             seat_model_id=seat_model_id,
-            region_id=region_id,
             source=source,
             status=status,
         )

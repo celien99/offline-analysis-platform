@@ -2,7 +2,6 @@ export interface ClusterSummary {
   cluster_id: string;
   seat_model_id: string | null;
   camera_id: string | null;
-  region_id: string | null;
   name: string | null;
   sample_count: number;
   possible_type: string | null;
@@ -36,7 +35,6 @@ export interface ClusterDetail {
   defect_type: string | null;
   seat_model_id: string | null;
   camera_id: string | null;
-  region_id: string | null;
   representative_ids: string[];
   representative_image_urls: string[];
   centroid: number[] | null;

@@ -10,7 +10,7 @@ import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormDat
 
 export function useClusterList(
   page: number,
-  filters?: { seatModelId?: string; cameraId?: string; regionId?: string },
+  filters?: { seatModelId?: string; cameraId?: string },
   enabled = true,
 ) {
   return useQuery({
@@ -18,7 +18,7 @@ export function useClusterList(
     queryFn: ({ signal }) =>
       clusterApi.list(
         page, 20, undefined,
-        filters?.seatModelId, filters?.cameraId, filters?.regionId,
+        filters?.seatModelId, filters?.cameraId,
         signal,
       ),
     placeholderData: (prev) => prev,
@@ -66,7 +66,6 @@ export function useAnomalyList(params: {
   page: number;
   camera_id?: string;
   seat_model_id?: string;
-  region_id?: string;
   status?: string;
 }) {
   return useQuery({
@@ -501,7 +500,6 @@ export function useGateEvaluate() {
 export function useDualTrackComparison(params: {
   seat_model_id?: string;
   camera_id?: string;
-  region_id?: string;
 }) {
   return useQuery({
     queryKey: ["mask-refinement", "compare", params],

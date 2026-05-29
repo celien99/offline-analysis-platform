@@ -20,7 +20,6 @@ export interface TrackMetricsResult {
 export interface DualTrackComparisonResult {
   seat_model_id: string | null;
   camera_id: string | null;
-  region_id: string | null;
   raw: TrackMetricsResult | null;
   refined: TrackMetricsResult | null;
   recommendation: string;

@@ -16,8 +16,6 @@ export default function AnomalyBrowser() {
   const [page, setPage] = useState(1);
   const [cameraInput, setCameraInput] = useState("");
   const [cameraFilter, setCameraFilter] = useState<string | undefined>();
-  const [regionInput, setRegionInput] = useState("");
-  const [regionFilter, setRegionFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyRecord | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -40,17 +38,9 @@ export default function AnomalyBrowser() {
     return () => clearTimeout(timer);
   }, [cameraInput]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setRegionFilter(regionInput || undefined);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [regionInput]);
-
   const { data, isLoading, refetch } = useAnomalyList({
     page,
     camera_id: cameraFilter,
-    region_id: regionFilter,
     status: statusFilter,
   });
   const anomalies = data?.items ?? [];
@@ -104,13 +94,6 @@ export default function AnomalyBrowser() {
               style={{ width: 150 }}
               value={cameraInput}
               onChange={(e) => setCameraInput(e.target.value)}
-            />
-            <Input
-              placeholder="区域ID"
-              allowClear
-              style={{ width: 150 }}
-              value={regionInput}
-              onChange={(e) => setRegionInput(e.target.value)}
             />
             <Select
               placeholder="状态"

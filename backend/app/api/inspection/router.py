@@ -66,9 +66,6 @@ async def run_inspection_with_files(
         for mv_id in (
             c.efficientad_model_version_id,
             c.filter_classifier_model_version_id,
-            c.region_upper_model_version_id,
-            c.region_middle_model_version_id,
-            c.region_lower_model_version_id,
         ):
             if mv_id:
                 model_version_ids.add(mv_id)

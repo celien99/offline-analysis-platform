@@ -5,7 +5,6 @@ export const anomalyApi = {
   list: (params: {
     camera_id?: string;
     seat_model_id?: string;
-    region_id?: string;
     source?: string;
     status?: string;
     page?: number;

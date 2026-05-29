@@ -20,9 +20,6 @@ class TrainingRun(BaseModel):
     camera_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True, comment="训练数据隔离：相机 ID"
     )
-    region_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True, comment="训练数据隔离：ROI 区域 ID"
-    )
     trigger: Mapped[str] = mapped_column(
         String(32), nullable=False, comment="manual / auto_timer / auto_threshold"
     )

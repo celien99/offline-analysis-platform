@@ -11,7 +11,6 @@ class ClusterListParams(BaseModel):
     defect_type: str | None = None
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
     min_samples: int | None = Field(default=None, ge=1)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
@@ -21,7 +20,6 @@ class ClusterSummary(BaseModel):
     cluster_id: str
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
     name: str | None
     sample_count: int
     possible_type: str | None
@@ -57,7 +55,6 @@ class ClusterDetailResponse(BaseModel):
     defect_type: str | None
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
     representative_ids: list[str] = []
     representative_image_urls: list[str] = []
     centroid: list[float] | None = None
@@ -91,4 +88,3 @@ class ClusterTriggerRequest(BaseModel):
     anomaly_ids: list[str] | None = None
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None

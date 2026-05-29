@@ -49,11 +49,7 @@ class CameraConfigCreate(BaseModel):
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
     efficientad_image_size: int = Field(default=256, ge=64, le=1024)
     efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
-    region_mode_enabled: bool = False
     filter_classifier_model_version_id: str | None = Field(default=None, description="Filter Classifier 模型版本 ID")
-    region_upper_model_version_id: str | None = Field(default=None, description="upper 区域模型版本 ID")
-    region_middle_model_version_id: str | None = Field(default=None, description="middle 区域模型版本 ID")
-    region_lower_model_version_id: str | None = Field(default=None, description="lower 区域模型版本 ID")
 
 
 class CameraConfigUpdate(BaseModel):
@@ -62,11 +58,7 @@ class CameraConfigUpdate(BaseModel):
     detection_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     efficientad_image_size: int | None = Field(default=None, ge=64, le=1024)
     efficientad_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
-    region_mode_enabled: bool | None = None
     filter_classifier_model_version_id: str | None = Field(default=None)
-    region_upper_model_version_id: str | None = Field(default=None)
-    region_middle_model_version_id: str | None = Field(default=None)
-    region_lower_model_version_id: str | None = Field(default=None)
 
 
 class CameraConfigResponse(BaseModel):
@@ -78,10 +70,6 @@ class CameraConfigResponse(BaseModel):
     detection_confidence: float
     efficientad_image_size: int
     efficientad_threshold: float
-    region_mode_enabled: bool
-    region_upper_model_version_id: str | None
-    region_middle_model_version_id: str | None
-    region_lower_model_version_id: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -61,26 +61,9 @@ class CameraConfig(BaseModel):
     efficientad_threshold: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.99, comment="EfficientAD 异常阈值分位数",
     )
-    region_mode_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, comment="是否启用三分区模式",
-    )
 
     # Filter Classifier 模型引用
     filter_classifier_model_version_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
         nullable=True, comment="Filter Classifier 模型版本 ID",
-    )
-
-    # 三分区模型引用
-    region_upper_model_version_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="upper 区域 EfficientAD 模型版本 ID",
-    )
-    region_middle_model_version_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="middle 区域 EfficientAD 模型版本 ID",
-    )
-    region_lower_model_version_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
-        nullable=True, comment="lower 区域 EfficientAD 模型版本 ID",
     )

@@ -22,7 +22,6 @@ class TrainingStartRequest(BaseModel):
     anomaly_ids: list[str] | None = None
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
 
 
 class MetricTrainingStartRequest(BaseModel):
@@ -39,7 +38,6 @@ class MetricTrainingStartRequest(BaseModel):
     anomaly_ids: list[str] | None = None
     seat_model_id: str | None = None
     camera_id: str | None = None
-    region_id: str | None = None
 
 
 class TrainingStatusResponse(BaseModel):

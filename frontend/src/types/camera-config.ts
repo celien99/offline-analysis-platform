@@ -29,10 +29,6 @@ export interface CameraConfig {
   detection_confidence: number;
   efficientad_image_size: number;
   efficientad_threshold: number;
-  region_mode_enabled: boolean;
-  region_upper_model_version_id: string | null;
-  region_middle_model_version_id: string | null;
-  region_lower_model_version_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,10 +40,6 @@ export interface CameraConfigFormData {
   detection_confidence: number;
   efficientad_image_size: number;
   efficientad_threshold: number;
-  region_mode_enabled: boolean;
-  region_upper_model_version_id: string | null;
-  region_middle_model_version_id: string | null;
-  region_lower_model_version_id: string | null;
 }
 
 export interface SeatModelFormData {

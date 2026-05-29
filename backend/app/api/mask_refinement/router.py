@@ -48,7 +48,6 @@ async def refine_batch_anomalies(
 async def compare_raw_vs_refined(
     seat_model_id: str | None = Query(default=None),
     camera_id: str | None = Query(default=None),
-    region_id: str | None = Query(default=None),
 ) -> dict[str, object]:
     """对比 raw vs refined embedding 的聚类质量。
 
@@ -61,6 +60,5 @@ async def compare_raw_vs_refined(
     report = await comparison.compare(
         seat_model_id=seat_model_id,
         camera_id=camera_id,
-        region_id=region_id,
     )
     return report.to_dict()

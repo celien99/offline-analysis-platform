@@ -174,7 +174,7 @@ def _extract_camera_results(
     for cr in camera_results:
         cam_id = str(cr.get("camera_id", "unknown"))
 
-        # 提取异常分数和判定：优先从顶层 texture_result，回退到 region_results
+        # 提取异常分数和判定
         texture = cr.get("texture_result") or {}
         anomaly_score = None
         is_anomaly = None
@@ -184,22 +184,6 @@ def _extract_camera_results(
             anomaly_score = float(texture.get("score", 0))
             threshold = float(texture.get("threshold", 0))
             is_anomaly = bool(texture.get("is_anomaly", False))
-        else:
-            # regions 模式：从 region_results 中收集最高异常分数和判定
-            region_results = cr.get("region_results") or []
-            region_scores = []
-            for rr in region_results:
-                rt = rr.get("texture_result") or {}
-                if rt:
-                    region_scores.append(float(rt.get("score", 0)))
-                    if rt.get("is_anomaly"):
-                        is_anomaly = True
-                    if threshold is None:
-                        threshold = float(rt.get("threshold", 0))
-            if region_scores:
-                anomaly_score = max(region_scores)
-                if is_anomaly is None:
-                    is_anomaly = anomaly_score > (threshold or 0)
 
         parsed.append({
             "camera_id": cam_id,

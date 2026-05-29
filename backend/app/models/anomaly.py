@@ -16,9 +16,6 @@ class AnomalyRecord(BaseModel):
     seat_model_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True, index=True, comment="所属座椅型号 ID"
     )
-    region_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True, comment="所属 ROI 区域 ID，用于细粒度数据隔离"
-    )
     source: Mapped[str] = mapped_column(
         String(32), nullable=False, comment="efficientad / filter_classifier / rule_engine"
     )

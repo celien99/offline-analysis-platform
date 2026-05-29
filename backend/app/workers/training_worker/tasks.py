@@ -52,7 +52,6 @@ async def _load_training_data(
     since: datetime | None = None,
     seat_model_id: str | None = None,
     camera_id: str | None = None,
-    region_id: str | None = None,
 ) -> tuple[list[np.ndarray], list[int]]:
     """加载训练数据。since 不为 None 时仅加载该时间后审核的 cluster。支持隔离键过滤。"""
     async with async_session_factory() as session:
@@ -63,14 +62,12 @@ async def _load_training_data(
                 since, offset=0, limit=10000,
                 seat_model_id=seat_model_id,
                 camera_id=camera_id,
-                region_id=region_id,
             )
         else:
             reviewed_clusters = await cluster_repo.get_by_status(
                 "reviewed", offset=0, limit=10000,
                 seat_model_id=seat_model_id,
                 camera_id=camera_id,
-                region_id=region_id,
             )
 
         image_label_pairs: list[tuple[str, int]] = []
@@ -124,7 +121,6 @@ def train_filter_classifier(
     trigger: str = "manual",
     seat_model_id: str | None = None,
     camera_id: str | None = None,
-    region_id: str | None = None,
 ) -> dict[str, object]:
     if class_names is None:
         class_names = ["false_alarm", "real_defect"]
@@ -186,7 +182,6 @@ def train_filter_classifier(
             anomaly_ids or [], since=since,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         ))
 
         if len(images) < 4:
@@ -300,7 +295,6 @@ def train_filter_classifier(
             metrics_json=json.dumps(numeric_metrics),
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         ))
 
         # 训练完成后触发门禁评估，通过后自动部署
@@ -465,7 +459,6 @@ async def _create_training_run(
     metrics_json: str | None = None,
     seat_model_id: str | None = None,
     camera_id: str | None = None,
-    region_id: str | None = None,
 ) -> TrainingRun:
     from datetime import datetime, timezone
 
@@ -486,7 +479,6 @@ async def _create_training_run(
             completed_at=datetime.now(tz=timezone.utc),
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
         repo = TrainingRunRepository(session)
         await repo.create(run)
@@ -591,7 +583,6 @@ def train_metric_embedding(
     anomaly_ids: list[str] | None = None,
     seat_model_id: str | None = None,
     camera_id: str | None = None,
-    region_id: str | None = None,
 ) -> dict[str, object]:
     """使用 ArcFace/Triplet 度量学习训练缺陷嵌入模型"""
     if loss_type not in ("arcface", "triplet"):
@@ -717,7 +708,6 @@ def train_metric_embedding(
             metrics_json=json.dumps({**numeric_metrics, "class_names": class_names}),
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         ))
 
         # 自动部署

@@ -249,41 +249,6 @@ class ConfigBuilder:
             "proposal": proposal,
             "track": tracking,
             "calibration": calibration,
-            "regions": [],
         }
-
-        if cam.region_mode_enabled:
-            region_efficientad_overrides: dict[str, object] = {
-                "min_valid_pixel_ratio": 0.35,
-            }
-            config["regions"] = [
-                {
-                    "region_id": "upper",
-                    "box": [0.03, 0.03, 0.97, 0.42],
-                    "efficientad_model_path": self._resolve_model_path(
-                        cam.region_upper_model_version_id, model_paths
-                    ),
-                    "enabled": bool(cam.region_upper_model_version_id),
-                    "efficientad": region_efficientad_overrides,
-                },
-                {
-                    "region_id": "middle",
-                    "box": [0.03, 0.38, 0.97, 0.67],
-                    "efficientad_model_path": self._resolve_model_path(
-                        cam.region_middle_model_version_id, model_paths
-                    ),
-                    "enabled": bool(cam.region_middle_model_version_id),
-                    "efficientad": region_efficientad_overrides,
-                },
-                {
-                    "region_id": "lower",
-                    "box": [0.03, 0.66, 0.97, 0.97],
-                    "efficientad_model_path": self._resolve_model_path(
-                        cam.region_lower_model_version_id, model_paths
-                    ),
-                    "enabled": bool(cam.region_lower_model_version_id),
-                    "efficientad": region_efficientad_overrides,
-                },
-            ]
 
         return config

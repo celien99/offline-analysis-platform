@@ -8,7 +8,6 @@ import {
   Input,
   InputNumber,
   Select,
-  Switch,
   Space,
   message,
   Typography,
@@ -17,7 +16,6 @@ import {
   List,
   Tag,
   Popconfirm,
-  Collapse,
 } from "antd";
 import {
   PlusOutlined,
@@ -149,12 +147,8 @@ export default function CameraConfigPage() {
       detection_confidence: 0.25,
       efficientad_image_size: 256,
       efficientad_threshold: 0.99,
-      region_mode_enabled: false,
       efficientad_model_version_id: null,
       filter_classifier_model_version_id: null,
-      region_upper_model_version_id: null,
-      region_middle_model_version_id: null,
-      region_lower_model_version_id: null,
     });
     setCameraModalOpen(true);
   };
@@ -168,10 +162,6 @@ export default function CameraConfigPage() {
       detection_confidence: record.detection_confidence,
       efficientad_image_size: record.efficientad_image_size,
       efficientad_threshold: record.efficientad_threshold,
-      region_mode_enabled: record.region_mode_enabled,
-      region_upper_model_version_id: record.region_upper_model_version_id,
-      region_middle_model_version_id: record.region_middle_model_version_id,
-      region_lower_model_version_id: record.region_lower_model_version_id,
     });
     setCameraModalOpen(true);
   };
@@ -213,8 +203,6 @@ export default function CameraConfigPage() {
     setRegisterModalOpen(false);
     registerForm.resetFields();
   };
-
-  const regionModeEnabled = Form.useWatch("region_mode_enabled", cameraForm);
 
   return (
     <div>
@@ -346,16 +334,6 @@ export default function CameraConfigPage() {
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
-                    title: "Region 模式",
-                    dataIndex: "region_mode_enabled",
-                    width: 90,
-                    render: (v: boolean) => (
-                      <Tag color={v ? "blue" : "default"}>
-                        {v ? "三分区" : "整体"}
-                      </Tag>
-                    ),
-                  },
-                  {
                     title: "操作",
                     width: 100,
                     render: (_: unknown, record: CameraConfig) => (
@@ -484,47 +462,6 @@ export default function CameraConfigPage() {
               </Form.Item>
             </Col>
           </Row>
-
-          <Form.Item
-            name="region_mode_enabled"
-            label="Region 分区模式"
-            valuePropName="checked"
-          >
-            <Switch />
-          </Form.Item>
-
-          <Collapse
-            activeKey={regionModeEnabled ? ["region"] : []}
-            items={[{
-              key: "region",
-              label: "Region 分区配置",
-              children: (
-                <>
-                  <Form.Item
-                    name="region_upper_model_version_id"
-                    label="Upper 区域模型"
-                    rules={[{ required: true, message: "请选择 upper 区域模型" }]}
-                  >
-                    <ModelSelect models={efficientadModels} placeholder="选择 upper 区域 EfficientAD 模型" />
-                  </Form.Item>
-                  <Form.Item
-                    name="region_middle_model_version_id"
-                    label="Middle 区域模型"
-                    rules={[{ required: true, message: "请选择 middle 区域模型" }]}
-                  >
-                    <ModelSelect models={efficientadModels} placeholder="选择 middle 区域 EfficientAD 模型" />
-                  </Form.Item>
-                  <Form.Item
-                    name="region_lower_model_version_id"
-                    label="Lower 区域模型"
-                    rules={[{ required: true, message: "请选择 lower 区域模型" }]}
-                  >
-                    <ModelSelect models={efficientadModels} placeholder="选择 lower 区域 EfficientAD 模型" />
-                  </Form.Item>
-                </>
-              ),
-            }]}
-          />
         </Form>
       </Modal>
 

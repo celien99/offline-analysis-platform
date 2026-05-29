@@ -135,7 +135,6 @@ class ClusteringService:
         probability_map: dict[str, float] | None = None,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
-        region_id: str | None = None,
     ) -> list[Cluster]:
         persisted: list[Cluster] = []
         for cr in result.clusters:
@@ -143,7 +142,6 @@ class ClusteringService:
                 id=cr.cluster_id,
                 seat_model_id=seat_model_id,
                 camera_id=camera_id,
-                region_id=region_id,
                 hdbscan_label=cr.label,
                 sample_count=cr.sample_count,
                 representative_ids=json.dumps(cr.representative_ids),
@@ -195,7 +193,6 @@ class ClusteringService:
         defect_type: str | None = None,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
-        region_id: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> tuple[list[Cluster], int]:
@@ -205,7 +202,6 @@ class ClusteringService:
             defect_type=defect_type,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
             offset=offset,
             limit=limit,
         )
@@ -215,7 +211,6 @@ class ClusteringService:
             defect_type=defect_type,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
-            region_id=region_id,
         )
         return list(clusters), total
 

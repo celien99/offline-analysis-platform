@@ -8,7 +8,6 @@ export const maskRefinementApi = {
   compare: (params: {
     seat_model_id?: string;
     camera_id?: string;
-    region_id?: string;
   }, signal?: AbortSignal) =>
     get<DualTrackComparisonResult>("/mask-refinement/compare", { params, signal }),
 };

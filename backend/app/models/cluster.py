@@ -17,9 +17,6 @@ class Cluster(BaseModel):
     camera_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True, comment="所属相机 ID，用于相机级数据隔离"
     )
-    region_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True, comment="所属 ROI 区域 ID，用于区域级数据隔离"
-    )
     name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     possible_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
