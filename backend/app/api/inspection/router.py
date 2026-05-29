@@ -87,6 +87,14 @@ async def run_inspection_with_files(
     projector_path = model_paths.get(seat_model.projector_model_version_id or "", "")
     whitening_path = model_paths.get(seat_model.whitening_matrix_model_version_id or "", "")
 
+    logger.info(
+        "inspection_config_building",
+        seat_model_id=seat_model_id,
+        yolo_version_id=seat_model.yolo_model_version_id,
+        yolo_path_resolved=seat_yolo_path or "(empty)",
+        camera_count=len(camera_id_list),
+    )
+
     builder = ConfigBuilder()
     config_dict = builder.build(
         seat_model_id=seat_model_id,

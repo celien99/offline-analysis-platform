@@ -75,6 +75,12 @@ def run_inspection_task(
             cwd=str(repo_root),
         )
 
+        # 诊断日志：子进程输出中包含各机位的 status 和 reason
+        if proc.stdout:
+            logger.info("inspection_subprocess_stdout", stdout=proc.stdout[-3000:])
+        if proc.stderr:
+            logger.info("inspection_subprocess_stderr", stderr=proc.stderr[-2000:])
+
         if proc.returncode != 0:
             logger.error(
                 "inspection_subprocess_failed",
