@@ -34,14 +34,19 @@ IMAGENET_MEAN_GRAY_RGB = np.asarray([124, 116, 104], dtype=np.uint8)
 
 
 class EfficientADService:
-    """加载训练后的 EfficientAD TorchScript 模型并执行推理。"""
+    """加载训练后的 EfficientAD 模型并执行推理。
+
+    优先使用 TorchScript 模型（性能更好），加载时会做一次预热推理验证。
+    如果 TorchScript 模型失败（如 CUDA 设备不兼容），自动回退到 state_dict
+    加载 + eager 模式（兼容性更好，跨平台稳定）。
+    """
 
     def __init__(self, config: EfficientADConfig) -> None:
         if torch is None:
             raise RuntimeError("EfficientAD 需要 PyTorch 运行环境")
         self.config = config
         self.device = _resolve_device(config.device)
-        self.model: Optional[torch.jit.ScriptModule] = None
+        self.model: Optional[torch.jit.ScriptModule | torch.nn.Module] = None
         self._feature_model: Optional[torch.nn.Module] = None
         self._image_threshold = config.image_threshold
         self._threshold_from_meta = False
@@ -49,13 +54,61 @@ class EfficientADService:
             self._load_model(config.model_path)
 
     def _load_model(self, model_path: str) -> None:
-        """加载 TorchScript 模型和阈值元数据。"""
+        """加载模型：优先 TorchScript，失败时回退 state_dict eager 模式。"""
         path = Path(model_path)
         if not path.exists():
             raise FileNotFoundError(f"EfficientAD 模型文件不存在: {model_path}")
-        self.model = torch.jit.load(str(path), map_location=self.device)
-        self.model.eval()
-        # 从模型文件读取训练时保存的阈值
+        self._load_meta(path)
+
+        state_dict_path = path.with_suffix(".state_dict.pt")
+
+        # 尝试 TorchScript 加载 + 预热验证
+        jit_ok = False
+        try:
+            jit_model = torch.jit.load(str(path), map_location=self.device)
+            jit_model.eval()
+            # 用 dummy 输入做一次预热推理，验证 TorchScript 图在当期设备上能正常执行
+            dummy = torch.randn(1, 3, self.config.input_size, self.config.input_size,
+                                device=self.device)
+            with torch.inference_mode():
+                _ = jit_model(dummy)
+            self.model = jit_model
+            jit_ok = True
+            _logger.info("efficientad_jit_loaded", model_path=model_path)
+        except Exception:
+            _logger.warning("efficientad_jit_failed_fallback_state_dict", exc_info=True)
+
+        # TorchScript 失败时用 state_dict 重建 eager 模式模型
+        if not jit_ok and state_dict_path.exists():
+            try:
+                from anomalib.models.image.efficient_ad.torch_model import EfficientAdModel
+                from ..training.efficientad import _EfficientADExportWrapper
+
+                state_dict = torch.load(str(state_dict_path), map_location=self.device,
+                                       weights_only=True)
+                raw_model = EfficientAdModel(teacher_out_channels=384, model_size="medium")
+                raw_model.load_state_dict(state_dict)
+                raw_model.to(self.device)
+                raw_model.eval()
+
+                eager_model = _EfficientADExportWrapper(raw_model).to(self.device).eval()
+                self.model = eager_model
+                _logger.info("efficientad_eager_loaded", model_path=model_path)
+            except Exception:
+                _logger.error("efficientad_state_dict_load_failed", exc_info=True)
+
+        if self.model is None:
+            raise RuntimeError(
+                f"EfficientAD 模型加载失败: {model_path}。"
+                f"TorchScript 和 state_dict 两种方式均无法加载。"
+            )
+
+        # 尝试加载特征提取模型（同样优先从 state_dict 重建）
+        if state_dict_path.exists():
+            self._load_feature_model(str(state_dict_path))
+
+    def _load_meta(self, path: Path) -> None:
+        """从 .meta.json 加载训练时保存的阈值。"""
         meta_path = path.with_suffix(".meta.json")
         if meta_path.exists():
             import json
@@ -72,16 +125,11 @@ class EfficientADService:
             _logger.warning(
                 "efficientad_threshold_not_loaded",
                 extra={
-                    "model_path": model_path,
+                    "model_path": str(path),
                     "fallback_threshold": self._image_threshold,
                     "hint": "请检查 .meta.json 是否与模型文件在同一目录，或重新训练生成阈值",
                 },
             )
-
-        # 尝试加载特征提取模型（state_dict）
-        state_dict_path = path.with_suffix(".state_dict.pt")
-        if state_dict_path.exists():
-            self._load_feature_model(str(state_dict_path))
 
     def _load_feature_model(self, state_dict_path: str) -> None:
         """尝试从 state_dict 重建模型用于多尺度特征提取。
