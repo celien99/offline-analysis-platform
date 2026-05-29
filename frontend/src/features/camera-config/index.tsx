@@ -22,6 +22,8 @@ import {
   EditOutlined,
   DeleteOutlined,
   SettingOutlined,
+  WarningOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
 import CameraTopology from "./components/CameraTopology";
@@ -234,33 +236,104 @@ export default function CameraConfigPage() {
     }
   };
 
+  // ── 当前选中 SeatModel 的派生数据 ──
+  const activeSeatModel = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel) ?? null;
+  const yoloLabel = modelLabel(activeSeatModel?.yolo_model_version_id ?? null, allModels);
+  const projectorLabel = modelLabel(activeSeatModel?.projector_model_version_id ?? null, allModels);
+  const whiteningLabel = modelLabel(activeSeatModel?.whitening_matrix_model_version_id ?? null, allModels);
+
+  const cameraTopoData = (cameras ?? []).map((c) => ({
+    cameraId: c.camera_id,
+    efficientadModel: modelLabel(c.efficientad_model_version_id, allModels),
+    normalizerModel: modelLabel(c.normalizer_model_version_id, allModels),
+    filterModel: c.filter_classifier_model_version_id
+      ? modelLabel(c.filter_classifier_model_version_id, allModels)
+      : undefined,
+  }));
+
   return (
     <div>
       <PageHeader title="相机配置" />
 
       <CameraTopology
         seatModelId={selectedSeatModel ?? ""}
-        yoloModel={(() => {
-          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
-          return modelLabel(sm?.yolo_model_version_id ?? null, allModels);
-        })()}
-        projectorModel={(() => {
-          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
-          return modelLabel(sm?.projector_model_version_id ?? null, allModels);
-        })()}
-        whiteningModel={(() => {
-          const sm = (seatModels ?? []).find((s) => s.seat_model_id === selectedSeatModel);
-          return modelLabel(sm?.whitening_matrix_model_version_id ?? null, allModels);
-        })()}
-        cameras={(cameras ?? []).map((c) => ({
-          cameraId: c.camera_id,
-          efficientadModel: modelLabel(c.efficientad_model_version_id, allModels),
-          normalizerModel: modelLabel(c.normalizer_model_version_id, allModels),
-          filterModel: c.filter_classifier_model_version_id
-            ? modelLabel(c.filter_classifier_model_version_id, allModels)
-            : undefined,
-        }))}
+        yoloModel={yoloLabel}
+        projectorModel={projectorLabel}
+        whiteningModel={whiteningLabel}
+        cameras={cameraTopoData}
       />
+
+      {/* 全局模型配置 Card — 选中 SeatModel 时展示 */}
+      {activeSeatModel && (
+        <Card
+          title="全局模型配置"
+          className="industrial-card mb-4"
+          extra={
+            <Button size="small" icon={<EditOutlined />} onClick={() => openSeatEdit(activeSeatModel)}>
+              编辑
+            </Button>
+          }
+        >
+          <Row gutter={[24, 12]}>
+            {[
+              {
+                label: "YOLO 检测模型",
+                value: yoloLabel,
+                required: true,
+                color: "#1677ff",
+              },
+              {
+                label: "Embedding Projector",
+                value: projectorLabel,
+                required: false,
+                color: "#eb2f96",
+              },
+              {
+                label: "Whitening Matrix",
+                value: whiteningLabel,
+                required: false,
+                color: "#13c2c2",
+              },
+            ].map((item) => {
+              const isConfigured = item.value !== "-";
+              return (
+                <Col span={8} key={item.label}>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: 6,
+                      border: `1px solid ${isConfigured ? item.color : "#d9d9d9"}`,
+                      background: isConfigured ? `${item.color}08` : "#fafafa",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      {isConfigured ? (
+                        <CheckCircleOutlined style={{ color: item.color, fontSize: 14 }} />
+                      ) : (
+                        <WarningOutlined style={{ color: item.required ? "#ff4d4f" : "#d9d9d9", fontSize: 14 }} />
+                      )}
+                      <span style={{ fontSize: 12, color: "#8c8c8c" }}>
+                        {item.label}
+                        {item.required && <span style={{ color: "#ff4d4f", marginLeft: 2 }}>*</span>}
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: isConfigured ? 500 : 400,
+                      color: isConfigured ? "#262626" : "#bfbfbf",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {isConfigured ? item.value : (item.required ? "未配置" : "未配置（可选）")}
+                    </div>
+                  </div>
+                </Col>
+              );
+            })}
+          </Row>
+        </Card>
+      )}
 
       <Row gutter={24}>
         {/* 左侧：座椅型号列表 */}
@@ -276,48 +349,60 @@ export default function CameraConfigPage() {
             <List
               loading={seatLoading}
               dataSource={seatModels ?? []}
-              renderItem={(item) => (
-                <List.Item
-                  onClick={() => setSelectedSeatModel(item.seat_model_id)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    background:
-                      selectedSeatModel === item.seat_model_id ? "#e6f4ff" : undefined,
-                  }}
-                  actions={[
-                    <Button
-                      key="edit"
-                      type="link"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openSeatEdit(item);
-                      }}
-                    />,
-                    <Popconfirm
-                      key="delete"
-                      title="确定删除此座椅型号？"
-                      onConfirm={() => handleSeatDelete(item.id)}
-                    >
+              renderItem={(item) => {
+                const hasYolo = !!item.yolo_model_version_id;
+                return (
+                  <List.Item
+                    onClick={() => setSelectedSeatModel(item.seat_model_id)}
+                    style={{
+                      cursor: "pointer",
+                      padding: "6px 10px",
+                      borderRadius: 4,
+                      background:
+                        selectedSeatModel === item.seat_model_id ? "#e6f4ff" : undefined,
+                    }}
+                    actions={[
                       <Button
+                        key="edit"
                         type="link"
                         size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={item.display_name}
-                    description={item.seat_model_id}
-                  />
-                </List.Item>
-              )}
+                        icon={<EditOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSeatEdit(item);
+                        }}
+                      />,
+                      <Popconfirm
+                        key="delete"
+                        title="确定删除此座椅型号？"
+                        onConfirm={() => handleSeatDelete(item.id)}
+                      >
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <Space size={4}>
+                          <span>{item.display_name}</span>
+                          {hasYolo ? (
+                            <Tag color="blue" style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>YOLO</Tag>
+                          ) : (
+                            <Tag color="red" style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>缺YOLO</Tag>
+                          )}
+                        </Space>
+                      }
+                      description={item.seat_model_id}
+                    />
+                  </List.Item>
+                );
+              }}
             />
           </Card>
         </Col>
