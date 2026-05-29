@@ -11,8 +11,8 @@ from app.models.camera_config import CameraConfig
 class ConfigBuilder:
     """将 DB 中的相机配置与硬编码默认参数合并，生成完整配置 JSON。
 
-    默认参数来自 seat_defect_core/config.example.json，仅暴露相机级的少量字段给用户配置，
-    YOLO/ROI/EfficientAD/Filter/Rule 等底层参数使用代码内默认值。
+    默认参数对齐 seat_defect_core/config.best.json（device 统一为 cpu，whitening 关闭），
+    仅暴露相机级的少量字段给用户配置。
     """
 
     DEFAULT_QUALITY = {
@@ -25,7 +25,7 @@ class ConfigBuilder:
 
     DEFAULT_DETECTION = {
         "target_class": "seat",
-        "confidence": 0.25,
+        "confidence": 0.15,
         "iou": 0.45,
         "device": "cpu",
         "imgsz": 960,
@@ -34,10 +34,10 @@ class ConfigBuilder:
     }
 
     DEFAULT_ROI = {
-        "crop_expand_ratio": 0.02,
+        "crop_expand_ratio": 0.0,
         "crop_shrink_ratio": 0.0,
-        "mask_erode_pixels": 1,
-        "edge_ignore_pixels": 4,
+        "mask_erode_pixels": 3,
+        "edge_ignore_pixels": 12,
         "alignment": {"output_width": 256, "output_height": 256},
     }
 
@@ -46,7 +46,7 @@ class ConfigBuilder:
         "input_size": 256,
         "teacher_backbone": "wide_resnet50_2",
         "student_backbone": "resnet18",
-        "min_valid_pixel_ratio": 0.3,
+        "min_valid_pixel_ratio": 0.2,
         "image_threshold": 0.0,
         "pixel_threshold": 0.0,
     }
@@ -61,53 +61,78 @@ class ConfigBuilder:
         "enabled": True,
         "model_path": "backend/deployed_models/line_a/filter_classifier/",
         "device": "cpu",
-        "input_size": 224,
-        "confidence_threshold": 0.5,
+        "input_size": 448,
+        "confidence_threshold": 0.3,
     }
 
     DEFAULT_RULE_ENGINE = {
-        "enabled": False,
+        "enabled": True,
         "rules": [],
         "deployed_rules_path": "backend/deployed_models/line_a/rules/rules.json",
     }
 
     DEFAULT_PROPOSAL = {
         "heatmap_threshold_mode": "adaptive",
-        "heatmap_adaptive_std_multiplier": 1.5,
-        "min_component_area": 16,
-        "max_proposals": 20,
+        "heatmap_threshold_fixed": 0.5,
+        "heatmap_adaptive_std_multiplier": 1.0,
+        "min_component_area": 8,
+        "min_solidity": 0.2,
+        "max_proposals": 30,
+        "open_kernel_size": 3,
+        "close_kernel_size": 5,
         "context_padding_ratio": 0.10,
+        "min_crop_size": 20,
         "aggregation_method": "weighted_confidence",
+        "area_exponent": 0.5,
+        "confidence_threshold": 0.3,
         "budget": {
             "enabled": True,
+            "scope": "proposal_and_filter",
             "target_latency_ms": 15.0,
             "hard_limit_ms": 20.0,
+            "max_cc_before_emergency": 50,
+            "avg_filter_latency_ms": 3.0,
+            "window_size": 100,
+            "threshold_multiplier_step": 0.5,
+            "threshold_multiplier_max": 3.0,
+            "recovery_rate": 0.01,
         },
     }
 
     DEFAULT_TRACKING = {
         "max_age": 30,
-        "min_hits": 3,
+        "min_hits": 2,
+        "mature_hits": 5,
         "iou_threshold": 0.3,
-        "feature_similarity_threshold": 0.7,
+        "mahalanobis_threshold": 9.5,
+        "feature_cosine_threshold": 0.85,
+        "feature_match_margin": 0.15,
+        "nms_iou_threshold": 0.5,
+        "cross_camera_cosine_threshold": 0.9,
+        "epipolar_distance_threshold": 50.0,
     }
 
     DEFAULT_CALIBRATION = {
-        "enabled": False,
+        "enabled": True,
         "camera_norm": {
             "enabled": True,
             "stats_path": "",
         },
         "projection": {
-            "enabled": False,
+            "enabled": True,
             "projector_path": "",
         },
         "whitening": {
             "enabled": False,
+            "method": "zca",
+            "regularization": 0.0001,
             "matrix_path": "",
         },
         "ema_center": {
-            "enabled": False,
+            "enabled": True,
+            "alpha": 0.99,
+            "min_samples": 10,
+            "novelty_threshold": 0.2,
             "centers_path": "",
         },
     }
