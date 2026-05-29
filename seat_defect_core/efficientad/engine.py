@@ -551,19 +551,25 @@ def _normalize_heatmap(
     """以检测阈值为锚点归一化 anomaly_map 到 [0, 1]。
 
     映射规则：
-    - 0.0      → 完全正常（dark blue）
-    - threshold → 0.5 边界（yellow/green）
-    - 2*threshold → 1.0 明确异常（red）
+    - 0.0           → 完全正常（dark blue）
+    - threshold      → ~0.5 边界（yellow/green）
+    - target_max     → 1.0 明确异常（red），当存在超阈值像素时
 
-    这样正常图像上远低于阈值的区域不会产生虚假的暖色信号，
-    只有真正接近或超过阈值的区域才会在 overlay 中显示为红/黄色。
+    存在超阈值异常像素时，使用实际最大像素值作为 vmax，
+    确保缺陷热点一定显示为红色。无超阈值像素时保持不变，
+    避免正常图像上产生虚假暖色信号。
     """
     target_pixels = anomaly_map[target_binary > 0]
     if target_pixels.size == 0:
         return np.zeros_like(anomaly_map, dtype=np.float32)
 
-    if threshold > 0:
-        # 阈值锚定：threshold → 0.5
+    target_max = float(target_pixels.max())
+
+    if threshold > 0 and target_max > threshold:
+        # 存在超阈值异常 → 让最热点映射到 1.0
+        vmax = max(target_max, threshold * 1.5)
+    elif threshold > 0:
+        # 全部低于阈值 → 锚定阈值到 0.5，避免正常区域出现暖色
         vmax = threshold * 2.0
     else:
         # 无有效阈值时，使用目标区域 99 分位数作为参考
