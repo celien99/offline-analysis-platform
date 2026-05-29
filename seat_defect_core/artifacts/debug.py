@@ -163,14 +163,24 @@ def _overlay_heatmap(
     image: Any,
     heatmap: np.ndarray,
 ) -> np.ndarray:
-    """Overlay the heatmap on the ROI while preserving cool areas."""
+    """将热力图叠加到 ROI 图像上，保留冷色区域的原始图像可见性。
+
+    两段归一化已把正常区域压缩到 [0, 0.3]，异常区域展开到 [0.3, 1.0]，
+    因此不再需要 gamma 校正来抑制低值噪声。叠加前做轻量膨胀 (3×3)，
+    确保单像素热点在上采样到原图分辨率后仍然可见。
+    """
     base_image, clipped = _prepare_heatmap_layers(image, heatmap)
     if float(clipped.max()) <= 1e-6:
         return base_image
 
-    color_map = cv2.applyColorMap(np.uint8(clipped * 255), cv2.COLORMAP_JET).astype(np.float32)
+    # 轻量膨胀：让单像素热点在放大后仍有视觉存在感
+    kernel = np.ones((3, 3), dtype=np.uint8)
+    dilated = cv2.dilate(clipped, kernel, iterations=1)
+
+    color_map = cv2.applyColorMap(np.uint8(dilated * 255), cv2.COLORMAP_JET).astype(np.float32)
     base_float = base_image.astype(np.float32)
-    alpha = np.power(clipped, 1.35)[..., None] * 0.75
+    # 直接使用热力值做 alpha，不加 gamma 校正（两段归一化已处理动态范围）
+    alpha = dilated[..., None] * 0.85
     overlay = base_float * (1.0 - alpha) + color_map * alpha
     return np.clip(overlay, 0.0, 255.0).astype(np.uint8)
 
