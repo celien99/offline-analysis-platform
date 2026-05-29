@@ -29,9 +29,6 @@ IMAGENET_STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
 IMAGENET_MEAN_TS = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1) if torch is not None else None
 IMAGENET_STD_TS = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1) if torch is not None else None
 
-# ImageNet 均值灰（RGB uint8），用于填充非目标区域避免黑边引入异常响应
-IMAGENET_MEAN_GRAY_RGB = np.asarray([124, 116, 104], dtype=np.uint8)
-
 
 class EfficientADService:
     """加载训练后的 EfficientAD 模型并执行推理。
@@ -213,10 +210,8 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 使用模型内置的 pred_score（全图 grid-pooled），与训练时 _compute_threshold
+        # 使用模型内置的 pred_score（像素级 amax），与训练时 _compute_threshold
         # 的 scoring 方法完全一致，确保阈值跨训练/推理可比。
-        # masked scoring (_grid_pool_score) 仅在 target_binary 存在且需要
-        # 排除背景区域时使用，但阈值的语义需要匹配。
         anomaly_score = anomaly_score_raw
 
         # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
@@ -470,30 +465,6 @@ def _prepare_input(image: np.ndarray, input_size: int) -> torch.Tensor:
     normalized = (padded.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
     tensor = torch.from_numpy(np.transpose(normalized, (2, 0, 1))).unsqueeze(0).float()
     return tensor
-
-
-def _grid_pool_score(anomaly_map: np.ndarray, target_binary: np.ndarray, grid_size: int = 8) -> float:
-    """对 masked anomaly_map 做空间网格池化，取最高网格均值作为异常分数。
-
-    相比 amax 单像素，网格均值：
-    - 不被边缘/噪声单点干扰
-    - 捕获缺陷的空间聚集特征
-    - 对暗表面微弱缺陷的分离度远优于 amax
-    """
-    masked = anomaly_map * target_binary.astype(np.float32)
-    h, w = masked.shape
-    gh = max(1, h // grid_size)
-    gw = max(1, w // grid_size)
-    cell_means = []
-    for y in range(0, h, gh):
-        for x in range(0, w, gw):
-            cell = masked[y : y + gh, x : x + gw]
-            cell_target = target_binary[y : y + gh, x : x + gw]
-            if cell_target.sum() > 0:
-                cell_means.append(float(cell[cell_target > 0].mean()))
-    if not cell_means:
-        return 0.0
-    return float(np.max(cell_means))
 
 
 def _resize_anomaly_map(

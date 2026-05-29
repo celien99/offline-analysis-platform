@@ -22,7 +22,7 @@ def select_texture_input(roi) -> Any:
 
     统一使用 aligned_roi_image (BGR)，不做 BGRA gray fill。
     gray fill 在 mask 边界产生高强度 ST distance 伪影，会淹没表面缺陷信号。
-    非目标区域由 _grid_pool_score 配合 target_binary mask 在 scoring 阶段排除。
+    非目标区域由 target_binary mask 在 scoring 阶段通过 ignore_mask 排除。
     """
     return roi.aligned_roi_image
 

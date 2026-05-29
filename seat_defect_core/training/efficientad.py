@@ -41,9 +41,9 @@ class _EfficientADExportWrapper(torch.nn.Module):
         """返回 (anomaly_map, pred_score)。
 
         anomaly_map: raw ST distance map（全图，未 mask）
-        pred_score: 全图 grid-pooled max（用于训练时阈值计算）。
-          推理时 EfficientADService.predict 会用 target_mask 重新做 masked
-          grid-pooled scoring，但训练时没有 mask，全图 scoring 作为近似。
+        pred_score: 全图像素级最大值，与 anomalib 原始设计对齐。
+          大核网格池化 (adaptive_avg_pool2d 8×8) 会把小缺陷信号稀释 10-100 倍，
+          pixel-level amax 保留单像素最强信号，对小尺寸缺陷更敏感。
         """
         # 线上 EfficientADService 已做 ImageNet normalize，还原到 [0,1] 像素值
         batch = (batch * self.std + self.mean).clamp(0.0, 1.0)
@@ -60,9 +60,9 @@ class _EfficientADExportWrapper(torch.nn.Module):
             map_st, size=image_size, mode="bilinear",
         )
 
-        # 全图 grid-pooled score（训练时无 target_mask，用全图近似）
-        pooled = torch.nn.functional.adaptive_avg_pool2d(anomaly_map, (8, 8))
-        pred_score = pooled.amax(dim=(1, 2, 3))
+        # 像素级最大值：对齐 anomalib 原始 scoring，对大核均值池化被稀释的小缺陷
+        # 信号更敏感。边缘噪声由 ignore_mask + target_binary mask 在 Service 层控制。
+        pred_score = anomaly_map.amax(dim=(1, 2, 3))
 
         return anomaly_map, pred_score
 
