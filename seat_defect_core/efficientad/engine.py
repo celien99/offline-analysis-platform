@@ -214,14 +214,12 @@ class EfficientADService:
         # 方法完全一致，确保阈值跨训练/推理可比。
         anomaly_score = anomaly_score_raw
 
-        # 像素颜色离群值检测：补充 ST distance 对同比例亮度变化不敏感的盲区。
+        # 像素颜色离群值检测：独立于 ST distance 的并行判定维度。
         # 白纸/彩色贴纸在深色面料上产生大范围像素值偏差，这是确定性信号，
-        # 不依赖随机 teacher 的特征网格对齐。
+        # 不依赖随机 teacher 的特征网格对齐。使用独立阈值而非乘到 ST 分数上，
+        # 避免光照波动导致误报。
         color_outlier_ratio = _compute_color_outlier_ratio(image, target_binary)
-        if color_outlier_ratio > 0.02:  # 超过 2% 的像素是颜色离群值
-            # 用颜色离群比例放大异常分数，确保颜色明显不同的缺陷一定被检出
-            color_boost = 1.0 + color_outlier_ratio * 10.0  # 2%→1.2, 10%→2.0, 50%→6.0
-            anomaly_score = max(anomaly_score, self._image_threshold * color_boost)
+        color_anomaly = color_outlier_ratio > 0.05  # 超过 5% 像素颜色异常 → NG
 
         # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
         # 正常区域（远低于阈值）→ dark blue，边界 → yellow，异常 → red
@@ -232,8 +230,8 @@ class EfficientADService:
             anomaly_map, target_binary, self._image_threshold
         )
 
-        # 异常判定
-        is_anomaly = anomaly_score > self._image_threshold
+        # 异常判定：ST distance 超阈值 或 颜色离群值超标
+        is_anomaly = (anomaly_score > self._image_threshold) or color_anomaly
 
         # 多尺度特征提取（如果可用；None 表示不可用或提取失败）
         features = None
