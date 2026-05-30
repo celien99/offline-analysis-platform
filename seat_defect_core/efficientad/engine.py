@@ -78,13 +78,11 @@ class EfficientADService:
         # TorchScript 失败时用 state_dict 重建 eager 模式模型
         if not jit_ok and state_dict_path.exists():
             try:
-                from anomalib.models.image.efficient_ad.torch_model import EfficientAdModel
-                from ..training.efficientad import _EfficientADExportWrapper
+                from ..training.efficientad import _EfficientADExportWrapper, _build_model_from_state_dict
 
                 state_dict = torch.load(str(state_dict_path), map_location=self.device,
                                        weights_only=True)
-                raw_model = EfficientAdModel(teacher_out_channels=384, model_size="medium")
-                raw_model.load_state_dict(state_dict)
+                raw_model = _build_model_from_state_dict(state_dict).model
                 raw_model.to(self.device)
                 raw_model.eval()
 

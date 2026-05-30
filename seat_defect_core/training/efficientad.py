@@ -17,6 +17,47 @@ import numpy as np
 import torch
 
 
+class PretrainedWideResNetTeacher(torch.nn.Module):
+    """用 ImageNet 预训练的 WideResNet50_2 替换随机 PDN teacher。
+
+    从 layer1 提取 256 通道特征 (64×64 @ 256 输入)，
+    通过 1×1 卷积投影到 384 通道，与现有 student (MediumPatchDescriptionNetwork)
+    的预期输出通道数对齐。
+
+    teacher 权重冻结，仅 student 参与训练。
+    """
+
+    def __init__(self, out_channels: int = 384) -> None:
+        super().__init__()
+        from torchvision.models import wide_resnet50_2, Wide_ResNet50_2_Weights
+
+        backbone = wide_resnet50_2(weights=Wide_ResNet50_2_Weights.IMAGENET1K_V2)
+        # conv1 → bn1 → relu → maxpool → layer1 输出 (N, 256, 64, 64)
+        self.encoder = torch.nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
+            backbone.layer1,
+        )
+        self.projection = torch.nn.Conv2d(256, out_channels, kernel_size=1)
+        # 冻结 encoder，仅 projection 可训练（对齐 student 通道维度）
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """输入 [0, 1] 像素值，输出 (N, out_channels, 64, 64) 特征图。
+
+        内部调用 anomalib 的 imagenet_norm_batch 做归一化，
+        与 MediumPatchDescriptionNetwork 的归一化流程一致。
+        """
+        from anomalib.models.image.efficient_ad.torch_model import imagenet_norm_batch
+
+        x = imagenet_norm_batch(x)
+        features = self.encoder(x)
+        return self.projection(features)
+
+
 class _EfficientADExportWrapper(torch.nn.Module):
     """把 anomalib 模型包装为推理服务期望的输出格式。
 
@@ -25,10 +66,8 @@ class _EfficientADExportWrapper(torch.nn.Module):
       AE 在暗表面上重建过强，会稀释 ST 的缺陷信号。
     - 禁用 quantile normalization。anomalib 默认的 0.1*(raw-qa)/(qb-qa)
       将动态范围压缩 5-10 倍，导致微弱缺陷信号被淹没。
-    - 使用空间网格池化 (adaptive_avg_pool2d + amax) 替代全局 amax。
-      全局 amax 取单一最热像素，易被边缘/轮廓噪声支配。
-      网格池化取每个局部区域 (如 32x32) 的均值后再取最大值，
-      既能捕获缺陷的空间聚集特征，又不被单像素噪声干扰。
+    - 使用 top-0.5% 均值替代 amax。单像素 amax 在边缘被 resize
+      柔化后可能漏掉整个异常；top-k 均值聚合边界像素集体信号。
     """
 
     def __init__(self, model: torch.nn.Module) -> None:
@@ -177,7 +216,13 @@ def train_efficientad(
         model = EfficientAd(
             teacher_out_channels=384,
             model_size="medium",
+            padding=True,  # padding 确保特征图为 64×64，与 WideResNet layer1 输出对齐
         )
+
+        # 根据配置注入预训练 teacher 替换随机 PDN teacher
+        if efficientad_cfg.teacher_backbone == "wide_resnet50_2":
+            model.model.teacher = PretrainedWideResNetTeacher(out_channels=384)
+            _logger.info("efficientad_teacher_replaced backbone=wide_resnet50_2")
 
         # 训练
         # EfficientAD 架构要求 train_batch_size=1，这是模型设计的硬约束
@@ -495,6 +540,28 @@ def _configure_gpu() -> None:
     torch.backends.cudnn.allow_tf32 = True
 
 
+def _build_model_from_state_dict(state_dict: dict) -> "torch.nn.Module":
+    """根据 state_dict 中的 key 自动选择 teacher 类型并构建模型。
+
+    如果检测到 WideResNet teacher key（teacher.encoder.*），
+    则用 PretrainedWideResNetTeacher 替换默认的随机 PDN teacher，
+    确保 state_dict 加载时 key 和 shape 完全匹配。
+    """
+    from anomalib.models import EfficientAd as _EfficientAd
+
+    # 检测 teacher 类型
+    has_wideresnet_teacher = any("teacher.encoder." in k for k in state_dict)
+
+    if has_wideresnet_teacher:
+        model = _EfficientAd(teacher_out_channels=384, model_size="medium", padding=True)
+        model.model.teacher = PretrainedWideResNetTeacher(out_channels=384)
+    else:
+        model = _EfficientAd(teacher_out_channels=384, model_size="medium")
+
+    model.model.load_state_dict(state_dict)
+    return model
+
+
 def re_export_cpu(
     state_dict_path: str,
     output_path: str,
@@ -519,11 +586,8 @@ def re_export_cpu(
     """
     import torch as _torch
 
-    from anomalib.models import EfficientAd as _EfficientAd
-
     state_dict = _torch.load(state_dict_path, map_location="cpu", weights_only=True)
-    model = _EfficientAd(teacher_out_channels=384, model_size="medium")
-    model.model.load_state_dict(state_dict)
+    model = _build_model_from_state_dict(state_dict)
     model.model.eval()
 
     export_model = _EfficientADExportWrapper(model.model).cpu().eval()
@@ -580,8 +644,6 @@ def recompute_threshold(
     import torch as _torch
     from pathlib import Path as _Path
 
-    from anomalib.models import EfficientAd as _EfficientAd
-
     _device = _torch.device(device)
     if _device.type == "cuda" and not _torch.cuda.is_available():
         _device = _torch.device("cpu")
@@ -589,8 +651,7 @@ def recompute_threshold(
         _device = _torch.device("cpu")
 
     state_dict = _torch.load(state_dict_path, map_location="cpu", weights_only=True)
-    model = _EfficientAd(teacher_out_channels=384, model_size="medium")
-    model.model.load_state_dict(state_dict)
+    model = _build_model_from_state_dict(state_dict)
     model.model.eval()
 
     export_model = _EfficientADExportWrapper(model.model).to(_device).eval()
