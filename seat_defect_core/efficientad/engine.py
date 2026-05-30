@@ -210,9 +210,18 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 使用模型内置的 pred_score（像素级 amax），与训练时 _compute_threshold
-        # 的 scoring 方法完全一致，确保阈值跨训练/推理可比。
+        # 使用模型内置的 pred_score，与训练时 _compute_threshold 的 scoring
+        # 方法完全一致，确保阈值跨训练/推理可比。
         anomaly_score = anomaly_score_raw
+
+        # 像素颜色离群值检测：补充 ST distance 对同比例亮度变化不敏感的盲区。
+        # 白纸/彩色贴纸在深色面料上产生大范围像素值偏差，这是确定性信号，
+        # 不依赖随机 teacher 的特征网格对齐。
+        color_outlier_ratio = _compute_color_outlier_ratio(image, target_binary)
+        if color_outlier_ratio > 0.02:  # 超过 2% 的像素是颜色离群值
+            # 用颜色离群比例放大异常分数，确保颜色明显不同的缺陷一定被检出
+            color_boost = 1.0 + color_outlier_ratio * 10.0  # 2%→1.2, 10%→2.0, 50%→6.0
+            anomaly_score = max(anomaly_score, self._image_threshold * color_boost)
 
         # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
         # 正常区域（远低于阈值）→ dark blue，边界 → yellow，异常 → red
@@ -588,3 +597,46 @@ def _normalize_heatmap(
     if vmax < 1e-8:
         vmax = 1.0
     return np.clip(masked / vmax, 0.0, 1.0).astype(np.float32)
+
+
+def _compute_color_outlier_ratio(
+    image: np.ndarray,
+    target_binary: np.ndarray,
+    deviation_threshold: int = 50,
+) -> float:
+    """计算目标区域内颜色显著偏离中位数的像素比例。
+
+    逐通道计算中位数，统计任一通道偏离超过阈值的像素占比。
+    用于补充 ST distance 对同比例亮度变化不敏感的盲区：
+    白纸/彩色贴纸在深色面料上产生大范围颜色偏差，是确定性信号。
+
+    Args:
+        image: BGR ROI 图像 (H, W, 3)。
+        target_binary: 目标区域二值掩膜 (H, W)。
+        deviation_threshold: 像素通道值偏离中位数的阈值，默认 50。
+
+    Returns:
+        float: 颜色离群像素占比 [0, 1]。
+    """
+    target_mask = (target_binary > 0) if target_binary is not None else np.ones(image.shape[:2], dtype=bool)
+    if target_mask.sum() < 10:
+        return 0.0
+
+    # 确保尺寸匹配
+    if target_mask.shape != image.shape[:2]:
+        target_mask = cv2.resize(target_mask.astype(np.uint8), (image.shape[1], image.shape[0]),
+                                 interpolation=cv2.INTER_NEAREST).astype(bool)
+
+    pixels = image[target_mask]  # (N, 3) BGR
+    if pixels.shape[0] < 10:
+        return 0.0
+
+    # 逐通道中位数
+    medians = np.median(pixels, axis=0)  # (3,) BGR
+
+    # 任一通道偏离超过阈值
+    channel_deviation = np.abs(pixels.astype(np.float32) - medians.astype(np.float32))
+    max_deviation = channel_deviation.max(axis=1)  # (N,)
+    outlier_count = int((max_deviation > deviation_threshold).sum())
+
+    return float(outlier_count / pixels.shape[0])

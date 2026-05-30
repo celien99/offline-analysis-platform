@@ -60,9 +60,12 @@ class _EfficientADExportWrapper(torch.nn.Module):
             map_st, size=image_size, mode="bilinear",
         )
 
-        # 像素级最大值：对齐 anomalib 原始 scoring，对大核均值池化被稀释的小缺陷
-        # 信号更敏感。边缘噪声由 ignore_mask + target_binary mask 在 Service 层控制。
-        pred_score = anomaly_map.amax(dim=(1, 2, 3))
+        # 取 top 0.5% 像素的均值作为异常分数。
+        # 单像素 amax 在边缘被 resize 柔化后可能漏掉整个异常；
+        # top-k 均值聚合所有边界像素信号，对小尺寸/柔化边缘的异常更鲁棒。
+        flat = anomaly_map.flatten(1)  # (B, H*W)
+        k = max(1, int(0.005 * flat.shape[1]))
+        pred_score = flat.topk(k, dim=1).values.mean(dim=1)
 
         return anomaly_map, pred_score
 
