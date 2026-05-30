@@ -353,7 +353,7 @@ def _compute_threshold(
                     batch_tensors.append(torch.zeros(3, input_size, input_size))
                     continue
                 # 使用与线上推理完全相同的预处理（BGR→RGB, aspect-ratio resize,
-                # gray canvas letterbox, ImageNet normalize）
+                # reflection padding, ImageNet normalize）
                 t = _prepare_input(img, input_size).squeeze(0)
                 batch_tensors.append(t)
 

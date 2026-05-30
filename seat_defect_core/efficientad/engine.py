@@ -183,7 +183,7 @@ class EfficientADService:
                 valid_pixel_ratio=valid_pixel_ratio,
             )
 
-        # 预处理：BGR → RGB, resize, normalize，非目标区域用 ImageNet 均值灰填充
+        # 预处理：BGR → RGB, resize, reflection padding, normalize
         input_tensor = _prepare_input(image, self.config.input_size).to(self.device)
 
         with torch.inference_mode():
