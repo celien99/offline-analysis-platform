@@ -173,15 +173,15 @@ INI 用于兼容 LabVIEW 和现场工具，核心流程仍会先把 INI 转成�
               "mask_erode_pixels": 1,
               "edge_ignore_pixels": 4,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "device": "cpu",
-              "input_size": 256,
+              "input_size": 384,
               "min_valid_pixel_ratio": 0.3
             }
           }

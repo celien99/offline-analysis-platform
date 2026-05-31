@@ -48,14 +48,14 @@
               "mask_erode_pixels": 3,
               "edge_ignore_pixels": 6,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_back_efficientad.pt",
               "device": "cuda",
-              "input_size": 256,
+              "input_size": 384,
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "min_valid_pixel_ratio": 0.2,
@@ -171,14 +171,14 @@
               "mask_erode_pixels": 3,
               "edge_ignore_pixels": 12,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_front_efficientad.pt",
               "device": "cuda",
-              "input_size": 256,
+              "input_size": 384,
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "min_valid_pixel_ratio": 0.2,
@@ -294,14 +294,14 @@
               "mask_erode_pixels": 3,
               "edge_ignore_pixels": 12,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_left_efficientad.pt",
               "device": "cuda",
-              "input_size": 256,
+              "input_size": 384,
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "min_valid_pixel_ratio": 0.2,
@@ -417,14 +417,14 @@
               "mask_erode_pixels": 3,
               "edge_ignore_pixels": 12,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_right_efficientad.pt",
               "device": "cuda",
-              "input_size": 256,
+              "input_size": 384,
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "min_valid_pixel_ratio": 0.2,
@@ -540,14 +540,14 @@
               "mask_erode_pixels": 3,
               "edge_ignore_pixels": 12,
               "alignment": {
-                "output_width": 256,
-                "output_height": 256
+                "output_width": 384,
+                "output_height": 384
               }
             },
             "efficientad": {
               "model_path": "../models/seat_model_a/cam_top_efficientad.pt",
               "device": "cuda",
-              "input_size": 256,
+              "input_size": 384,
               "teacher_backbone": "wide_resnet50_2",
               "student_backbone": "resnet18",
               "min_valid_pixel_ratio": 0.2,

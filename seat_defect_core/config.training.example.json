@@ -14,7 +14,7 @@
         "efficientad": {
           "model_path": "",
           "device": "cuda",
-          "input_size": 256,
+          "input_size": 384,
           "teacher_backbone": "wide_resnet50_2",
           "student_backbone": "resnet18",
           "min_valid_pixel_ratio": 0.3,

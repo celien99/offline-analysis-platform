@@ -144,8 +144,8 @@ flowchart TB
     <td width="50%">
       <h3>🔄 在线检测核心 (seat_defect_core)</h3>
       <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>ST-only 异常评分</b> + grid pooling) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
-        <li><b>EfficientAD 评分管线</b>：ST-only 评分（去除 AE 双分支噪声）→ 无 quantile 归一化 → adaptive_avg_pool2d(8×8) grid pooling 替换单像素 amax，暗表面缺陷检测能力从 0 提升至可用</li>
+        <li>完整在线推理 pipeline：YOLO → ROI → EfficientAD(<b>ST+STAE 混合评分</b> + top-k 兜底 + 像素级判定 + 颜色离群值) → <b>Feature Calibration</b> → <b>Cascading Budget</b> → <b>Region Proposal</b> → <b>Identity Linking</b> → <b>Three-Modal Filter</b> → <b>Aggregation</b> → <b>Rule Engine</b> → Fusion</li>
+        <li><b>EfficientAD 评分管线</b>：ST+STAE 混合评分 (use_ae 可配置) → top-0.5% 均值图像分数 + ROI top-k 兜底 → 独立像素级强异常判定 (pixel_threshold) → 颜色离群值检测 (color_outlier_ratio) → 三分支并行 NG 判定，暗表面/小面积缺陷检测能力显著提升</li>
         <li><b>跨平台 TorchScript</b>：CPU trace 导出 + JIT warmup 校验 + state_dict eager 回退，兼容有无 CUDA 环境</li>
         <li><b>Patch-level Feature Harvesting</b>：Forward Hook 捕获 EfficientAD Teacher/Student 完整输出 (384d/768d) + Teacher-Student 差异特征 (384d)，保留 anomaly representation 而非仅 score</li>
         <li><b>Feature Calibration Layer</b>：CameraNormalizer (机位级 per-channel 标准化，teacher/student/difference 三组特征) → EmbeddingProjector (多尺度特征 → PCA 投影至 384-dim) → WhiteningTransform (ZCA 白化去相关) → EMAFeatureCenter (缺陷类型特征中心 EMA 追踪)，跨机位统一特征空间</li>
@@ -283,11 +283,14 @@ flowchart TB
     <td width="50%">
       <h3>🧬 EfficientAD 训练管线</h3>
       <ul>
-        <li><b>_EfficientADExportWrapper</b>：封装 anomalib EfficientAD 模型，统一评分接口（ST distance → grid pool → pred_score）</li>
-        <li><b>CPU 优先导出</b>：训练完成后在 CPU 上 trace → TorchScript 导出，保证跨平台兼容</li>
-        <li><b>阈值自动计算</b>：在正常样本上运行 wrapper → 取 pred_score 的 99.0 percentile 作为 image_threshold</li>
-        <li><b>训练/推理一致性</b>：_compute_threshold 与 predict() 共享 _prepare_input 预处理 + wrapper.forward() 评分逻辑</li>
+        <li><b>YOLO+ROI 自动制备</b>：输入原始正常图 → 复用线上 CameraPipeline (YOLO+ROI) → 自动生成与线上推理一致的 aligned ROI 训练图 + target/ignore mask</li>
+        <li><b>制备产物留存</b>：训练产物旁保存 <code>&lt;model&gt;_prepared_roi/</code>，包含 images/ target_masks/ ignore_masks/ + manifest.json，用于复查实际参与训练的 ROI 图</li>
+        <li><b>_EfficientADExportWrapper</b>：封装 anomalib EfficientAD 模型，统一评分接口（ST+STAE 混合 → top-0.5% 均值 → pred_score），use_ae 可配置</li>
+        <li><b>双阈值自动计算</b>：_compute_thresholds 在正常验证集上同时计算 image_threshold (99.0 percentile) + pixel_threshold (99.9 percentile)，使用与线上一致的 mask 语义</li>
+        <li><b>CPU 优先导出</b>：训练完成后在 CPU 上 trace → TorchScript 导出，保证跨平台兼容；MPS 自动回退 CPU</li>
+        <li><b>训练/推理一致性</b>：_prepare_input (aspect-ratio resize + reflection padding + normalize) → wrapper 反归一化 → [0,1] 像素值，阈值计算与推理共享同一预处理管线</li>
         <li><b>Celery 异步训练</b>：通过 API 触发 → Celery Worker 执行 → MLflow 注册 → 自动回写 camera_config</li>
+        <li><b>batch_train 全机位</b>：按 camera_id/good/ 组织原图 → 自动制备 → 逐机位训练 → 自动计算 CameraNormalizer + EmbeddingProjector 校准参数</li>
       </ul>
     </td>
   </tr>
@@ -407,55 +410,93 @@ offline-analysis-platform/
 
 ```
 seat_defect_core/
+├── __init__.py                        # 公共 SDK API：SeatDefectInspector, inspect_paths_once 等
+├── __main__.py                        # CLI 入口：inspect / train-efficientad / batch-train
+├── api.py                             # SeatDefectInspector 实现，含自动上传调度
+├── config.py                          # InspectionConfig, AlignmentConfig 等数据类定义
+├── config_file.py                     # JSON/INI 配置文件加载 + 校验
+├── runtime_config.py                  # 运行时配置加载
+├── runtime_config_parsers.py          # 配置解析器（含所有子配置解析）
+├── rule_engine.py                     # 规则引擎：阈值条件命中 + 动作执行
+├── anomaly_uploader.py                # NG 结果 fire-and-forget 上传至离线平台
+├── fusion.py                          # 多机位融合判定
+├── serialization.py                   # 检测结果序列化
+├── reporting.py                       # 报告生成
+├── util.py                            # 通用工具（select_texture_input, write_image, write_json）
+├── USAGE.md                           # 使用说明文档（中文）
+├── config.example.json                # 示例检测配置
+├── config.best.json                   # 最佳实践检测配置
+├── config.training.example.json       # 训练配置示例
+│
 ├── _protocol/                         # 共享数据协议（内嵌，零外部依赖）
+│   ├── types.py                    #   类型别名
 │   ├── entities.py                 #   PatchProposal, EfficientADFeatures 等 dataclass
 │   ├── canonical_proposal.py       #   CanonicalPatchProposal (schema_version + 归一化坐标)
 │   ├── embedding_space.py          #   EmbeddingSpaceContract + UnifiedEmbedding
-│   ├── serialization.py            #   JSON/dict 序列化
-│   └── types.py                    #   类型别名
-├── runtime_config_parsers.py         # JSON / INI 配置解析器
-├── config_file.py                    # 配置文件加载入口
-├── rule_engine.py                    # 规则引擎：阈值条件命中 + 动作执行
-├── anomaly_uploader.py               # NG 结果 fire-and-forget 上传至离线平台
-├── fusion.py                         # 多机位融合判定
-├── serialization.py                  # 检测结果序列化（含 filter_result）
-├── api.py                            # SeatDefectInspector 入口，含自动上传调度
-├── calibration/                      # 🎯 特征校准层（跨机位特征统一）
-│   ├── camera_normalizer.py          #   CameraNormalizer — 机位级 per-channel 标准化
-│   ├── projector.py                  #   EmbeddingProjector — EAD 多尺度特征 → 384-dim
-│   ├── whitening.py                  #   WhiteningTransform — ZCA 白化去相关
-│   ├── feature_center.py             #   EMAFeatureCenter — 缺陷类型特征中心 EMA
-│   ├── registry.py                   #   CalibrationRegistry — 统一校准入口
-│   └── config.py                     #   CalibrationConfig
-├── classifier/
-│   ├── __init__.py
-│   └── engine.py                     # Three-Modal Filter 推理引擎：图像+EAD特征+Unified Emb 三模态 + 故障安全
-├── proposal/                         # 🔬 Region Proposal 模块
-│   ├── generator.py                  #   热力图→连通域→区域裁剪
-│   ├── budget.py                     #   BudgetController（三态自适应阈值）
-│   ├── aggregation.py                #   加权聚合 (area × score)
-│   └── config.py                     #   Proposal + BudgetConfig 配置
-├── tracking/                         # 🔗 Defect Identity 追踪模块
-│   ├── identity.py                   #   6态生命周期 (BIRTH→DEAD)
-│   ├── tracker.py                    #   DefectTracker 编排器
-│   ├── matcher.py                    #   级联匹配 + 冲突解决
-│   ├── kalman_filter.py              #   6-DOF Kalman + Hungarian
-│   └── config.py                     #   TrackConfig
-├── service/
-│   ├── core.py                       # InspectionService + ModelBundleCache（含分类器缓存/自动加载）
-│   ├── inspection_camera.py          # 单机位检测流程（含分类器推理 + 规则引擎接入）
-│   ├── inspection.py                 # 多机位检测编排
-│   └── ...
-├── types/                            # 类型定义（FramePacket, CameraInspectionResult 等）
-├── yolo/                             # YOLO 检测模块
-├── efficientad/                       # EfficientAD 异常检测引擎（ST-only 评分 + grid pooling + JIT/state_dict 双加载）
-├── cvops/                            # 图像预处理（ROI / 质量 / 区域分割）
-├── training/                         # 🧬 模型训练
-│   ├── efficientad.py               #   _EfficientADExportWrapper（CPU 导出 + 阈值计算）
-│   └── batch_train.py               #   批量训练脚本
-├── core_types/                       # 核心类型定义（geometry / input / pipeline / results）
-├── artifacts/                        # 调试产物生成
-└── tests/                            # 标定模块测试
+│   └── serialization.py            #   JSON/dict 序列化
+│
+├── artifacts/                         # 调试工件生成
+│   └── debug.py                    #   热力图叠加（峰值增强 + 膨胀 + 白色热点标记）
+│
+├── calibration/                       # 🎯 特征校准层（跨机位特征统一）
+│   ├── camera_normalizer.py        #   CameraNormalizer — 机位级 per-channel 标准化
+│   ├── projector.py                #   EmbeddingProjector — EAD 多尺度特征 → 384-dim
+│   ├── whitening.py                #   WhiteningTransform — ZCA 白化去相关
+│   ├── feature_center.py           #   EMAFeatureCenter — 缺陷类型特征中心 EMA
+│   ├── registry.py                 #   CalibrationRegistry — 统一校准入口
+│   └── config.py                   #   CalibrationConfig
+│
+├── classifier/                        # Filter Classifier（三模态误报抑制）
+│   └── engine.py                    #   Three-Modal Filter 推理引擎 + 故障安全
+│
+├── core_types/                        # 核心类型定义
+│   ├── geometry.py                 #   几何类型
+│   ├── input.py                    #   输入类型（InspectionFrame）
+│   ├── pipeline.py                 #   流水线状态类型
+│   └── results.py                  #   结果类型（TextureAnomalyResult, InspectionResponse 等）
+│
+├── cvops/                             # 计算机视觉操作
+│   ├── quality.py                  #   图像质量检查
+│   ├── roi.py                      #   ROI 裁剪 + 对齐
+│   └── roi_geometry.py             #   ROI 几何操作
+│
+├── efficientad/                       # EfficientAD 异常检测引擎
+│   ├── config.py                   #   EfficientADConfig（含 use_ae, pixel_threshold 等）
+│   └── engine.py                   #   EfficientADService + _prepare_input + 评分函数
+│
+├── proposal/                          # 🔬 Region Proposal 模块
+│   ├── generator.py                #   热力图→连通域→区域裁剪
+│   ├── budget.py                   #   Cascading Budget 控制器
+│   ├── aggregation.py              #   加权聚合 (area^0.5 × score)
+│   └── config.py                   #   Proposal + BudgetConfig 配置
+│
+├── service/                           # 检测服务层
+│   ├── core.py                     #   InspectionService + ModelBundleCache
+│   ├── frames.py                   #   帧管理
+│   ├── inspection.py               #   多机位检测编排
+│   ├── inspection_camera.py        #   单机位检测流程
+│   └── response.py                 #   响应构建
+│
+├── scripts/                           # 辅助脚本
+│   └── train_windows.ps1           #   Windows 训练脚本
+│
+├── tracking/                          # 🔗 Defect Identity 追踪模块
+│   ├── identity.py                 #   6态生命周期 (BIRTH→DEAD)
+│   ├── tracker.py                  #   DefectTracker 编排器
+│   ├── matcher.py                  #   级联匹配 + 冲突解决
+│   ├── kalman_filter.py            #   6-DOF Kalman + Hungarian
+│   └── config.py                   #   TrackConfig
+│
+├── training/                          # 🧬 EfficientAD 训练管线
+│   ├── efficientad.py              #   单机位训练 + _EfficientADExportWrapper + 阈值计算
+│   └── batch_train.py              #   批量多机位训练 + 校准参数计算
+│
+├── yolo/                              # YOLO 分割集成
+│   └── detection.py                #   YOLO 模型加载 + 推理
+│
+└── tests/                             # 测试
+    ├── test_calibration.py
+    └── test_efficientad_high_recall.py
 ```
 
 ---
@@ -723,10 +764,17 @@ mkdir -p sample_images
         "enabled": true,
         "model_path": "./models/seat_model_A/cam_front/efficientad/model.pt",
         "device": "cpu",
-        "input_size": 256,
+        "input_size": 384,
         "batch_size": 1,
         "min_valid_pixel_ratio": 0.2,
-        "use_st_only": true
+        "use_ae": true,
+        "score_topk_ratio": 0.005,
+        "enable_pixel_threshold": true,
+        "min_pixel_anomaly_area": 8,
+        "min_pixel_anomaly_area_ratio": 0.0005,
+        "color_outlier_ratio_threshold": 0.05,
+        "image_threshold_percentile": 99.0,
+        "pixel_threshold_percentile": 99.9
       },
       "filter_classifier": {
         "enabled": true,
@@ -758,7 +806,7 @@ mkdir -p sample_images
 }
 ```
 
-> **关键设计**：EfficientAD 采用 ST-only 评分（去噪 AE 分支）+ adaptive_avg_pool2d(8×8) grid pooling 替代单像素 amax，大幅提升暗表面缺陷检测能力。Three-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+EAD特征+Unified Embedding 三模态判定，若判定为误报则降级为 OK。Feature Dropout 保证 fallback，推理失败默认 `is_real_defect=True`（故障安全）。
+> **关键设计**：EfficientAD 采用 ST+STAE 混合评分 (use_ae 可配置) + top-0.5% 均值 + ROI top-k 分数兜底 + 独立像素级强异常判定 (pixel_threshold) + 颜色离群值并行检测 (color_outlier_ratio)，三分支任一命中即 NG，大幅提升暗表面/小面积缺陷检测能力。Three-Modal Filter **只抑制不提升** — 仅在 EfficientAD 报 NG 时介入，通过图像+EAD特征+Unified Embedding 三模态判定，若判定为误报则降级为 OK。Feature Dropout 保证 fallback，推理失败默认 `is_real_defect=True`（故障安全）。
 
 ---
 
