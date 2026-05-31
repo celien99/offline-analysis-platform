@@ -26,8 +26,8 @@ class QualityGuardConfig:
 class AlignmentConfig:
     """ROI 裁剪后的输出尺寸。"""
 
-    output_width: int = 256
-    output_height: int = 256
+    output_width: int = 384
+    output_height: int = 384
 
 
 @dataclass

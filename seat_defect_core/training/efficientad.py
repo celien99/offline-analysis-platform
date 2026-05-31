@@ -766,7 +766,7 @@ def re_export_cpu(
     state_dict_path: str,
     output_path: str,
     *,
-    input_size: int = 256,
+    input_size: int = 384,
     image_threshold: float | None = None,
     use_ae: bool = True,
 ) -> str:
@@ -823,7 +823,7 @@ def recompute_threshold(
     state_dict_path: str,
     image_dir: str,
     *,
-    input_size: int = 256,
+    input_size: int = 384,
     percentile: float = 99.0,
     pixel_percentile: float = 99.9,
     score_topk_ratio: float = 0.005,

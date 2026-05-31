@@ -245,7 +245,7 @@ def _letterbox_bundle(
     """Resize ROI image and mask to the canonical texture anomaly detection canvas.
 
     Uses direct stretch resize (not letterbox) to match anomalib's training-time
-    PreProcessor transform: Resize(size=[256, 256], interpolation=BILINEAR).
+    PreProcessor transform: Resize(size=[384, 384], interpolation=BILINEAR).
     """
     src_height, src_width = roi_image.shape[:2]
 

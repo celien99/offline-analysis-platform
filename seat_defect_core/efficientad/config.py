@@ -16,7 +16,7 @@ class EfficientADConfig:
     device: str = "cpu"
     """推理设备：cpu / cuda / mps。"""
 
-    input_size: int = 256
+    input_size: int = 384
     """模型输入尺寸 (正方形)。"""
 
     teacher_backbone: str = "wide_resnet50_2"

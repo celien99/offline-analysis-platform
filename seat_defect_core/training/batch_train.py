@@ -285,7 +285,7 @@ def _compute_calibration_stats(
     camera_model_map: dict[str, tuple[str, int]] = {}
     for cam in _collect_all_cameras(config):
         if cam.camera_id in training_results:
-            input_size = getattr(cam.efficientad, "input_size", 256) if cam.efficientad else 256
+            input_size = getattr(cam.efficientad, "input_size", 384) if cam.efficientad else 384
             camera_model_map[cam.camera_id] = (
                 training_results[cam.camera_id]["artifact_path"],
                 input_size,
