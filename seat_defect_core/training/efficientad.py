@@ -8,13 +8,20 @@ from __future__ import annotations
 
 import json
 import inspect
+import logging
+import shutil
+import tempfile
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Optional, Sequence, Type
 
 import cv2
 import numpy as np
 import torch
+
+
+_logger = logging.getLogger(__name__)
 
 
 class _EfficientADExportWrapper(torch.nn.Module):
@@ -108,11 +115,6 @@ def train_efficientad(
     if efficientad_cfg is None:
         raise ValueError(f"相机 '{camera_id}' 未配置 efficientad 参数")
 
-    # 只收集文件路径，不在内存中累积高分辨率 numpy 数组，避免 cv::OutOfMemoryError
-    image_paths: list[Path] = [Path(p) for p in good_image_paths if Path(p).exists()]
-    if len(image_paths) < 2:
-        raise RuntimeError(f"正常参考图像不足 ({len(image_paths)} 张)，至少需要 2 张")
-
     device = _resolve_train_device(efficientad_cfg.device)
 
     # GPU 性能优化：针对 RTX 4060 (Ada Lovelace) 及以上架构
@@ -140,25 +142,59 @@ def train_efficientad(
             ) from fallback_exc
     datamodule_cls: Type = FolderDataModule
 
-    import tempfile
-    import shutil
-
     # MLflow 初始化
     mlflow_run_id: Optional[str] = None
     mlflow = _init_mlflow(mlflow_tracking_uri, mlflow_experiment)
 
+    # 只收集文件路径，不在内存中累积高分辨率 numpy 数组，避免 cv::OutOfMemoryError
+    source_image_paths: list[Path] = [Path(p) for p in good_image_paths if Path(p).exists()]
+    if len(source_image_paths) < 2:
+        raise RuntimeError(f"正常参考图像不足 ({len(source_image_paths)} 张)，至少需要 2 张")
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    prepared_root = output.parent / f"{output.stem}_prepared_roi"
     tmp_dir = Path(tempfile.mkdtemp(prefix="efficientad_train_"))
     t_start = time.monotonic()
     try:
+        prepared = _prepare_training_images(
+            camera_config,
+            source_image_paths,
+            prepared_root,
+            reset_output=True,
+        )
+        image_paths = prepared["image_paths"]
+        target_mask_paths = prepared["target_mask_paths"]
+        ignore_mask_paths = prepared["ignore_mask_paths"]
+        if len(image_paths) < 2:
+            reason_summary = ", ".join(
+                f"{reason}={count}" for reason, count in sorted(prepared["rejections"].items())
+            ) or "none"
+            raise RuntimeError(
+                f"YOLO+ROI 制备后的正常参考图像不足 ({len(image_paths)} 张)，"
+                f"至少需要 2 张；跳过原因: {reason_summary}"
+            )
+
         # anomalib MVTec 格式: {category}/train/good/ + {category}/test/good/ (用于阈值计算)
         category = camera_id.replace(" ", "_")
         good_dir = tmp_dir / category / "train" / "good"
         good_dir.mkdir(parents=True, exist_ok=True)
 
-        # 划分训练集和阈值计算集 (90/10)
+        # 固定 seed 打乱后划分，避免按时间/批次排序导致阈值集偏置。
+        order = np.random.default_rng(42).permutation(len(image_paths)).tolist()
+        image_paths = [image_paths[i] for i in order]
+        target_mask_paths = [target_mask_paths[i] for i in order]
+        ignore_mask_paths = [ignore_mask_paths[i] for i in order]
+
         split_idx = max(1, int(len(image_paths) * (1.0 - efficientad_cfg.validation_split)))
         train_paths = image_paths[:split_idx]
         threshold_paths = image_paths[split_idx:] if split_idx < len(image_paths) else image_paths[:1]
+        threshold_target_mask_paths = (
+            target_mask_paths[split_idx:] if split_idx < len(target_mask_paths) else target_mask_paths[:1]
+        )
+        threshold_ignore_mask_paths = (
+            ignore_mask_paths[split_idx:] if split_idx < len(ignore_mask_paths) else ignore_mask_paths[:1]
+        )
 
         # 直接复制原图到 anomalib 目录（保留原始格式，不做 decode→re-encode）
         for i, src in enumerate(train_paths):
@@ -211,17 +247,28 @@ def train_efficientad(
         # （teacher-student 知识蒸馏 + 特征统计依赖 per-image 处理）
         # 通过 gradient_accumulation 增大有效 batch size，减少 optimizer step 开销
         train_batch_size = 1
+        accelerator = "gpu" if device.type == "cuda" else ("mps" if device.type == "mps" else "cpu")
         engine_kwargs: dict = {
             "max_epochs": efficientad_cfg.epochs,
-            "devices": 1 if device.type != "cpu" else 0,
-            "accelerator": "gpu" if device.type == "cuda" else "cpu",
+            "devices": 1,
+            "accelerator": accelerator,
             "default_root_dir": str(tmp_dir / "results"),
         }
         if device.type == "cuda":
             engine_kwargs["precision"] = "16-mixed"
             # 每 4 步更新一次权重，等效 batch_size=4，减少 optimizer CPU-GPU 同步开销
             engine_kwargs["accumulate_grad_batches"] = 4
-        engine = Engine(**engine_kwargs)
+        try:
+            engine = Engine(**engine_kwargs)
+        except (ValueError, RuntimeError) as exc:
+            if accelerator == "mps":
+                _logger.warning(
+                    "mps_accelerator_unsupported falling back to CPU: %s", exc
+                )
+                engine_kwargs["accelerator"] = "cpu"
+                engine = Engine(**engine_kwargs)
+            else:
+                raise
 
         eval_batch_size = max(16, efficientad_cfg.batch_size)
         num_workers = 8
@@ -257,8 +304,6 @@ def train_efficientad(
         torch_model = model.model.to(device).eval()
 
         # 保存 state_dict（在任何设备迁移之前保存训练后的权重）
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
         state_dict_path = output.with_suffix(".state_dict.pt")
         torch.save(torch_model.state_dict(), str(state_dict_path))
 
@@ -269,13 +314,19 @@ def train_efficientad(
 
         # 计算最优阈值：使用与线上推理完全一致的 wrapper + scoring 方法，
         # 在 CPU 上计算，确保训练环境 (CUDA) 和部署环境 (CPU/Mac) 阈值一致
-        image_threshold = _compute_threshold(
+        thresholds = _compute_thresholds(
             model=export_model,
             image_paths=threshold_paths,
             device=torch.device("cpu"),
             input_size=efficientad_cfg.input_size,
-            percentile=99.0,
+            image_percentile=efficientad_cfg.image_threshold_percentile,
+            pixel_percentile=efficientad_cfg.pixel_threshold_percentile,
+            score_topk_ratio=efficientad_cfg.score_topk_ratio,
+            target_mask_paths=threshold_target_mask_paths,
+            ignore_mask_paths=threshold_ignore_mask_paths,
         )
+        image_threshold = thresholds["image_threshold"]
+        pixel_threshold = thresholds["pixel_threshold"]
 
         # 导出 TorchScript（CPU trace，确保跨平台兼容）
         example_input = torch.randn(
@@ -286,9 +337,6 @@ def train_efficientad(
         )
         traced = torch.jit.trace(export_model, example_input)
         traced.save(str(output))
-
-        # 像素级阈值（取图像级阈值的 0.8 倍作为参考）
-        pixel_threshold = round(image_threshold * 0.8, 6)
 
         train_time_s = round(time.monotonic() - t_start, 1)
 
@@ -301,12 +349,19 @@ def train_efficientad(
             "student_backbone": efficientad_cfg.student_backbone,
             "train_image_count": len(train_paths),
             "threshold_image_count": len(threshold_paths),
+            "source_image_count": len(source_image_paths),
+            "prepared_image_count": len(image_paths),
+            "prepared_image_dir": str(prepared_root),
+            "prepare_rejections": dict(prepared["rejections"]),
             "epochs": efficientad_cfg.epochs,
             "train_batch_size": train_batch_size,
             "eval_batch_size": eval_batch_size,
             "num_workers": num_workers,
             "train_time_s": train_time_s,
             "camera_id": camera_id,
+            "image_threshold_percentile": efficientad_cfg.image_threshold_percentile,
+            "pixel_threshold_percentile": efficientad_cfg.pixel_threshold_percentile,
+            "score_topk_ratio": efficientad_cfg.score_topk_ratio,
         }
         meta_path = output.with_suffix(".meta.json")
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
@@ -349,10 +404,106 @@ def train_efficientad(
             "pixel_threshold": pixel_threshold,
             "train_image_count": len(train_paths),
             "train_time_s": train_time_s,
+            "prepared_image_dir": str(prepared_root),
+            "source_image_count": len(source_image_paths),
+            "prepared_image_count": len(image_paths),
+            "prepare_rejections": dict(prepared["rejections"]),
             "mlflow_run_id": mlflow_run_id,
         }
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _prepare_training_images(
+    camera_config,
+    source_image_paths: Sequence[Path],
+    output_dir: Path,
+    *,
+    reset_output: bool = False,
+    pipeline_cls=None,
+) -> dict:
+    """Run the online YOLO+ROI prepare path and persist EfficientAD training inputs.
+
+    The saved image is exactly the online texture input (`aligned_roi_image`) that
+    `select_texture_input(prepared.roi)` returns during inspection. Masks are kept
+    beside it so threshold calibration can use the same target/ignore semantics as
+    online scoring.
+    """
+    from ..util import select_texture_input, write_image
+
+    if pipeline_cls is None:
+        from ..service.core import CameraPipeline
+
+        pipeline_cls = CameraPipeline
+
+    if reset_output and output_dir.exists():
+        import shutil as _shutil
+
+        _shutil.rmtree(output_dir)
+    image_dir = output_dir / "images"
+    target_dir = output_dir / "target_masks"
+    ignore_dir = output_dir / "ignore_masks"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    ignore_dir.mkdir(parents=True, exist_ok=True)
+
+    pipeline = pipeline_cls(camera_config)
+    prepared_image_paths: list[Path] = []
+    target_mask_paths: list[Path] = []
+    ignore_mask_paths: list[Path] = []
+    rejections: Counter[str] = Counter()
+
+    for index, source_path in enumerate(source_image_paths):
+        try:
+            image = cv2.imread(str(source_path))
+            if image is None:
+                rejections["image_decode_failed"] += 1
+                continue
+            prepared = pipeline.prepare_image(image)
+            if prepared.roi is None:
+                rejections[prepared.rejection_reason or "roi_missing"] += 1
+                continue
+            texture_input = select_texture_input(prepared.roi)
+            stem = f"{index:06d}_{source_path.stem}"
+            image_path = image_dir / f"{stem}.png"
+            target_path = target_dir / f"{stem}.png"
+            ignore_path = ignore_dir / f"{stem}.png"
+
+            write_image(image_path, texture_input)
+            write_image(target_path, (prepared.roi.target_mask > 0).astype(np.uint8) * 255)
+            write_image(ignore_path, (prepared.roi.ignore_mask > 0).astype(np.uint8) * 255)
+            prepared_image_paths.append(image_path)
+            target_mask_paths.append(target_path)
+            ignore_mask_paths.append(ignore_path)
+            if prepared.rejection_reason is not None:
+                rejections[prepared.rejection_reason] += 1
+        except Exception:
+            rejections["prepare_exception"] += 1
+            _logger.warning(
+                "prepare_training_image_failed index=%d path=%s",
+                index, str(source_path), exc_info=True,
+            )
+
+    manifest = {
+        "camera_id": camera_config.camera_id,
+        "source_image_count": len(source_image_paths),
+        "prepared_image_count": len(prepared_image_paths),
+        "rejections": dict(rejections),
+        "images": [str(path) for path in prepared_image_paths],
+        "target_masks": [str(path) for path in target_mask_paths],
+        "ignore_masks": [str(path) for path in ignore_mask_paths],
+    }
+    (output_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return {
+        "image_paths": prepared_image_paths,
+        "target_mask_paths": target_mask_paths,
+        "ignore_mask_paths": ignore_mask_paths,
+        "rejections": rejections,
+    }
 
 
 def _compute_threshold(
@@ -363,48 +514,137 @@ def _compute_threshold(
     percentile: float = 99.0,
     batch_size: int = 32,
 ) -> float:
-    """在正常图像上计算异常分数阈值。
+    """Backward-compatible image-threshold helper."""
+    thresholds = _compute_thresholds(
+        model=model,
+        image_paths=image_paths,
+        device=device,
+        input_size=input_size,
+        image_percentile=percentile,
+        batch_size=batch_size,
+    )
+    return thresholds["image_threshold"]
 
-    预处理与线上推理一致（使用 _prepare_input），确保阈值在部署环境中有效。
-    model 为 _EfficientADExportWrapper，输出 (anomaly_map, pred_score)。
+
+def _compute_thresholds(
+    model: object,
+    image_paths: list[Path],
+    device: torch.device,
+    input_size: int,
+    *,
+    image_percentile: float = 99.0,
+    pixel_percentile: float = 99.9,
+    score_topk_ratio: float = 0.005,
+    batch_size: int = 32,
+    target_mask_paths: Optional[list[Path]] = None,
+    ignore_mask_paths: Optional[list[Path]] = None,
+) -> dict[str, float]:
+    """在正常图像上同时计算图像级和像素级阈值。
+
+    图像级分数与线上高召回判定一致：取 wrapper pred_score 与 anomaly_map
+    top-k 均值的较大值。像素级阈值来自正常验证集 anomaly_map 像素分布，
+    用于线上强热点兜底。
     """
-    from ..efficientad.engine import _prepare_input
+    from ..efficientad.engine import _prepare_input, _resize_anomaly_map, _to_binary_mask, _topk_mean_flat
 
     model.eval()
-    all_scores: list[float] = []
+    image_scores: list[float] = []
+    pixel_scores: list[np.ndarray] = []
 
     with torch.no_grad():
         for start in range(0, len(image_paths), batch_size):
             batch_paths = image_paths[start : start + batch_size]
+            batch_target_masks = (
+                target_mask_paths[start : start + batch_size]
+                if target_mask_paths is not None
+                else [None] * len(batch_paths)
+            )
+            batch_ignore_masks = (
+                ignore_mask_paths[start : start + batch_size]
+                if ignore_mask_paths is not None
+                else [None] * len(batch_paths)
+            )
             batch_tensors: list[torch.Tensor] = []
-            for p in batch_paths:
+            batch_masks: list[np.ndarray | None] = []
+            for p, target_path, ignore_path in zip(batch_paths, batch_target_masks, batch_ignore_masks):
                 img = cv2.imread(str(p))
                 if img is None:
-                    batch_tensors.append(torch.zeros(3, input_size, input_size))
                     continue
-                # 使用与线上推理完全相同的预处理（BGR→RGB, aspect-ratio resize,
-                # reflection padding, ImageNet normalize）
                 t = _prepare_input(img, input_size).squeeze(0)
                 batch_tensors.append(t)
+                if target_path is None:
+                    batch_masks.append(None)
+                    continue
+                target = cv2.imread(str(target_path), cv2.IMREAD_GRAYSCALE)
+                if target is None:
+                    batch_masks.append(None)
+                    continue
+                ignore = (
+                    cv2.imread(str(ignore_path), cv2.IMREAD_GRAYSCALE)
+                    if ignore_path is not None
+                    else None
+                )
+                target_binary = _to_binary_mask(target, (input_size, input_size))
+                if ignore is not None:
+                    ignore_binary = _to_binary_mask(ignore, (input_size, input_size))
+                    target_binary[ignore_binary > 0] = 0
+                batch_masks.append(target_binary)
+
+            if not batch_tensors:
+                continue
 
             batch = torch.stack(batch_tensors).to(device)
             output = model(batch)
-            pred_score = _extract_pred_score(output)
+            if not isinstance(output, (tuple, list)) or len(output) < 2:
+                pred_score = _extract_pred_score(output)
+                if isinstance(pred_score, torch.Tensor):
+                    image_scores.extend(pred_score.detach().cpu().flatten().tolist())
+                else:
+                    image_scores.append(float(pred_score))
+                continue
 
-            if isinstance(pred_score, torch.Tensor):
-                # flatten 处理 (B,1) 和 (B,) 两种 shape
-                all_scores.extend(pred_score.detach().cpu().flatten().tolist())
-            elif isinstance(pred_score, (list, tuple)):
-                all_scores.extend(float(s) for s in pred_score)
-            else:
-                all_scores.append(float(pred_score))
+            anomaly_map, pred_score = output[0], output[1]
+            maps_np = anomaly_map.detach().cpu().float().numpy()
+            if maps_np.ndim == 4:
+                maps_np = maps_np[:, 0]
+            pred_scores = pred_score.detach().cpu().flatten().tolist()
+            for i, amap in enumerate(maps_np):
+                if amap.shape != (input_size, input_size):
+                    amap = _resize_anomaly_map(
+                        torch.from_numpy(amap).unsqueeze(0).unsqueeze(0),
+                        input_size,
+                        input_size,
+                    )
+                mask = batch_masks[i] if i < len(batch_masks) else None
+                if mask is not None and int(mask.sum()) > 0:
+                    flat = amap[mask > 0].reshape(-1).astype(np.float32)
+                else:
+                    flat = amap.reshape(-1).astype(np.float32)
+                if flat.size == 0:
+                    continue
+                topk = _topk_mean_flat(flat, score_topk_ratio)
+                base_score = pred_scores[i] if i < len(pred_scores) else float(flat.mean())
+                image_scores.append(max(float(base_score), topk))
+                pixel_scores.append(flat)
 
-    if not all_scores:
-        return 0.5
+    if not image_scores:
+        return {
+            "image_threshold": 0.5,
+            "pixel_threshold": 0.4,
+        }
 
-    threshold = float(np.percentile(all_scores, percentile))
-    threshold = max(threshold, 1e-6)
-    return round(threshold, 6)
+    image_threshold = float(np.percentile(image_scores, image_percentile))
+    if pixel_scores:
+        all_pixels = np.concatenate(pixel_scores)
+        pixel_threshold = float(np.percentile(all_pixels, pixel_percentile))
+    else:
+        pixel_threshold = image_threshold * 0.8
+
+    return {
+        "image_threshold": round(max(image_threshold, 1e-6), 6),
+        "pixel_threshold": round(max(pixel_threshold, 1e-6), 6),
+    }
+
 
 
 def _extract_pred_score(output: object) -> torch.Tensor | float:
@@ -448,7 +688,7 @@ def train_efficientad_cli() -> None:
     parser = argparse.ArgumentParser(description="训练 EfficientAD 模型")
     parser.add_argument("--config", required=True, help="检测配置文件路径 (JSON/INI)")
     parser.add_argument("--camera-id", required=True, help="目标相机 ID")
-    parser.add_argument("--good-images", required=True, help="正常参考图像目录")
+    parser.add_argument("--good-images", required=True, help="正常原图目录（训练前自动执行 YOLO+ROI 制备）")
     parser.add_argument("--output", required=True, help="输出 .pt 文件路径")
     parser.add_argument("--mlflow-uri", default=None, help="MLflow tracking URI")
     parser.add_argument("--mlflow-experiment", default="efficientad", help="MLflow 实验名称")
@@ -528,6 +768,7 @@ def re_export_cpu(
     *,
     input_size: int = 256,
     image_threshold: float | None = None,
+    use_ae: bool = True,
 ) -> str:
     """将 CUDA traced 的 EfficientAD 模型重新导出为 CPU 兼容版本。
 
@@ -540,6 +781,7 @@ def re_export_cpu(
         input_size: 模型输入尺寸（需与训练时一致）
         image_threshold: 异常分数阈值。为 None 则保留 meta.json 中的旧值。
             注意：新 scoring 管线的阈值与旧管线不兼容，建议重新计算。
+        use_ae: 启用 ST+STAE 混合评分。旧训练模型（无 AE）应设为 False。
 
     Returns:
         str: 输出文件路径
@@ -553,7 +795,7 @@ def re_export_cpu(
     model.model.load_state_dict(state_dict)
     model.model.eval()
 
-    export_model = _EfficientADExportWrapper(model.model, use_ae=False).cpu().eval()
+    export_model = _EfficientADExportWrapper(model.model, use_ae=use_ae).cpu().eval()
     example_input = _torch.randn(1, 3, input_size, input_size)
     traced = _torch.jit.trace(export_model, example_input)
 
@@ -583,8 +825,11 @@ def recompute_threshold(
     *,
     input_size: int = 256,
     percentile: float = 99.0,
+    pixel_percentile: float = 99.9,
+    score_topk_ratio: float = 0.005,
     batch_size: int = 32,
     device: str = "cpu",
+    use_ae: bool = True,
 ) -> dict:
     """从 state_dict 重建模型，在给定正常图像上重新计算异常分数阈值。
 
@@ -598,8 +843,11 @@ def recompute_threshold(
         image_dir: 正常参考图像目录（支持 jpg/png/bmp）。
         input_size: 模型输入尺寸，需与训练时一致。
         percentile: 阈值百分位数，默认 99.0。
+        pixel_percentile: 像素级阈值百分位数，默认 99.9。
+        score_topk_ratio: top-k 兜底评分比例，默认 0.005。
         batch_size: 批量推理大小。
         device: 推理设备 (cpu/cuda/mps)。
+        use_ae: 启用 ST+STAE 混合评分。旧训练模型（无 AE）应设为 False。
 
     Returns:
         dict: {image_threshold, pixel_threshold, image_count, scores_percentiles}
@@ -620,7 +868,7 @@ def recompute_threshold(
     model.model.load_state_dict(state_dict)
     model.model.eval()
 
-    export_model = _EfficientADExportWrapper(model.model, use_ae=False).to(_device).eval()
+    export_model = _EfficientADExportWrapper(model.model, use_ae=use_ae).to(_device).eval()
 
     image_dir_path = _Path(image_dir)
     image_paths: list[_Path] = []
@@ -629,18 +877,19 @@ def recompute_threshold(
     if not image_paths:
         raise FileNotFoundError(f"{image_dir} 中未找到图像文件")
 
-    image_threshold = _compute_threshold(
+    thresholds = _compute_thresholds(
         model=export_model,
         image_paths=image_paths,
         device=_device,
         input_size=input_size,
-        percentile=percentile,
+        image_percentile=percentile,
+        pixel_percentile=pixel_percentile,
+        score_topk_ratio=score_topk_ratio,
         batch_size=batch_size,
     )
-    pixel_threshold = round(image_threshold * 0.8, 6)
 
     return {
-        "image_threshold": image_threshold,
-        "pixel_threshold": pixel_threshold,
+        "image_threshold": thresholds["image_threshold"],
+        "pixel_threshold": thresholds["pixel_threshold"],
         "image_count": len(image_paths),
     }

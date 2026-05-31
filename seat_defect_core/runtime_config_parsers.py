@@ -346,6 +346,34 @@ def _parse_efficientad_config(payload: Any, *, scope: str) -> EfficientADConfig:
         pixel_threshold=_float_or_default(
             payload.get("pixel_threshold"), defaults.pixel_threshold
         ),
+        score_topk_ratio=_float_or_default(
+            payload.get("score_topk_ratio"), defaults.score_topk_ratio
+        ),
+        enable_pixel_threshold=_bool_or_default(
+            payload.get("enable_pixel_threshold"), defaults.enable_pixel_threshold
+        ),
+        min_pixel_anomaly_area=_int_or_default(
+            payload.get("min_pixel_anomaly_area"), defaults.min_pixel_anomaly_area
+        ),
+        min_pixel_anomaly_area_ratio=_float_or_default(
+            payload.get("min_pixel_anomaly_area_ratio"),
+            defaults.min_pixel_anomaly_area_ratio,
+        ),
+        color_outlier_ratio_threshold=_float_or_default(
+            payload.get("color_outlier_ratio_threshold"),
+            defaults.color_outlier_ratio_threshold,
+        ),
+        use_ae=_bool_or_default(
+            payload.get("use_ae"), defaults.use_ae
+        ),
+        image_threshold_percentile=_float_or_default(
+            payload.get("image_threshold_percentile"),
+            defaults.image_threshold_percentile,
+        ),
+        pixel_threshold_percentile=_float_or_default(
+            payload.get("pixel_threshold_percentile"),
+            defaults.pixel_threshold_percentile,
+        ),
         epochs=_int_or_default(payload.get("epochs"), defaults.epochs),
         batch_size=_int_or_default(payload.get("batch_size"), defaults.batch_size),
         learning_rate=_float_or_default(

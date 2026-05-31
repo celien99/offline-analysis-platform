@@ -39,6 +39,21 @@ class TextureAnomalyResult:
     strong_patch_ratio: float = 0.0
     """强异常 patch 比例（强异常面积 / ROI 总面积）。"""
 
+    pixel_threshold: float = 0.0
+    """像素级强异常阈值。"""
+
+    pixel_anomaly_area: int = 0
+    """超过像素级阈值的强异常像素数量。"""
+
+    pixel_anomaly_ratio: float = 0.0
+    """超过像素级阈值的强异常像素比例。"""
+
+    roi_topk_score: float = 0.0
+    """ROI 目标区域内 top-k 异常分数均值。"""
+
+    color_outlier_ratio: float = 0.0
+    """颜色离群像素比例。"""
+
 
 @dataclass
 class InspectionError:

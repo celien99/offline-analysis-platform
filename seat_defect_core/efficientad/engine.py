@@ -46,6 +46,7 @@ class EfficientADService:
         self.model: Optional[torch.jit.ScriptModule | torch.nn.Module] = None
         self._feature_model: Optional[torch.nn.Module] = None
         self._image_threshold = config.image_threshold
+        self._pixel_threshold = config.pixel_threshold
         self._threshold_from_meta = False
         if config.model_path:
             self._load_model(config.model_path)
@@ -88,7 +89,7 @@ class EfficientADService:
                 raw_model.to(self.device)
                 raw_model.eval()
 
-                eager_model = _EfficientADExportWrapper(raw_model, use_ae=False).to(self.device).eval()
+                eager_model = _EfficientADExportWrapper(raw_model, use_ae=self.config.use_ae).to(self.device).eval()
                 self.model = eager_model
                 _logger.info("efficientad_eager_loaded model_path=%s", model_path)
             except Exception:
@@ -118,6 +119,8 @@ class EfficientADService:
             if "image_threshold" in meta:
                 self._image_threshold = float(meta["image_threshold"])
                 self._threshold_from_meta = True
+            if "pixel_threshold" in meta:
+                self._pixel_threshold = float(meta["pixel_threshold"])
         if not self._threshold_from_meta:
             _logger.warning(
                 "efficientad_threshold_not_loaded",
@@ -155,6 +158,10 @@ class EfficientADService:
         return self._image_threshold
 
     @property
+    def pixel_threshold(self) -> float:
+        return self._pixel_threshold
+
+    @property
     def has_features(self) -> bool:
         """是否支持多尺度特征提取。"""
         return self._feature_model is not None
@@ -181,6 +188,7 @@ class EfficientADService:
                 heatmap=np.zeros((original_h, original_w), dtype=np.float32),
                 anomaly_map=np.zeros((original_h, original_w), dtype=np.float32),
                 valid_pixel_ratio=valid_pixel_ratio,
+                pixel_threshold=self._pixel_threshold,
             )
 
         # 预处理：BGR → RGB, resize, reflection padding, normalize
@@ -210,16 +218,24 @@ class EfficientADService:
         # 构建目标区域二值掩膜，清零非目标区域（letterbox padding 等）
         target_binary = _to_binary_mask(target_mask, (original_h, original_w))
 
-        # 使用模型内置的 pred_score，与训练时 _compute_threshold 的 scoring
-        # 方法完全一致，确保阈值跨训练/推理可比。
-        anomaly_score = anomaly_score_raw
+        # 使用模型内置 pred_score，并用 ROI 内 top-k 分数兜底。
+        # 前者保持 TorchScript 导出分数可比，后者避免小面积明显缺陷被
+        # 非目标/低响应区域稀释。
+        roi_topk_score = _compute_masked_topk_score(
+            anomaly_map,
+            target_binary,
+            ratio=self.config.score_topk_ratio,
+        )
+        anomaly_score = max(anomaly_score_raw, roi_topk_score)
 
         # 像素颜色离群值检测：独立于 ST distance 的并行判定维度。
         # 白纸/彩色贴纸在深色面料上产生大范围像素值偏差，这是确定性信号，
         # 不依赖随机 teacher 的特征网格对齐。使用独立阈值而非乘到 ST 分数上，
         # 避免光照波动导致误报。
         color_outlier_ratio = _compute_color_outlier_ratio(image, target_binary)
-        color_anomaly = color_outlier_ratio > 0.05  # 超过 5% 像素颜色异常 → NG
+        color_anomaly = (
+            color_outlier_ratio > self.config.color_outlier_ratio_threshold
+        )
 
         # 热力图：以阈值为锚点做归一化，阈值≈0.5，2×阈值≈1.0
         # 正常区域（远低于阈值）→ dark blue，边界 → yellow，异常 → red
@@ -229,9 +245,20 @@ class EfficientADService:
         strong_patch_count, strong_patch_ratio = _compute_strong_patches(
             anomaly_map, target_binary, self._image_threshold
         )
+        pixel_anomaly, pixel_anomaly_area, pixel_anomaly_ratio = _compute_pixel_anomaly_stats(
+            anomaly_map,
+            target_binary,
+            threshold=self._pixel_threshold,
+            min_area=self.config.min_pixel_anomaly_area,
+            min_area_ratio=self.config.min_pixel_anomaly_area_ratio,
+        )
 
-        # 异常判定：ST distance 超阈值 或 颜色离群值超标
-        is_anomaly = (anomaly_score > self._image_threshold) or color_anomaly
+        # 异常判定：图像级分数、像素级强热点、颜色离群任一命中即 NG。
+        is_anomaly = (
+            anomaly_score > self._image_threshold
+            or (self.config.enable_pixel_threshold and pixel_anomaly)
+            or color_anomaly
+        )
 
         # 多尺度特征提取（如果可用；None 表示不可用或提取失败）
         features = None
@@ -249,6 +276,11 @@ class EfficientADService:
             features=features,
             strong_patch_count=strong_patch_count,
             strong_patch_ratio=strong_patch_ratio,
+            pixel_threshold=self._pixel_threshold,
+            pixel_anomaly_area=pixel_anomaly_area,
+            pixel_anomaly_ratio=pixel_anomaly_ratio,
+            roi_topk_score=roi_topk_score,
+            color_outlier_ratio=color_outlier_ratio,
         )
 
     def predict_batch(
@@ -548,6 +580,58 @@ def _compute_strong_patches(
     patch_count = max(0, num_labels - 1)
     patch_ratio = float(strong_area / target_pixels)
     return patch_count, patch_ratio
+
+
+def _topk_mean_flat(values: np.ndarray, ratio: float) -> float:
+    """计算一维数组 top-k 均值，用于异常分数兜底。
+
+    与 _compute_masked_topk_score 共享核心算法，后者增加了 ROI mask 过滤。
+    """
+    if values.size == 0:
+        return 0.0
+    topk_ratio = float(np.clip(ratio, 1.0 / float(values.size), 1.0))
+    k = max(1, int(round(values.size * topk_ratio)))
+    if k >= values.size:
+        return float(values.mean())
+    partitioned = np.partition(values, values.size - k)
+    return float(partitioned[-k:].mean())
+
+
+def _compute_masked_topk_score(
+    anomaly_map: np.ndarray,
+    target_binary: np.ndarray,
+    *,
+    ratio: float,
+) -> float:
+    """计算 ROI 目标区域内 top-k 像素均值作为高召回兜底图像分数。"""
+    target_values = anomaly_map[target_binary > 0].astype(np.float32)
+    if target_values.size == 0:
+        return 0.0
+    return _topk_mean_flat(target_values, ratio)
+
+
+def _compute_pixel_anomaly_stats(
+    anomaly_map: np.ndarray,
+    target_binary: np.ndarray,
+    *,
+    threshold: float,
+    min_area: int,
+    min_area_ratio: float,
+) -> Tuple[bool, int, float]:
+    """统计 ROI 内达到像素级阈值的强热点区域。"""
+    if threshold <= 0:
+        return False, 0, 0.0
+    target_pixels = int(target_binary.sum())
+    if target_pixels <= 0:
+        return False, 0, 0.0
+    strong_mask = ((anomaly_map > threshold) & (target_binary > 0)).astype(np.uint8)
+    strong_area = int(strong_mask.sum())
+    required_area = max(
+        1,
+        int(max(0, min_area)),
+        int(round(max(0.0, min_area_ratio) * float(target_pixels))),
+    )
+    return strong_area >= required_area, strong_area, float(strong_area / target_pixels)
 
 
 def _normalize_heatmap(

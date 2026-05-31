@@ -2,7 +2,7 @@
 
 Usage examples:
   python -m seat_defect_core inspect --config config.json --images cam1=img1.jpg
-  python -m seat_defect_core train-efficientad --config config.json --camera-id cam_front --good-images ./good/ --output model.pt
+  python -m seat_defect_core train-efficientad --config config.json --camera-id cam_front --good-images ./raw_good/ --output model.pt
   python -m seat_defect_core batch-train --config config.json --good-images-root ./training_data/ --output-root ./models/
 """
 
@@ -30,13 +30,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     train_parser = subparsers.add_parser("train-efficientad", help="训练 EfficientAD 模型")
     train_parser.add_argument("--config", type=str, required=True, help="检测配置文件路径 (JSON/INI)")
     train_parser.add_argument("--camera-id", type=str, required=True, help="目标相机 ID")
-    train_parser.add_argument("--good-images", type=str, required=True, help="正常参考图像目录")
+    train_parser.add_argument("--good-images", type=str, required=True, help="正常原图目录（训练前自动执行 YOLO+ROI 制备）")
     train_parser.add_argument("--output", type=str, required=True, help="输出 .pt 文件路径")
 
     # batch-train 子命令
     batch_parser = subparsers.add_parser("batch-train", help="批量训练多机位 EfficientAD 模型")
     batch_parser.add_argument("--config", type=str, required=True, help="检测配置文件路径 (JSON)")
-    batch_parser.add_argument("--good-images-root", type=str, required=True, help="正常图像根目录")
+    batch_parser.add_argument("--good-images-root", type=str, required=True, help="正常原图根目录")
     batch_parser.add_argument("--output-root", type=str, required=True, help="模型输出根目录")
     batch_parser.add_argument("--cameras", type=str, default=None, help="限定训练机位，逗号分隔")
     batch_parser.add_argument("--mlflow-uri", type=str, default=None, help="MLflow tracking URI")

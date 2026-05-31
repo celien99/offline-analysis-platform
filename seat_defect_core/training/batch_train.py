@@ -1,12 +1,12 @@
 """批量训练多机位 EfficientAD 模型。
 
-从按机位组织的正常图像目录中，批量训练 EfficientAD 模型，
+从按机位组织的正常原图目录中，先执行线上 YOLO+ROI 制备，再批量训练 EfficientAD 模型，
 同时自动计算 CameraNormalizer + EmbeddingProjector 校准参数。
 
 目录结构要求：
     <good_images_root>/
       <camera_id>/
-        good/              # 全 ROI 正常图像
+        good/              # 正常原图；训练前自动转换为线上 aligned ROI
           *.jpg
 
 用法：
@@ -51,7 +51,7 @@ def batch_train_all(
 
     Args:
         config_path: 检测配置文件路径。
-        good_images_root: 正常图像根目录，按 camera_id/good/ 组织。
+        good_images_root: 正常原图根目录，按 camera_id/good/ 组织。
         output_root: 模型输出根目录。
         cameras: 限定要训练的机位列表，为 None 则训练全部。
         mlflow_tracking_uri: MLflow tracking URI。
@@ -216,7 +216,7 @@ def batch_train_cli() -> None:
     parser.add_argument(
         "--good-images-root",
         required=True,
-        help="正常图像根目录（结构: <root>/<camera_id>/good/*.jpg）",
+        help="正常原图根目录（结构: <root>/<camera_id>/good/*.jpg，训练前自动执行 YOLO+ROI）",
     )
     parser.add_argument("--output-root", required=True, help="模型输出根目录")
     parser.add_argument("--cameras", default=None, help="限定训练机位，逗号分隔，不传则全部训练")
@@ -273,7 +273,7 @@ def _compute_calibration_stats(
 ) -> dict:
     """在训练完成后自动计算 CameraNormalizer + EmbeddingProjector。
 
-    使用同一批 good/*.jpg 正常图像，通过训练好的 EfficientAD 模型
+    使用训练阶段保存的 prepared ROI 图像，通过训练好的 EfficientAD 模型
     批量提取特征，拟合 per-camera 标准化参数和跨机位 PCA 投影矩阵。
     GPU 可用时自动使用 GPU 加速，比 CPU 逐张推理快 10-50×。
     """
@@ -311,7 +311,11 @@ def _compute_calibration_stats(
     camera_normalizers: dict[str, CameraNormalizer] = {}
 
     for camera_id, (model_path, input_size) in camera_model_map.items():
-        cam_good_dir = good_root / camera_id / "good"
+        prepared_dir_raw = training_results[camera_id].get("prepared_image_dir")
+        if prepared_dir_raw:
+            cam_good_dir = Path(prepared_dir_raw) / "images"
+        else:
+            cam_good_dir = good_root / camera_id / "good"
         if not cam_good_dir.is_dir():
             print(f"  跳过 {camera_id}: 目录不存在 {cam_good_dir}")
             continue

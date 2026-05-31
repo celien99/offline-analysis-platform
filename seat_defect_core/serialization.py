@@ -77,6 +77,13 @@ def texture_result_to_dict(texture_result) -> Optional[Dict[str, Any]]:
         "threshold": texture_result.threshold,
         "is_anomaly": texture_result.is_anomaly,
         "valid_pixel_ratio": texture_result.valid_pixel_ratio,
+        "pixel_threshold": texture_result.pixel_threshold,
+        "pixel_anomaly_area": texture_result.pixel_anomaly_area,
+        "pixel_anomaly_ratio": texture_result.pixel_anomaly_ratio,
+        "roi_topk_score": texture_result.roi_topk_score,
+        "color_outlier_ratio": texture_result.color_outlier_ratio,
+        "strong_patch_count": texture_result.strong_patch_count,
+        "strong_patch_ratio": texture_result.strong_patch_ratio,
     }
 
 

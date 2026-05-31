@@ -12,6 +12,7 @@ _LIST_KEYS = {"box", "debug_artifact_names", "feature_layers"}
 _BOOL_KEYS = {
     "debug_artifacts_enabled",
     "defect_overrides_reject",
+    "enable_pixel_threshold",
     "enabled",
     "pretrained",
     "reject_on_any_reject",

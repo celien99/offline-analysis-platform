@@ -36,6 +36,34 @@ class EfficientADConfig:
     pixel_threshold: float = 0.0
     """像素级异常分数阈值。"""
 
+    score_topk_ratio: float = 0.005
+    """ROI 内用于图像级分数兜底的最高分像素比例。"""
+
+    enable_pixel_threshold: bool = True
+    """是否启用像素级强异常兜底判定。"""
+
+    min_pixel_anomaly_area: int = 8
+    """像素级强异常判定的最小面积（ROI 像素数）。"""
+
+    min_pixel_anomaly_area_ratio: float = 0.0005
+    """像素级强异常判定的最小面积比例。"""
+
+    color_outlier_ratio_threshold: float = 0.05
+    """颜色离群像素比例阈值，超过则判定为异常。"""
+
+    use_ae: bool = True
+    """推理时启用 ST+STAE 混合评分（AE map）。
+
+    True:  ST + STAE 各 50% 混合，同时覆盖纹理和外观异常。
+    False: ST-only，仅用 teacher-student distance（兼容旧训练模型）。
+    仅对 eager 模式重建 wrapper 有效；TorchScript 模型使用 trace 时的设定。"""
+
+    image_threshold_percentile: float = 99.0
+    """训练后在正常验证图上计算图像级阈值的分位数。"""
+
+    pixel_threshold_percentile: float = 99.9
+    """训练后在正常验证图上计算像素级阈值的分位数。"""
+
     # 训练参数
     epochs: int = 100
     """训练轮数。"""
