@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -16,7 +18,6 @@ import numpy as np
 import requests
 
 from .core_types import CameraInspectionResult, InspectionResponse
-from ._protocol import proposals_to_json
 
 logger = logging.getLogger(__name__)
 
@@ -60,23 +61,13 @@ def upload_camera_result(
     files: list[tuple[str, tuple]] = []
     data: Dict[str, Any] = {
         "camera_id": result.camera_id,
-        "source": "efficientad",
+        "source": "patchcore",
         "date_folder": date_folder,
         "detected_at": datetime.now(tz=timezone.utc).isoformat(),
         "decision_reason": result.reason,
     }
     if result.seat_model_id:
         data["seat_model_id"] = result.seat_model_id
-
-        # Mark best-frame proposals from MATURE identities
-        for p in getattr(result, 'proposals', []):
-            identity_id = getattr(p, 'identity_id', None)
-            if identity_id:
-                if result._uploaded_identities is None:
-                    result._uploaded_identities = set()
-                if identity_id not in result._uploaded_identities:
-                    data.setdefault("identity_ids", []).append(identity_id)
-                    result._uploaded_identities.add(identity_id)
 
     # 传递过滤器分类器决策元数据
     if result.filter_result is not None:
@@ -97,6 +88,15 @@ def upload_camera_result(
     # 异常分数
     if result.texture_result is not None:
         data["anomaly_score"] = float(result.texture_result.score)
+    elif result.region_results:
+        # 区域模式下从 region_results 收集最高异常分数
+        region_scores = [
+            r.texture_result.score
+            for r in result.region_results
+            if r.texture_result is not None
+        ]
+        if region_scores:
+            data["anomaly_score"] = float(max(region_scores))
 
     # 原图：用户/产线上传到 inspection 的原始大图，不含热力图叠加。
     if result.original_image is not None:
@@ -130,7 +130,7 @@ def upload_camera_result(
         )))
 
     # Heatmap：Inspection 页面输出的检测叠加图。它已经把完整 ROI 或 region
-    # 纹理异常检测的热力图统一映射回原图坐标系。
+    # PatchCore 的热力图统一映射回原图坐标系。
     if result.overlay_image is not None:
         files.append(("heatmap_file", (
             "heatmap.jpg",
@@ -141,26 +141,6 @@ def upload_camera_result(
         heatmap = _extract_heatmap_for_upload(result)
         if heatmap is not None:
             files.append(("heatmap_file", ("heatmap.png", _encode_heatmap(heatmap), "image/png")))
-
-        # Add proposals JSON if present
-        if getattr(result, 'proposals', None):
-            data["proposals_json"] = proposals_to_json(result.proposals)
-
-        # Upload EfficientAD feature files (.npy format)
-        feature_files: list[tuple[str, bytes, str]] = []
-        texture = result.texture_result
-        if texture is not None and texture.features is not None:
-            import io as _io
-            for feat_name, feat_array in texture.features.items():
-                buf = _io.BytesIO()
-                np.save(buf, feat_array)
-                feature_files.append(
-                    (f"{feat_name}.npy", buf.getvalue(), "application/octet-stream")
-                )
-
-        # Add feature files to the multipart upload
-        for fname, fdata, ftype in feature_files:
-            files.append(("feature_files", (fname, fdata, ftype)))
 
     try:
         url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
@@ -229,11 +209,15 @@ def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | 
 def _extract_anomaly_crop(result: CameraInspectionResult) -> list[np.ndarray]:
     """利用热力图定位异常高响应区域，从 ROI 图中裁剪出异常部位。
 
-    提取热力图中所有显著连通域，按面积降序排列。
+    一张图可能存在多处缺陷 → 提取热力图中所有显著连通域，
+    按面积降序排列。regions 模式下遍历所有 NG region 各自裁剪。
 
     Returns:
-        异常区域 BGR 裁剪图列表（按面积降序）。
+        异常区域 BGR 裁剪图列表（按面积降序，跨 region 合并）。
     """
+    all_crops: list[np.ndarray] = []
+
+    # 完整 ROI 模式：heatmap + roi_aligned_image 同坐标系
     if (
         result.texture_result is not None
         and result.texture_result.heatmap is not None
@@ -245,8 +229,29 @@ def _extract_anomaly_crop(result: CameraInspectionResult) -> list[np.ndarray]:
             else result.roi_image
         )
         if crop_base is not None:
-            return _crop_by_heatmap(heatmap, crop_base)
-    return []
+            all_crops.extend(_crop_by_heatmap(heatmap, crop_base))
+
+    # regions 模式：遍历所有 NG region，各自从其热力图和局部图像中裁剪
+    elif result.region_results:
+        ng_regions = [
+            r for r in result.region_results
+            if r.status == "NG" and r.texture_result is not None and r.texture_result.heatmap is not None
+        ]
+        for region in ng_regions:
+            heatmap = np.asarray(region.texture_result.heatmap, dtype=np.float32)
+            crop_base = (
+                np.asarray(region.sample.image)
+                if region.sample is not None and region.sample.image is not None
+                else (
+                    result.roi_aligned_image
+                    if result.roi_aligned_image is not None
+                    else result.roi_image
+                )
+            )
+            if heatmap is not None and crop_base is not None:
+                all_crops.extend(_crop_by_heatmap(heatmap, crop_base))
+
+    return all_crops
 
 
 def _crop_by_heatmap(
@@ -260,7 +265,7 @@ def _crop_by_heatmap(
 ) -> list[np.ndarray]:
     """按热力图高响应连通域裁剪图像，支持多异常区域。
 
-    纹理异常检测热力图通常是高度局部化的尖锐热点，阈值取 max*0.2 保留
+    PatchCore 热力图通常是高度局部化的尖锐热点，阈值取 max*0.2 保留
     高响应区域，配合 10% 外扩兼顾精度与 embedding 模型所需的上下文。
 
     Args:
