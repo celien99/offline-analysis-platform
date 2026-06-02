@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
+from app.api.camera_config.router import _validate_patchcore_model_bindings
 from app.models.camera_config import CameraConfig, CameraConfigRegion
+from app.models.registry import ModelVersion
 from app.schemas.camera_config import CameraConfigResponse
 from app.services.camera_config.builder import ConfigBuilder
 from app.api.camera_config.router import _build_region_binding_entities
+from app.services.training.service import TrainingService
+from app.api.registry.router import list_model_options
 
 
 def test_camera_region_response_keeps_binding_metadata() -> None:
@@ -189,3 +197,52 @@ def test_region_binding_entities_do_not_require_geometry() -> None:
         1.0,
         1.0,
     ]
+
+
+@pytest.mark.asyncio
+async def test_patchcore_binding_rejects_missing_artifact_file(db_session) -> None:
+    model = ModelVersion(
+        id="missing_patchcore_model",
+        model_name="cam_back_upper",
+        version="v1",
+        model_type="patchcore",
+        artifact_path="/tmp/does-not-exist/upper_patchcore.npz",
+        trained_at=datetime.now(tz=timezone.utc),
+        status="registered",
+    )
+    db_session.add(model)
+    await db_session.flush()
+
+    with pytest.raises(HTTPException) as exc:
+        await _validate_patchcore_model_bindings(
+            db_session,
+            "missing_patchcore_model",
+            [],
+        )
+
+    assert exc.value.status_code == 400
+    assert "PatchCore 模型文件不存在" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_model_options_exclude_missing_artifacts(db_session, tmp_path) -> None:
+    existing = tmp_path / "cam_0_upper_patchcore.npz"
+    existing.write_bytes(b"patchcore")
+    service = TrainingService(db_session)
+    await service.create_model_version(
+        model_name="cam_back_upper",
+        version="new",
+        model_type="patchcore",
+        artifact_path=str(existing),
+    )
+    await service.create_model_version(
+        model_name="cam_back_old",
+        version="old",
+        model_type="patchcore",
+        artifact_path=str(Path(tmp_path) / "missing_patchcore.npz"),
+    )
+    await db_session.commit()
+
+    options = await list_model_options(model_type="patchcore", session=db_session)
+
+    assert [option.model_name for option in options] == ["cam_back_upper"]

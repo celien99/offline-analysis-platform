@@ -46,7 +46,7 @@ class ModelVersionRepository(BaseRepository[ModelVersion]):
         stmt = select(ModelVersion).where(ModelVersion.deleted_at.is_(None))
         if model_type is not None:
             stmt = stmt.where(ModelVersion.model_type == model_type)
-        stmt = stmt.offset(offset).limit(limit)
+        stmt = stmt.order_by(ModelVersion.trained_at.desc()).offset(offset).limit(limit)
 
         result = await self._session.execute(stmt)
         models = list(result.scalars().all())

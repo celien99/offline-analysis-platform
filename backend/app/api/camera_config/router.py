@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.models.camera_config import SeatModel
+from app.models.registry import ModelVersion
 from app.repositories.camera_config import CameraConfigRepository, SeatModelRepository
 from app.schemas.camera_config import (
     CameraConfigCreate,
@@ -158,6 +162,11 @@ async def create_camera(
 
     from app.models.camera_config import CameraConfig
 
+    await _validate_patchcore_model_bindings(
+        session,
+        data.efficientad_model_version_id,
+        data.regions,
+    )
     payload = data.model_dump(exclude={"regions"})
     entity = CameraConfig(
         seat_model_id=seat_model_id,
@@ -189,6 +198,17 @@ async def update_camera(
 
     update_data = data.model_dump(exclude_unset=True)
     regions = update_data.pop("regions", None)
+    patchcore_model_version_id = update_data.get(
+        "efficientad_model_version_id",
+        entity.efficientad_model_version_id,
+    )
+    if data.efficientad_model_version_id is not None or regions is not None:
+        region_bindings = regions if regions is not None else entity.regions
+        await _validate_patchcore_model_bindings(
+            session,
+            patchcore_model_version_id,
+            region_bindings,
+        )
     for key, value in update_data.items():
         setattr(entity, key, value)
     if regions is not None:
@@ -214,6 +234,63 @@ async def delete_camera(
     await cam_repo.soft_delete(camera_db_id)
     await session.commit()
     return None
+
+
+async def _validate_patchcore_model_bindings(
+    session: AsyncSession,
+    camera_model_version_id: str | None,
+    regions: list[dict] | list,
+) -> None:
+    model_ids = {camera_model_version_id} if camera_model_version_id else set()
+    for raw_region in regions:
+        region = (
+            raw_region
+            if isinstance(raw_region, dict)
+            else raw_region.model_dump()
+        )
+        model_id = region.get("patchcore_model_version_id")
+        if model_id:
+            model_ids.add(model_id)
+
+    if not model_ids:
+        return
+
+    result = await session.execute(
+        select(ModelVersion).where(
+            ModelVersion.deleted_at.is_(None),
+            ModelVersion.id.in_(model_ids),
+        )
+    )
+    models = {model.id: model for model in result.scalars().all()}
+
+    missing_ids = sorted(model_ids - set(models))
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"PatchCore 模型版本不存在: {', '.join(missing_ids)}",
+        )
+
+    invalid_type_ids = sorted(
+        model_id
+        for model_id, model in models.items()
+        if model.model_type != "patchcore"
+    )
+    if invalid_type_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"请选择 PatchCore 类型模型: {', '.join(invalid_type_ids)}",
+        )
+
+    missing_paths = [
+        f"{model.id} ({model.artifact_path})"
+        for model in models.values()
+        if not Path(model.artifact_path).is_file()
+    ]
+    if missing_paths:
+        raise HTTPException(
+            status_code=400,
+            detail=f"PatchCore 模型文件不存在: {', '.join(sorted(missing_paths))}",
+        )
 
 
 def _build_region_binding_entities(regions: list[dict] | list) -> list:

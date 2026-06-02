@@ -147,6 +147,9 @@ async def list_model_options(
     """获取已注册模型列表，供相机配置页下拉框使用。"""
     service = TrainingService(session)
     models, _ = await service.list_models(model_type=model_type, offset=0, limit=500)
+    available_models = [
+        model for model in models if Path(model.artifact_path).is_file()
+    ]
     return [
         ModelOption(
             model_id=m.id,
@@ -155,7 +158,7 @@ async def list_model_options(
             model_type=m.model_type,
             artifact_path=m.artifact_path,
         )
-        for m in models
+        for m in available_models
     ]
 
 
