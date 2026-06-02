@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Literal, Sequence
 
 import cv2
 import numpy as np
@@ -18,12 +20,28 @@ try:
 except ImportError:  # 回退：FAISS 不可用时降级为 numpy 暴力搜索
     faiss = None
 
+PatchCoreInputMode = Literal["roi", "online"]
+
+
+@dataclass(frozen=True)
+class PatchCoreTrainingSample:
+    """PatchCore 训练实际消费的一张样本。"""
+
+    image: np.ndarray
+    target_mask: np.ndarray
+    ignore_mask: np.ndarray
+    source_path: str
+    region_id: str | None = None
+
 
 def train_patchcore(
     config: object,
     camera_id: str,
     good_image_paths: Sequence[str | Path],
     output_path: str,
+    *,
+    input_mode: PatchCoreInputMode = "roi",
+    region_id: str | None = None,
 ) -> dict:
     """训练 PatchCore 模型。
 
@@ -32,9 +50,11 @@ def train_patchcore(
         camera_id: 目标相机 ID，从配置中提取对应相机的 PatchCore 参数。
         good_image_paths: 正常（无缺陷）参考图像路径列表。
         output_path: 输出 .npz 文件路径。
+        input_mode: roi 表示样本已是标准 ROI；online 表示按线上 YOLO→ROI→mask 流程准备。
+        region_id: online 模式下可指定训练某个局部区域模型。
 
     Returns:
-        dict: {memory_bank_size, total_embeddings, threshold, artifact_path}
+        dict: {memory_bank_size, total_embeddings, threshold, artifact_path, skipped_by_reason}
     """
     from ..config import (
         InspectionConfig,
@@ -62,33 +82,51 @@ def train_patchcore(
     patchcore_cfg: PatchCoreConfig = camera_config.patchcore
     if patchcore_cfg is None:
         raise ValueError(f"相机 '{camera_id}' 未配置 patchcore 参数")
+    region_config = _find_region(camera_config, region_id)
+    if region_id is not None and region_config is None:
+        available = ", ".join(region.region_id for region in camera_config.regions)
+        raise ValueError(f"未找到区域 '{region_id}'，可用区域: {available or 'none'}")
+    if region_config is not None and region_config.patchcore is not None:
+        patchcore_cfg = region_config.patchcore
 
     # 构建特征提取器（复用 seat_defect_core 的核心实现）
     extractor = _TorchPatchFeatureExtractor(patchcore_cfg)
 
     # 逐张提取 embedding
     all_embeddings: list[np.ndarray] = []
+    skipped_by_reason: Counter[str] = Counter()
     for img_path in good_image_paths:
         img_path = Path(img_path)
         if not img_path.exists():
+            skipped_by_reason["image_missing"] += 1
             continue
         img = cv2.imread(str(img_path))
         if img is None:
+            skipped_by_reason["image_read_failed"] += 1
             continue
-        # 训练时使用全图作为有效区域（无需掩膜）
-        h, w = img.shape[:2]
-        target_mask = np.ones((h, w), dtype=np.uint8)
-        ignore_mask = np.zeros((h, w), dtype=np.uint8)
-        try:
-            embeddings, _patch_batch = extractor.extract(
-                img,
-                target_mask=target_mask,
-                ignore_mask=ignore_mask,
-            )
-            if embeddings.shape[0] > 0:
-                all_embeddings.append(embeddings)
-        except Exception:
+        samples, skipped_reason = prepare_patchcore_training_samples(
+            img,
+            camera_config,
+            input_mode=input_mode,
+            region_id=region_id,
+            source_path=str(img_path),
+        )
+        if skipped_reason is not None:
+            skipped_by_reason[skipped_reason] += 1
             continue
+        for sample in samples:
+            try:
+                embeddings, _patch_batch = extractor.extract(
+                    sample.image,
+                    target_mask=sample.target_mask,
+                    ignore_mask=sample.ignore_mask,
+                )
+                if embeddings.shape[0] > 0:
+                    all_embeddings.append(embeddings)
+                else:
+                    skipped_by_reason["empty_embeddings"] += 1
+            except Exception:
+                skipped_by_reason["embedding_extract_failed"] += 1
 
     if not all_embeddings:
         raise RuntimeError(f"未能从参考图像中提取到有效 embedding: {len(good_image_paths)} 张图片")
@@ -163,6 +201,8 @@ def train_patchcore(
             getattr(patchcore_cfg, "training_threshold_upper_quantile", 0.999)
         ),
         "texture_input": str(patchcore_cfg.texture_input),
+        "input_mode": input_mode,
+        "region_id": region_id,
         "feature_layers": list(patchcore_cfg.feature_layers),
         "feature_pool_kernel_size": int(patchcore_cfg.feature_pool_kernel_size),
         "coreset_sampling_ratio": float(patchcore_cfg.coreset_sampling_ratio),
@@ -181,6 +221,7 @@ def train_patchcore(
         "min_peak_component_patch_count": int(patchcore_cfg.min_peak_component_patch_count),
         # 训练诊断信息
         "train_image_count": int(len(image_scores)),
+        "skipped_by_reason": dict(skipped_by_reason),
         "threshold_image_score_mean": float(image_scores_arr.mean()),
         "threshold_image_score_std": float(image_scores_arr.std()),
     }
@@ -202,7 +243,92 @@ def train_patchcore(
         "total_embeddings": int(total_embeddings),
         "threshold": float(threshold),
         "artifact_path": str(output),
+        "input_mode": input_mode,
+        "region_id": region_id,
+        "skipped_by_reason": dict(skipped_by_reason),
     }
+
+
+def prepare_patchcore_training_samples(
+    image: np.ndarray,
+    camera_config,
+    *,
+    input_mode: PatchCoreInputMode = "roi",
+    region_id: str | None = None,
+    detection_result=None,
+    source_path: str = "",
+) -> tuple[list[PatchCoreTrainingSample], str | None]:
+    """把训练图准备成 PatchCore 与线上同源的 image/mask 输入。
+
+    返回 `(samples, skipped_reason)`；当 `skipped_reason` 非空时表示整张图不可用于训练。
+    """
+    normalized_mode = input_mode.strip().lower()
+    if normalized_mode == "roi":
+        if region_id is not None:
+            return [], "region_requires_online_mode"
+        height, width = image.shape[:2]
+        return [
+            PatchCoreTrainingSample(
+                image=image,
+                target_mask=np.ones((height, width), dtype=np.uint8),
+                ignore_mask=np.zeros((height, width), dtype=np.uint8),
+                source_path=source_path,
+            )
+        ], None
+    if normalized_mode != "online":
+        return [], f"unsupported_input_mode:{input_mode}"
+
+    from ..cvops import ImageQualityGuard, RoiRefineEngine, split_roi_regions
+    from ..util import select_patchcore_input
+    from ..yolo import DetectionService
+
+    if detection_result is None:
+        detection_result = DetectionService(camera_config.detection).detect(image)
+    if detection_result.target is None:
+        return [], "target_not_found"
+    if detection_result.target.segmentation_mask is None:
+        return [], "target_mask_missing"
+
+    try:
+        roi = RoiRefineEngine(camera_config.roi).refine(image, detection_result)
+    except ValueError as exc:
+        return [], str(exc)
+
+    quality = ImageQualityGuard(camera_config.quality).evaluate(
+        roi.aligned_roi_image,
+        valid_mask=roi.valid_mask,
+    )
+    if not quality.accepted:
+        return [], f"quality_{quality.reason or 'rejected'}"
+
+    if region_id is not None:
+        samples = [
+            region_sample
+            for region_sample in split_roi_regions(roi, camera_config.regions)
+            if region_sample.region_id == region_id
+        ]
+        if not samples:
+            return [], "region_empty"
+        return [
+            PatchCoreTrainingSample(
+                image=sample.image,
+                target_mask=sample.target_mask,
+                ignore_mask=sample.ignore_mask,
+                source_path=source_path,
+                region_id=sample.region_id,
+            )
+            for sample in samples
+        ], None
+
+    patchcore_input = select_patchcore_input(roi)
+    return [
+        PatchCoreTrainingSample(
+            image=patchcore_input,
+            target_mask=roi.target_mask,
+            ignore_mask=roi.ignore_mask,
+            source_path=source_path,
+        )
+    ], None
 
 
 def train_patchcore_cli() -> None:
@@ -214,6 +340,13 @@ def train_patchcore_cli() -> None:
     parser.add_argument("--camera-id", required=True, help="目标相机 ID")
     parser.add_argument("--good-images", required=True, help="正常参考图像目录")
     parser.add_argument("--output", required=True, help="输出 .npz 文件路径")
+    parser.add_argument(
+        "--input-mode",
+        choices=("roi", "online"),
+        default="roi",
+        help="训练样本输入模式：roi=已裁标准ROI，online=复用线上YOLO/ROI/mask流程",
+    )
+    parser.add_argument("--region-id", default=None, help="online 模式下训练指定局部区域")
 
     args = parser.parse_args()
 
@@ -232,6 +365,8 @@ def train_patchcore_cli() -> None:
         camera_id=args.camera_id,
         good_image_paths=image_paths,
         output_path=args.output,
+        input_mode=args.input_mode,
+        region_id=args.region_id,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -250,6 +385,15 @@ def _find_camera(inspection_cfg, camera_id: str):
         for cam in getattr(sm, "cameras", []) or []:
             if cam.camera_id == camera_id:
                 return cam
+    return None
+
+
+def _find_region(camera_config, region_id: str | None):
+    if region_id is None:
+        return None
+    for region in getattr(camera_config, "regions", []) or []:
+        if region.region_id == region_id:
+            return region
     return None
 
 

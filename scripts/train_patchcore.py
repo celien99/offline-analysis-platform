@@ -74,6 +74,9 @@ def train_single(
     camera_id: str,
     good_image_dir: str,
     output_path: str,
+    *,
+    input_mode: str = "roi",
+    region_id: str | None = None,
 ) -> dict:
     """训练单个机位的 PatchCore 模型。"""
     from seat_defect_core.training.patchcore import train_patchcore
@@ -88,6 +91,9 @@ def train_single(
     print(f"正常样本: {len(image_paths)} 张")
     print(f"样本目录: {good_image_dir}")
     print(f"输出路径: {output_path}")
+    print(f"输入模式: {input_mode}")
+    if region_id:
+        print(f"训练区域: {region_id}")
     print(f"{'='*60}\n")
 
     result = train_patchcore(
@@ -95,6 +101,8 @@ def train_single(
         camera_id=camera_id,
         good_image_paths=image_paths,
         output_path=output_path,
+        input_mode=input_mode,
+        region_id=region_id,
     )
     return result
 
@@ -104,6 +112,9 @@ def train_batch(
     camera_ids: list[str],
     good_images_root: str,
     output_dir: str,
+    *,
+    input_mode: str = "roi",
+    region_id: str | None = None,
 ) -> list[dict]:
     """批量训练多个机位的 PatchCore 模型。
 
@@ -129,7 +140,14 @@ def train_batch(
 
         output_path = str(out_dir / f"{cam_id}_patchcore.npz")
         try:
-            result = train_single(config_path, cam_id, str(cam_sample_dir), output_path)
+            result = train_single(
+                config_path,
+                cam_id,
+                str(cam_sample_dir),
+                output_path,
+                input_mode=input_mode,
+                region_id=region_id,
+            )
             results.append(result)
         except Exception as exc:
             print(f"错误：{cam_id} 训练失败: {exc}", file=sys.stderr)
@@ -172,6 +190,18 @@ def main() -> None:
     parser.add_argument("--camera-id", type=str, default=None, help="目标相机 ID（单机位模式）")
     parser.add_argument("--good-images", type=str, default=None, help="正常参考图像目录（单机位模式）")
     parser.add_argument("--output", type=str, default=None, help="输出 .npz 文件路径（单机位模式）")
+    parser.add_argument(
+        "--input-mode",
+        choices=("roi", "online"),
+        default="roi",
+        help="训练样本输入模式：roi=已裁标准ROI，online=复用线上YOLO/ROI/mask流程",
+    )
+    parser.add_argument(
+        "--region-id",
+        type=str,
+        default=None,
+        help="online 模式下训练指定局部区域，如 upper/middle/lower",
+    )
 
     # 多机位批量模式
     parser.add_argument(
@@ -208,11 +238,25 @@ def main() -> None:
     validate_args(args)
 
     if is_single:
-        result = train_single(args.config, args.camera_id, args.good_images, args.output)
+        result = train_single(
+            args.config,
+            args.camera_id,
+            args.good_images,
+            args.output,
+            input_mode=args.input_mode,
+            region_id=args.region_id,
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         cam_ids = [cid.strip() for cid in args.camera_ids.split(",") if cid.strip()]
-        train_batch(args.config, cam_ids, args.good_images_root, args.output_dir)
+        train_batch(
+            args.config,
+            cam_ids,
+            args.good_images_root,
+            args.output_dir,
+            input_mode=args.input_mode,
+            region_id=args.region_id,
+        )
 
 
 if __name__ == "__main__":

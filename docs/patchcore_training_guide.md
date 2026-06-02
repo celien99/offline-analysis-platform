@@ -73,10 +73,13 @@ data/
 | 项目 | 要求 |
 |------|------|
 | 格式 | JPG / PNG / BMP |
-| 内容 | 仅包含正常（无缺陷）的座椅 ROI 区域图像 |
+| `online` 模式内容 | 正常（无缺陷）的原始相机图像，由训练脚本复用线上 YOLO → ROI → mask 流程 |
+| `roi` 模式内容 | 已裁剪并标准化的正常座椅 ROI 区域图像，仅用于兼容历史训练数据 |
 | 数量 | 建议 50-200 张，覆盖正常制造波动 |
 | 光照 | 覆盖产线典型光照条件 |
 | 拍摄 | 与线上推理使用相同的机位和角度 |
+
+> 生产训练推荐使用 `--input-mode online`。该模式会按检测配置中的 YOLO、ROI、mask erode、edge ignore 和 region 切分逻辑准备 PatchCore 输入，避免训练样本与线上推理样本分布不一致。
 
 ## 创建训练配置
 
@@ -122,7 +125,7 @@ data/
 
 ## 执行训练
 
-### 单机位训练
+### 单机位训练（生产推荐：online 模式）
 
 ```bash
 cd <项目根目录>
@@ -131,6 +134,35 @@ python scripts/train_patchcore.py \
   --config config.training.json \
   --camera-id cam_front \
   --good-images ./data/cam_front/ \
+  --output ./models/cam_front_patchcore.npz \
+  --input-mode online
+```
+
+`online` 模式要求配置中存在该相机的 YOLO 分割模型路径。训练脚本会跳过无法检测到座椅、缺少 mask、ROI 为空或质量门控不通过的样本，并在输出 JSON 的 `skipped_by_reason` 中给出统计。
+
+### 局部区域 PatchCore 训练
+
+当线上配置使用 `upper` / `middle` / `lower` 等局部区域模型时，应对每个区域分别训练：
+
+```bash
+python scripts/train_patchcore.py \
+  --config config.training.json \
+  --camera-id cam_front \
+  --good-images ./data/cam_front/ \
+  --output ./models/cam_front_upper_patchcore.npz \
+  --input-mode online \
+  --region-id upper
+```
+
+### 已裁 ROI 兼容训练
+
+如果训练目录已经是历史流程导出的标准 ROI 图，可保留默认 `roi` 模式：
+
+```bash
+python scripts/train_patchcore.py \
+  --config config.training.json \
+  --camera-id cam_front \
+  --good-images ./data/cam_front_roi/ \
   --output ./models/cam_front_patchcore.npz
 ```
 
@@ -141,7 +173,8 @@ python scripts/train_patchcore.py \
   --config config.training.json \
   --camera-ids cam_front,cam_back,cam_left \
   --good-images-root ./data/ \
-  --output-dir ./models/
+  --output-dir ./models/ \
+  --input-mode online
 ```
 
 批量模式会为每个 `--camera-ids` 中的机位，从 `<good-images-root>/<camera_id>/` 读取样本，输出到 `<output-dir>/<camera_id>_patchcore.npz`。
@@ -155,7 +188,12 @@ python scripts/train_patchcore.py \
   "memory_bank_size": 256,
   "total_embeddings": 5120,
   "threshold": 24.835,
-  "artifact_path": "./models/cam_front_patchcore.npz"
+  "artifact_path": "./models/cam_front_patchcore.npz",
+  "input_mode": "online",
+  "region_id": null,
+  "skipped_by_reason": {
+    "target_not_found": 2
+  }
 }
 ```
 
@@ -163,6 +201,7 @@ python scripts/train_patchcore.py \
 - `total_embeddings`：所有图像的 patch embedding 总数
 - `threshold`：image-level 异常分数阈值
 - `artifact_path`：模型文件路径
+- `skipped_by_reason`：online 模式下被跳过样本的原因统计
 
 ### 也可用原始 CLI
 
@@ -172,7 +211,8 @@ python -m seat_defect_core train-patchcore \
   --config config.training.json \
   --camera-id cam_front \
   --good-images ../data/cam_front/ \
-  --output ../models/cam_front_patchcore.npz
+  --output ../models/cam_front_patchcore.npz \
+  --input-mode online
 ```
 
 ## 模型部署到线上
@@ -205,6 +245,12 @@ python -c "import torch; print(torch.__version__)"
 ### Q: 训练报错 "未能从参考图像中提取到有效 embedding"
 
 正常样本可能不满足 min_target_coverage（默认 0.8）要求。样本需要是裁剪后的 ROI 区域（非完整座椅图），或者将 `min_target_coverage` 调低。
+
+如果使用 `--input-mode online`，还需要检查：
+
+- YOLO `model_path` 是否存在且能分割 `target_class`。
+- `skipped_by_reason` 中是否大量出现 `target_not_found`、`target_mask_missing` 或 `quality_*`。
+- `--region-id` 是否与配置里的局部区域 ID 一致。
 
 ### Q: Windows 上 faiss-cpu 安装失败
 

@@ -31,6 +31,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     train_parser.add_argument("--camera-id", type=str, required=True, help="目标相机 ID")
     train_parser.add_argument("--good-images", type=str, required=True, help="正常参考图像目录")
     train_parser.add_argument("--output", type=str, required=True, help="输出 .npz 文件路径")
+    train_parser.add_argument(
+        "--input-mode",
+        choices=("roi", "online"),
+        default="roi",
+        help="训练样本输入模式：roi=已裁标准ROI，online=复用线上YOLO/ROI/mask流程",
+    )
+    train_parser.add_argument(
+        "--region-id",
+        type=str,
+        default=None,
+        help="online 模式下训练指定局部区域，如 upper/middle/lower",
+    )
 
     args = parser.parse_args(argv)
 
@@ -147,6 +159,8 @@ def _run_train_patchcore(args) -> int:
             camera_id=args.camera_id,
             good_image_paths=image_paths,
             output_path=args.output,
+            input_mode=args.input_mode,
+            region_id=args.region_id,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

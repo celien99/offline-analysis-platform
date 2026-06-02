@@ -71,171 +71,37 @@ flowchart TB
 
 ---
 
-## 核心功能
+## 能力边界
 
-<table>
-  <tr>
-    <td width="50%">
-      <h3>🧬 Embedding 提取与相似检索</h3>
-      <ul>
-        <li>DINOv2-S 自监督视觉大模型，像素级密集特征</li>
-        <li>384 维特征向量，存入 <b>pgvector</b>（IVFFlat 索引）</li>
-        <li>支持按异常 ID 或原始向量进行余弦相似度检索</li>
-        <li>Celery 异步批量提取，不阻塞 API</li>
-        <li>Grad-CAM 热力图生成 + Pillow 缩略图生成</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🔬 无监督聚类发现</h3>
-      <ul>
-        <li>StandardScaler → UMAP → HDBSCAN 完整 Pipeline</li>
-        <li>无需人工标注，自动发现缺陷模式</li>
-        <li>每个簇自动选取代表样本</li>
-        <li>Celery Beat 每 <b>6 小时</b>自动触发完整离线分析周期 (Pipeline 编排)</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🤖 多模态 VLM 异常解释</h3>
-      <ul>
-        <li>Qwen2.5-VL / InternVL，通过 vLLM 端点推理</li>
-        <li>同时分析原图、ROI、热力图、裁剪图</li>
-        <li>结构化 JSON 输出：缺陷类型、误报判断、原因分析、置信度</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>👨‍🔧 人工复核工作流</h3>
-      <ul>
-        <li>6 种操作：确认缺陷 / 标记误报 / 重命名 / 拆分 / 合并 / 忽略</li>
-        <li>复核后自动生成知识库条目</li>
-        <li>完整审计追溯：复核人 + 时间戳 + 状态变更</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>📚 知识库 + 规则引擎</h3>
-      <ul>
-        <li>缺陷模式库：分类、相机关联、建议动作（忽略 / NG / 复核）</li>
-        <li>优先级规则引擎，支持在线过滤</li>
-        <li>一键从知识条目生成规则</li>
-        <li>内置评估模拟器，测试规则命中效果</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🎯 分类器训练与模型部署</h3>
-      <ul>
-        <li>支持 MobileNetV3 / EfficientNet / ResNet18 + ArcFace / Triplet Loss 度量学习</li>
-        <li>Adam + ReduceLROnPlateau + Early Stopping (patience=10)</li>
-        <li>自动数据加载：从 MinIO 读取已审核聚类数据，train/val split</li>
-        <li>按 defect_type 自动分组构建度量学习多类训练数据</li>
-        <li>导出 TorchScript / ONNX，自动注册至 <b>MLflow</b> 和数据库</li>
-        <li>安全部署 + 版本化回滚 + 🔴 热重载信号自动通知在线系统</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🔄 在线检测核心 (seat_defect_core)</h3>
-      <ul>
-        <li>完整在线推理 pipeline：YOLO → ROI → PatchCore → <b>Filter Classifier</b> → <b>Rule Engine</b> → Fusion</li>
-        <li>Filter Classifier 推理引擎：TorchScript 模型加载，ImageNet 标准化预处理，抑制 PatchCore 误报</li>
-        <li>故障安全：推理失败默认 is_real_defect=True，不拦截真实缺陷</li>
-        <li>规则引擎后处理：可配置阈值规则（异常分数/patch 数/patch 比例），支持 suppress_to_ok / flag_for_review</li>
-        <li>多区域 PatchCore 支持，按区域独立判定 + 合并状态逻辑</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🌳 缺陷分类树</h3>
-      <ul>
-        <li>4 大类预设分类体系：表面缺陷 / 缝线缺陷 / 结构缺陷 / 光学异常</li>
-        <li>自引用层级结构（parent_id），支持多级细分</li>
-        <li>审核确认缺陷时自动关联分类树节点</li>
-        <li>树统计 API：各节点下的异常计数和聚类计数</li>
-        <li>支持自定义扩展和人工调整分类结构</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🕸 相似度图谱</h3>
-      <ul>
-        <li>基于 pgvector 的 KNN 图谱构建</li>
-        <li>预计算相似边，支持快速邻居查询</li>
-        <li>BFS 最短路径导航（max_hops 可配置）</li>
-        <li>以任意异常为中心的子图探索</li>
-        <li>图谱构建记录追踪 + Celery 异步重建</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>📐 度量学习训练</h3>
-      <ul>
-        <li>ArcFace 加性角度边际损失：同类嵌入更紧凑</li>
-        <li>Triplet Loss：锚点/正样本/负样本三元组优化</li>
-        <li>EmbeddingBackbone：从 MobileNetV3/ResNet/EfficientNet 提取归一化嵌入</li>
-        <li>按 defect_type 自动分组构建多类训练数据</li>
-        <li>训练完成后自动导出 TorchScript + 注册 MLflow</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🧹 Mask Refinement + 双轨对比</h3>
-      <ul>
-        <li>GrabCut 前景/背景分离，去除背景噪声</li>
-        <li>CLAHE 自适应直方图均衡化，标准化光照</li>
-        <li>形态学操作：闭运算填充孔洞 + 开运算去噪</li>
-        <li><b>双轨 Embedding 对比</b>：Raw vs Refined 聚类质量评估</li>
-        <li>自动推荐最优精化策略，Celery 批量处理</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🔴 在线热重载</h3>
-      <ul>
-        <li>reload.signal 信号文件机制，在线系统自动检测模型更新</li>
-        <li>A/B 模型版本管理（Active / Shadow），支持 Canary 灰度提升</li>
-        <li><b>SHA256 Checksum 校验</b>：部署前后完整性验证</li>
-        <li><b>回滚版本绑定</b>：manifest.json 追踪切换历史 + 安全回滚</li>
-        <li><b>训练完成自动 Canary 部署</b>：仅部署至 Shadow，通过后手动 Promote</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🔒 数据隔离</h3>
-      <ul>
-        <li><b>三级隔离键</b>：seat_model_id + camera_id + region_id</li>
-        <li><b>4 级回退策略</b>：model+camera+region → model+camera → model → global</li>
-        <li><b>按操作类型阈值</b>：聚类 ≥3 样本、训练 ≥5 样本才使用当前隔离级</li>
-        <li>隔离键从 anomaly → cluster → training run 全链路传播</li>
-        <li>前端筛选器：支持按 model/camera/region 独立过滤</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🛡 模型上线门禁</h3>
-      <ul>
-        <li><b>自动回归评估</b>：训练完成后自动触发门禁 Celery 任务</li>
-        <li><b>4 项准入标准</b>：召回率 ≥95%、召回下降 ≤2%、抑制率提升 ≥10%、零真实缺陷误杀</li>
-        <li><b>分层评估</b>：按 camera_id 分层的 Stratified 指标</li>
-        <li>Holdout 评估集：从已审核 cluster 自动构建 Ground Truth</li>
-        <li>门禁失败阻断部署，仅通过模型可进入 Canary 阶段</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🔁 在线↔离线数据闭环</h3>
-      <ul>
-        <li><b>NG 自动上传</b>：检测完成后 daemon 线程异步 POST 到离线平台，不阻塞主流程</li>
-        <li><b>模型自动加载</b>：指向部署目录即可自动发现 <code>model.pt</code>，mtime 缓存自动失效</li>
-        <li><b>训练完成自动门禁 → 部署</b>：训练 → 门禁评估 → 通过后自动 Canary 部署</li>
-        <li><b>原子部署</b>：模型文件先写 <code>.tmp</code> 再 rename，防止在线系统读到不完整文件</li>
-        <li><b>部署桥接</b>：<code>DeploymentService</code> 执行实际文件拷贝至配置的部署目标目录</li>
-      </ul>
-    </td>
-  </tr>
-</table>
+本仓库包含可运行的在线检测核心和离线分析平台，也包含部分仍需现场验证的实验能力。为避免把原型能力误认为生产承诺，当前功能按成熟度分为三类。
+
+### 已实现并接入
+
+- **异常样本入库**：在线 NG 结果可上传 original / ROI / crop / heatmap，写入 MinIO 和数据库，并触发离线流水线。
+- **Embedding 提取与聚类**：DINOv2-S 384 维特征、pgvector 相似检索、UMAP + HDBSCAN 聚类，通过 Celery 异步运行。
+- **VLM 辅助解释**：支持 Qwen2.5-VL / InternVL 端点，对原图、ROI、热力图和裁剪图生成结构化解释。
+- **人工复核工作流**：支持确认缺陷、标记误报、重命名、拆分、合并、忽略，并保留审核状态和审计信息。
+- **知识库与规则引擎**：知识条目可生成在线过滤规则，规则支持优先级、机位、阈值和 classifier 条件。
+- **分类器训练与模型注册**：基于已审核聚类数据训练 Filter Classifier，导出 TorchScript，并注册模型版本。
+- **模型部署与相机配置**：支持模型注册、部署目标管理、相机/座椅型号配置，并生成 `seat_defect_core` 运行配置。
+- **在线检测核心 `seat_defect_core`**：已接入 YOLO 分割、ROI 标准化、PatchCore / 多区域 PatchCore、Filter Classifier、规则后处理和多机位融合。
+- **数据隔离**：核心数据链路包含 `seat_model_id + camera_id + region_id`，前端支持按型号、机位、区域筛选。
+
+### 实验能力 / 需现场验证
+
+- **Mask Refinement 双轨对比**：已提供 GrabCut、CLAHE 和形态学处理任务，但不同材质/光照下的收益需要现场数据验证。
+- **相似度图谱**：已实现 KNN 边构建和子图查询，适合作为复核辅助，不应单独作为产线判定依据。
+- **度量学习训练**：ArcFace / Triplet Loss 训练链路存在，但上线价值依赖缺陷类型标签质量和样本规模。
+- **自动训练**：Celery Beat 可定期检查已审核样本并触发训练，生产启用前需要补齐训练记录、样本平衡和回归验证策略。
+- **模型上线门禁**：已有门禁服务和分层评估框架，指标口径和最小样本量仍需结合现场验收标准校准。
+- **Canary / 热重载**：已有 manifest、reload.signal、Shadow/Canary 目录逻辑；回滚、Promote 和现场在线进程的联动仍需端到端验收。
+
+### 规划 / 当前限制
+
+- EfficientAD、FastFlow、双模态分类等能力不作为当前稳定交付能力，若启用需要补齐源码接入、API、训练、测试和文档。
+- PatchCore 生产训练推荐使用 `--input-mode online`，确保训练样本经过与线上一致的 `YOLO → ROI → mask → region` 流程；旧的已裁 ROI 训练模式仅用于兼容历史数据。
+- 模型门禁、部署回滚、现场光学一致性和长期漂移监控仍是生产上线前必须完成的可靠性工作。
+- README 中的架构图表达目标闭环，具体交付状态以上述成熟度分类为准。
 
 ---
 
