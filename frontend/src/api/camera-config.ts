@@ -14,7 +14,7 @@ interface BackendCameraRegionConfig {
   id?: string;
   region_id: string;
   box: [number, number, number, number];
-  patchcore_model_version_id: string;
+  patchcore_model_version_id?: string;
   enabled: boolean;
   sort_order: number;
   patchcore?: Record<string, object | undefined> | null;
@@ -45,7 +45,12 @@ interface BackendCameraConfigFormData {
   detection_confidence?: number;
   efficientad_image_size?: number;
   efficientad_threshold?: number;
-  regions?: BackendCameraRegionConfig[];
+  regions?: BackendCameraRegionPayload[];
+}
+
+interface BackendCameraRegionPayload {
+  region_id: string;
+  patchcore_model_version_id: string;
 }
 
 function toCameraConfig(data: BackendCameraConfig): CameraConfig {
@@ -70,21 +75,17 @@ function toCameraRegionConfig(data: BackendCameraRegionConfig): CameraRegionConf
     id: data.id,
     region_id: data.region_id,
     box: data.box,
-    patchcore_model_version_id: data.patchcore_model_version_id,
+    patchcore_model_version_id: data.patchcore_model_version_id ?? null,
     enabled: data.enabled,
     sort_order: data.sort_order,
     patchcore: data.patchcore ?? null,
   };
 }
 
-function toBackendRegionPayload(region: CameraRegionConfig): BackendCameraRegionConfig {
+function toBackendRegionPayload(region: CameraRegionConfig): BackendCameraRegionPayload {
   return {
     region_id: region.region_id,
-    box: region.box,
     patchcore_model_version_id: region.patchcore_model_version_id ?? "",
-    enabled: region.enabled,
-    sort_order: region.sort_order,
-    patchcore: region.patchcore ?? null,
   };
 }
 
@@ -138,6 +139,18 @@ export const cameraConfigApi = {
   listCameras: (seatModelId: string) =>
     get<BackendCameraConfig[]>(`/seat-models/${seatModelId}/cameras`)
       .then((items) => items.map(toCameraConfig)),
+
+  getRegionDefinitions: (seatModelId: string, cameraId: string) =>
+    get<BackendCameraRegionConfig[]>(
+      `/seat-models/${seatModelId}/cameras/${cameraId}/region-definitions`,
+    ).then((items) =>
+      items.map((item) =>
+        toCameraRegionConfig({
+          ...item,
+          patchcore_model_version_id: "",
+        }),
+      ),
+    ),
 
   createCamera: (seatModelId: string, data: CameraConfigFormData) =>
     post<BackendCameraConfig>(

@@ -8,6 +8,7 @@ from app.models.camera_config import SeatModel
 from app.repositories.camera_config import CameraConfigRepository, SeatModelRepository
 from app.schemas.camera_config import (
     CameraConfigCreate,
+    CameraRegionDefinition,
     CameraConfigResponse,
     CameraConfigUpdate,
     CameraOption,
@@ -15,6 +16,11 @@ from app.schemas.camera_config import (
     SeatModelOption,
     SeatModelResponse,
     SeatModelUpdate,
+)
+from app.services.camera_config.region_definitions import (
+    RegionDefinitionError,
+    RegionDefinitionLoader,
+    RegionDefinitionNotFoundError,
 )
 
 router = APIRouter(prefix="/api/seat-models", tags=["camera-config"])
@@ -136,6 +142,25 @@ async def list_cameras(
     return [CameraConfigResponse.model_validate(c) for c in cameras]
 
 
+@router.get(
+    "/{seat_model_id}/cameras/{camera_id}/region-definitions",
+    response_model=list[CameraRegionDefinition],
+)
+async def get_camera_region_definitions(
+    seat_model_id: str,
+    camera_id: str,
+) -> list[CameraRegionDefinition]:
+    try:
+        return RegionDefinitionLoader().load_for_camera(
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+        )
+    except RegionDefinitionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RegionDefinitionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post(
     "/{seat_model_id}/cameras",
     response_model=CameraConfigResponse,
@@ -164,7 +189,14 @@ async def create_camera(
         **payload,
     )
     await cam_repo.create(entity)
-    await cam_repo.replace_regions(entity, _build_region_entities(data.regions))
+    await cam_repo.replace_regions(
+        entity,
+        _build_region_entities_from_config(
+            seat_model_id=seat_model_id,
+            camera_id=data.camera_id,
+            regions=data.regions,
+        ),
+    )
     await session.commit()
     return CameraConfigResponse.model_validate(entity)
 
@@ -186,12 +218,17 @@ async def update_camera(
 
     update_data = data.model_dump(exclude_unset=True)
     regions = update_data.pop("regions", None)
+    target_camera_id = str(update_data.get("camera_id") or entity.camera_id)
     for key, value in update_data.items():
         setattr(entity, key, value)
     if regions is not None:
         await cam_repo.replace_regions(
             entity,
-            _build_region_entities(regions),
+            _build_region_entities_from_config(
+                seat_model_id=seat_model_id,
+                camera_id=target_camera_id,
+                regions=regions,
+            ),
         )
     await cam_repo.update(entity)
     await session.commit()
@@ -213,11 +250,28 @@ async def delete_camera(
     return None
 
 
-def _build_region_entities(regions: list[dict] | list) -> list:
+def _build_region_entities_from_config(
+    *,
+    seat_model_id: str,
+    camera_id: str,
+    regions: list[dict] | list,
+    loader: RegionDefinitionLoader | None = None,
+) -> list:
     import json
 
     from app.models.camera_config import CameraConfigRegion
 
+    try:
+        definitions = (loader or RegionDefinitionLoader()).load_for_camera(
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+        )
+    except RegionDefinitionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RegionDefinitionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    definition_by_id = {definition.region_id: definition for definition in definitions}
     entities = []
     for index, raw_region in enumerate(regions):
         region = (
@@ -225,18 +279,25 @@ def _build_region_entities(regions: list[dict] | list) -> list:
             if isinstance(raw_region, dict)
             else raw_region.model_dump()
         )
-        box = region["box"]
-        patchcore = region.get("patchcore")
+        region_id = region["region_id"]
+        definition = definition_by_id.get(region_id)
+        if definition is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Region {region_id} 不存在于检测配置文件",
+            )
+        box = definition.box
+        patchcore = definition.patchcore
         entities.append(
             CameraConfigRegion(
-                region_id=region["region_id"],
+                region_id=region_id,
                 x1=float(box[0]),
                 y1=float(box[1]),
                 x2=float(box[2]),
                 y2=float(box[3]),
                 patchcore_model_version_id=region["patchcore_model_version_id"],
-                enabled=bool(region.get("enabled", True)),
-                sort_order=int(region.get("sort_order", index)),
+                enabled=definition.enabled,
+                sort_order=definition.sort_order if definition.sort_order is not None else index,
                 patchcore_overrides_json=(
                     json.dumps(patchcore, ensure_ascii=False)
                     if patchcore

@@ -43,10 +43,9 @@ class SeatModelWithCameras(SeatModelResponse):
 
 # ── Camera Config ──
 
-class CameraRegionBase(BaseModel):
+class CameraRegionDefinition(BaseModel):
     region_id: str = Field(..., max_length=64, description="ROI 区域 ID")
     box: list[float] = Field(..., min_length=4, max_length=4, description="归一化区域框 [x1, y1, x2, y2]")
-    patchcore_model_version_id: str = Field(..., description="区域 PatchCore 模型版本 ID")
     enabled: bool = True
     sort_order: int = Field(default=0, ge=0)
     patchcore: dict[str, object] | None = Field(default=None, description="区域级 PatchCore 配置覆盖")
@@ -62,12 +61,14 @@ class CameraRegionBase(BaseModel):
         return value
 
 
-class CameraRegionCreate(CameraRegionBase):
-    pass
+class CameraRegionCreate(BaseModel):
+    region_id: str = Field(..., max_length=64, description="ROI 区域 ID")
+    patchcore_model_version_id: str = Field(..., description="区域 PatchCore 模型版本 ID")
 
 
-class CameraRegionResponse(CameraRegionBase):
+class CameraRegionResponse(CameraRegionDefinition):
     id: str
+    patchcore_model_version_id: str
     created_at: datetime
     updated_at: datetime
 
