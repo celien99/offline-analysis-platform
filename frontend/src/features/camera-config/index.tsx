@@ -16,6 +16,7 @@ import {
   List,
   Tag,
   Popconfirm,
+  Switch,
 } from "antd";
 import {
   PlusOutlined,
@@ -24,6 +25,7 @@ import {
   SettingOutlined,
   WarningOutlined,
   CheckCircleOutlined,
+  MinusCircleOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
 import CameraTopology from "./components/CameraTopology";
@@ -159,6 +161,7 @@ export default function CameraConfigPage() {
       patchcore_model_version_id: null,
       filter_classifier_model_version_id: null,
       normalizer_model_version_id: null,
+      regions: [],
     });
     setCameraModalOpen(true);
   };
@@ -173,6 +176,7 @@ export default function CameraConfigPage() {
       detection_confidence: record.detection_confidence,
       patchcore_image_size: record.patchcore_image_size,
       patchcore_threshold: record.patchcore_threshold,
+      regions: record.regions ?? [],
     });
     setCameraModalOpen(true);
   };
@@ -461,6 +465,16 @@ export default function CameraConfigPage() {
                     render: (v: string | null) => modelLabel(v, allModels),
                   },
                   {
+                    title: "Regions",
+                    dataIndex: "regions",
+                    width: 120,
+                    render: (regions) => (
+                      <Tag color={(regions?.length ?? 0) > 0 ? "blue" : "default"}>
+                        {(regions?.length ?? 0) > 0 ? `${regions.length} 个` : "整体"}
+                      </Tag>
+                    ),
+                  },
+                  {
                     title: "Normalizer",
                     dataIndex: "normalizer_model_version_id",
                     width: 110,
@@ -609,6 +623,93 @@ export default function CameraConfigPage() {
               </Form.Item>
             </Col>
           </Row>
+
+          <Typography.Title level={5}>Region PatchCore 模型</Typography.Title>
+          <Form.List name="regions">
+            {(fields, { add, remove }) => (
+              <Space direction="vertical" className="w-full" size={12}>
+                {fields.map((field, index) => (
+                  <Card
+                    key={field.key}
+                    size="small"
+                    title={`Region ${index + 1}`}
+                    extra={
+                      <Button
+                        danger
+                        type="text"
+                        icon={<MinusCircleOutlined />}
+                        onClick={() => remove(field.name)}
+                      />
+                    }
+                  >
+                    <Row gutter={12}>
+                      <Col span={8}>
+                        <Form.Item
+                          name={[field.name, "region_id"]}
+                          label="区域 ID"
+                          rules={[{ required: true, message: "请输入区域 ID" }]}
+                        >
+                          <Input placeholder="upper" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name={[field.name, "patchcore_model_version_id"]}
+                          label="PatchCore 模型"
+                          rules={[{ required: true, message: "请选择区域 PatchCore 模型" }]}
+                        >
+                          <ModelSelect models={patchcoreModels} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={4}>
+                        <Form.Item
+                          name={[field.name, "enabled"]}
+                          label="启用"
+                          valuePropName="checked"
+                          initialValue
+                        >
+                          <Switch />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={12}>
+                      {(["x1", "y1", "x2", "y2"] as const).map((coord, coordIndex) => (
+                        <Col span={6} key={coord}>
+                          <Form.Item
+                            name={[field.name, "box", coordIndex]}
+                            label={coord}
+                            rules={[{ required: true, message: "必填" }]}
+                          >
+                            <InputNumber min={0} max={1} step={0.01} className="w-full" />
+                          </Form.Item>
+                        </Col>
+                      ))}
+                    </Row>
+                    <Form.Item name={[field.name, "sort_order"]} initialValue={index} hidden>
+                      <InputNumber />
+                    </Form.Item>
+                  </Card>
+                ))}
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    add({
+                      region_id: "",
+                      box: [0, 0, 1, 1],
+                      patchcore_model_version_id: null,
+                      enabled: true,
+                      sort_order: fields.length,
+                      patchcore: null,
+                    })
+                  }
+                  block
+                >
+                  添加 Region PatchCore 模型
+                </Button>
+              </Space>
+            )}
+          </Form.List>
         </Form>
       </Modal>
 

@@ -5,9 +5,22 @@ import type {
   SeatModel,
   SeatModelOption,
   CameraConfig,
+  CameraRegionConfig,
   SeatModelFormData,
   CameraConfigFormData,
 } from "../types";
+
+interface BackendCameraRegionConfig {
+  id?: string;
+  region_id: string;
+  box: [number, number, number, number];
+  patchcore_model_version_id: string;
+  enabled: boolean;
+  sort_order: number;
+  patchcore?: Record<string, object | undefined> | null;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface BackendCameraConfig {
   id: string;
@@ -19,6 +32,7 @@ interface BackendCameraConfig {
   detection_confidence: number;
   efficientad_image_size: number;
   efficientad_threshold: number;
+  regions: BackendCameraRegionConfig[];
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +45,7 @@ interface BackendCameraConfigFormData {
   detection_confidence?: number;
   efficientad_image_size?: number;
   efficientad_threshold?: number;
+  regions?: BackendCameraRegionConfig[];
 }
 
 function toCameraConfig(data: BackendCameraConfig): CameraConfig {
@@ -44,8 +59,32 @@ function toCameraConfig(data: BackendCameraConfig): CameraConfig {
     detection_confidence: data.detection_confidence,
     patchcore_image_size: data.efficientad_image_size,
     patchcore_threshold: data.efficientad_threshold,
+    regions: (data.regions ?? []).map(toCameraRegionConfig),
     created_at: data.created_at,
     updated_at: data.updated_at,
+  };
+}
+
+function toCameraRegionConfig(data: BackendCameraRegionConfig): CameraRegionConfig {
+  return {
+    id: data.id,
+    region_id: data.region_id,
+    box: data.box,
+    patchcore_model_version_id: data.patchcore_model_version_id,
+    enabled: data.enabled,
+    sort_order: data.sort_order,
+    patchcore: data.patchcore ?? null,
+  };
+}
+
+function toBackendRegionPayload(region: CameraRegionConfig): BackendCameraRegionConfig {
+  return {
+    region_id: region.region_id,
+    box: region.box,
+    patchcore_model_version_id: region.patchcore_model_version_id ?? "",
+    enabled: region.enabled,
+    sort_order: region.sort_order,
+    patchcore: region.patchcore ?? null,
   };
 }
 
@@ -73,6 +112,9 @@ function toBackendCameraPayload(
   }
   if (data.patchcore_threshold !== undefined) {
     payload.efficientad_threshold = data.patchcore_threshold;
+  }
+  if (data.regions !== undefined) {
+    payload.regions = data.regions.map(toBackendRegionPayload);
   }
   return payload;
 }

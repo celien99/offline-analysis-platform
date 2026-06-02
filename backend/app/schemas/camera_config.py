@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Seat Model ──
@@ -43,6 +43,37 @@ class SeatModelWithCameras(SeatModelResponse):
 
 # ── Camera Config ──
 
+class CameraRegionBase(BaseModel):
+    region_id: str = Field(..., max_length=64, description="ROI 区域 ID")
+    box: list[float] = Field(..., min_length=4, max_length=4, description="归一化区域框 [x1, y1, x2, y2]")
+    patchcore_model_version_id: str = Field(..., description="区域 PatchCore 模型版本 ID")
+    enabled: bool = True
+    sort_order: int = Field(default=0, ge=0)
+    patchcore: dict[str, object] | None = Field(default=None, description="区域级 PatchCore 配置覆盖")
+
+    @field_validator("box")
+    @classmethod
+    def validate_box(cls, value: list[float]) -> list[float]:
+        if len(value) != 4:
+            raise ValueError("box 必须包含 4 个坐标")
+        x1, y1, x2, y2 = value
+        if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
+            raise ValueError("box 必须满足 0 <= x1 < x2 <= 1 且 0 <= y1 < y2 <= 1")
+        return value
+
+
+class CameraRegionCreate(CameraRegionBase):
+    pass
+
+
+class CameraRegionResponse(CameraRegionBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class CameraConfigCreate(BaseModel):
     camera_id: str = Field(..., max_length=128, description="相机标识符")
     efficientad_model_version_id: str = Field(..., description="PatchCore 模型版本 ID")
@@ -51,6 +82,7 @@ class CameraConfigCreate(BaseModel):
     efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
     filter_classifier_model_version_id: str | None = Field(default=None, description="Filter Classifier 模型版本 ID")
     normalizer_model_version_id: str | None = Field(default=None, description="CameraNormalizer stats 模型版本 ID")
+    regions: list[CameraRegionCreate] = Field(default_factory=list, description="区域级 PatchCore 配置")
 
 
 class CameraConfigUpdate(BaseModel):
@@ -61,6 +93,7 @@ class CameraConfigUpdate(BaseModel):
     efficientad_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     filter_classifier_model_version_id: str | None = Field(default=None)
     normalizer_model_version_id: str | None = Field(default=None, description="CameraNormalizer stats 模型版本 ID")
+    regions: list[CameraRegionCreate] | None = Field(default=None, description="区域级 PatchCore 配置；传入时整体替换")
 
 
 class CameraConfigResponse(BaseModel):
@@ -73,6 +106,7 @@ class CameraConfigResponse(BaseModel):
     detection_confidence: float
     efficientad_image_size: int
     efficientad_threshold: float
+    regions: list[CameraRegionResponse] = []
     created_at: datetime
     updated_at: datetime
 

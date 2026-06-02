@@ -69,6 +69,9 @@ async def run_inspection_with_files(
         ):
             if mv_id:
                 model_version_ids.add(mv_id)
+        for region in c.regions:
+            if region.patchcore_model_version_id:
+                model_version_ids.add(region.patchcore_model_version_id)
 
     model_paths: dict[str, str] = {}
     if model_version_ids:

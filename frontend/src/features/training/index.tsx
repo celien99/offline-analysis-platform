@@ -55,6 +55,7 @@ export default function TrainingPage() {
 
   // PatchCore inline form state
   const [patchcoreCameraId, setPatchcoreCameraId] = useState("");
+  const [patchcoreRegionId, setPatchcoreRegionId] = useState("");
   const [patchcoreImageFiles, setPatchcoreImageFiles] = useState<File[]>([]);
 
   const [filterForm] = Form.useForm();
@@ -100,6 +101,12 @@ export default function TrainingPage() {
 
     const formData = new FormData();
     formData.append("camera_id", patchcoreCameraId.trim());
+    if (patchcoreRegionId.trim()) {
+      formData.append("region_id", patchcoreRegionId.trim());
+      formData.append("input_mode", "online");
+    } else {
+      formData.append("input_mode", "roi");
+    }
     patchcoreImageFiles.forEach((f) => formData.append("good_images", f));
 
     patchcoreStart.mutate(formData, {
@@ -235,7 +242,7 @@ export default function TrainingPage() {
       children: (
         <Card>
           <Typography.Paragraph type="secondary" className="mb-4">
-            使用正常参考图像训练 PatchCore 异常检测模型。训练参数由内置配置文件控制，仅需提供目标相机 ID 和正常参考图像。
+            使用正常参考图像训练整体或 region PatchCore 模型。填写区域 ID 时会复用线上 YOLO/ROI/region 流程制备训练样本。
           </Typography.Paragraph>
 
           <Form layout="vertical" className="max-w-lg">
@@ -244,6 +251,13 @@ export default function TrainingPage() {
                 placeholder="例如: cam_front"
                 value={patchcoreCameraId}
                 onChange={(e) => setPatchcoreCameraId(e.target.value)}
+              />
+            </Form.Item>
+            <Form.Item label="区域ID">
+              <Input
+                placeholder="留空训练整体模型，例如 upper"
+                value={patchcoreRegionId}
+                onChange={(e) => setPatchcoreRegionId(e.target.value)}
               />
             </Form.Item>
 

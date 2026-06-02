@@ -17,6 +17,8 @@ logger = get_logger(__name__)
 @router.post("/start", response_model=StatusResponse)
 async def start_patchcore_training(
     camera_id: str = Form(..., description="目标相机 ID"),
+    region_id: str | None = Form(default=None, description="可选 ROI 区域 ID"),
+    input_mode: str = Form(default="roi", pattern="^(roi|online)$", description="训练输入模式"),
     good_images: list[UploadFile] = File(..., description="正常参考图像文件（可多张）"),
 ) -> StatusResponse:
     """上传正常参考图像，启动 PatchCore 模型训练任务。
@@ -50,12 +52,16 @@ async def start_patchcore_training(
             camera_id=camera_id,
             config_json=config_json,
             good_image_paths=image_paths,
+            input_mode=input_mode,
+            region_id=region_id,
         )
 
         logger.info(
             "patchcore_training_dispatched",
             task_id=task.id,
             camera_id=camera_id,
+            region_id=region_id,
+            input_mode=input_mode,
             image_count=len(image_paths),
         )
         return StatusResponse(

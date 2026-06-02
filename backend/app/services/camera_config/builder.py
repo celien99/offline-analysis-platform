@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -262,6 +263,7 @@ class ConfigBuilder:
         patchcore_path = self._resolve_model_path(
             cam.efficientad_model_version_id, model_paths
         )
+        regions = self._build_region_configs(cam, model_paths)
 
         config: dict[str, object] = {
             "camera_id": cam.camera_id,
@@ -276,7 +278,36 @@ class ConfigBuilder:
             "color_branch": dict(self.DEFAULT_COLOR_BRANCH),
             "filter_classifier": filter_classifier,
             "rule_engine": rule_engine,
-            "regions": [],
+            "regions": regions,
         }
 
         return config
+
+    def _build_region_configs(
+        self,
+        cam: CameraConfig,
+        model_paths: dict[str, str],
+    ) -> list[dict[str, object]]:
+        region_configs: list[dict[str, object]] = []
+        for region in cam.regions:
+            if region.deleted_at is not None:
+                continue
+            patchcore_path = self._resolve_model_path(
+                region.patchcore_model_version_id,
+                model_paths,
+            )
+            region_config: dict[str, object] = {
+                "region_id": region.region_id,
+                "box": [region.x1, region.y1, region.x2, region.y2],
+                "patchcore_model_path": patchcore_path,
+                "enabled": region.enabled,
+            }
+            if region.patchcore_overrides_json:
+                try:
+                    overrides = json.loads(region.patchcore_overrides_json)
+                except json.JSONDecodeError:
+                    overrides = None
+                if isinstance(overrides, dict):
+                    region_config["patchcore"] = overrides
+            region_configs.append(region_config)
+        return region_configs

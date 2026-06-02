@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.camera_config import CameraConfig, SeatModel
+from app.models.camera_config import CameraConfig, CameraConfigRegion, SeatModel
 from app.repositories.base import BaseRepository
 
 
@@ -38,6 +39,7 @@ class CameraConfigRepository(BaseRepository[CameraConfig]):
     async def list_by_seat_model(self, seat_model_id: str) -> Sequence[CameraConfig]:
         stmt = (
             select(CameraConfig)
+            .options(selectinload(CameraConfig.regions))
             .where(
                 CameraConfig.seat_model_id == seat_model_id,
                 CameraConfig.deleted_at.is_(None),
@@ -54,6 +56,28 @@ class CameraConfigRepository(BaseRepository[CameraConfig]):
             CameraConfig.seat_model_id == seat_model_id,
             CameraConfig.camera_id == camera_id,
             CameraConfig.deleted_at.is_(None),
+        ).options(selectinload(CameraConfig.regions))
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id(self, id_: str) -> CameraConfig | None:
+        stmt = (
+            select(CameraConfig)
+            .options(selectinload(CameraConfig.regions))
+            .where(
+                CameraConfig.id == id_,
+                CameraConfig.deleted_at.is_(None),
+            )
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def replace_regions(
+        self,
+        camera: CameraConfig,
+        regions: list[CameraConfigRegion],
+    ) -> None:
+        camera.regions.clear()
+        await self._session.flush()
+        camera.regions.extend(regions)
+        await self._session.flush()

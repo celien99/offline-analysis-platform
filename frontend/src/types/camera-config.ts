@@ -30,8 +30,19 @@ export interface CameraConfig {
   detection_confidence: number;
   patchcore_image_size: number;
   patchcore_threshold: number;
+  regions: CameraRegionConfig[];
   created_at: string;
   updated_at: string;
+}
+
+export interface CameraRegionConfig {
+  id?: string;
+  region_id: string;
+  box: [number, number, number, number];
+  patchcore_model_version_id: string | null;
+  enabled: boolean;
+  sort_order: number;
+  patchcore?: Record<string, object | undefined> | null;
 }
 
 export interface CameraConfigFormData {
@@ -42,6 +53,7 @@ export interface CameraConfigFormData {
   detection_confidence: number;
   patchcore_image_size: number;
   patchcore_threshold: number;
+  regions: CameraRegionConfig[];
 }
 
 export interface SeatModelFormData {

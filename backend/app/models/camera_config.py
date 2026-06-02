@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import Float, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+import json
+
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 
@@ -73,3 +75,66 @@ class CameraConfig(BaseModel):
         String(32), ForeignKey("model_versions.id", ondelete="SET NULL"),
         nullable=True, comment="CameraNormalizer stats 模型版本 ID (per-camera mean/std .npz)",
     )
+
+    regions: Mapped[list[CameraConfigRegion]] = relationship(
+        "CameraConfigRegion",
+        back_populates="camera_config",
+        cascade="all, delete-orphan",
+        order_by="CameraConfigRegion.sort_order",
+    )
+
+
+class CameraConfigRegion(BaseModel):
+    __tablename__ = "camera_config_regions"
+    __table_args__ = (
+        UniqueConstraint("camera_config_id", "region_id", name="uq_camera_config_region"),
+    )
+
+    camera_config_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("camera_configs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="所属 camera_configs.id",
+    )
+    region_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, comment="ROI 区域标识，如 upper/middle/lower",
+    )
+    x1: Mapped[float] = mapped_column(Float, nullable=False, comment="归一化区域左上角 x")
+    y1: Mapped[float] = mapped_column(Float, nullable=False, comment="归一化区域左上角 y")
+    x2: Mapped[float] = mapped_column(Float, nullable=False, comment="归一化区域右下角 x")
+    y2: Mapped[float] = mapped_column(Float, nullable=False, comment="归一化区域右下角 y")
+    patchcore_model_version_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("model_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="该区域使用的 PatchCore 模型版本 ID",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, comment="是否启用该区域",
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="前端展示和配置生成顺序",
+    )
+    patchcore_overrides_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="区域级 PatchCore 配置覆盖 JSON",
+    )
+
+    camera_config: Mapped[CameraConfig] = relationship(
+        "CameraConfig",
+        back_populates="regions",
+    )
+
+    @property
+    def box(self) -> list[float]:
+        return [self.x1, self.y1, self.x2, self.y2]
+
+    @property
+    def patchcore(self) -> dict[str, object] | None:
+        if not self.patchcore_overrides_json:
+            return None
+        try:
+            value = json.loads(self.patchcore_overrides_json)
+        except json.JSONDecodeError:
+            return None
+        return value if isinstance(value, dict) else None

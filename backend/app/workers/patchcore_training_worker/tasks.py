@@ -23,11 +23,15 @@ def train_patchcore_model(
     camera_id: str,
     config_json: str,
     good_image_paths: list[str],
+    input_mode: str = "roi",
+    region_id: str | None = None,
 ) -> dict[str, object]:
     """Celery task: train a PatchCore model via seat_defect_core."""
     logger.info(
         "patchcore_training_started",
         camera_id=camera_id,
+        region_id=region_id,
+        input_mode=input_mode,
         image_count=len(good_image_paths),
     )
 
@@ -43,7 +47,8 @@ def train_patchcore_model(
 
         output_dir = settings.model_dir / "patchcore"
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{camera_id}_patchcore_{datetime.now(tz=timezone.utc).strftime('%Y%m%d%H%M%S')}.npz"
+        model_suffix = f"{camera_id}_{region_id}" if region_id else camera_id
+        output_path = output_dir / f"{model_suffix}_patchcore_{datetime.now(tz=timezone.utc).strftime('%Y%m%d%H%M%S')}.npz"
 
         cmd = [
             settings.seat_defect_core_python,
@@ -53,7 +58,10 @@ def train_patchcore_model(
             "--camera-id", camera_id,
             "--good-images", good_image_paths[0] if len(good_image_paths) == 1 and Path(good_image_paths[0]).is_dir() else tmp_dir,
             "--output", str(output_path),
+            "--input-mode", input_mode,
         ]
+        if region_id:
+            cmd.extend(["--region-id", region_id])
 
         # 如果传的是文件列表而非目录，需要把图片放到同一目录
         if not (len(good_image_paths) == 1 and Path(good_image_paths[0]).is_dir()):
@@ -82,7 +90,7 @@ def train_patchcore_model(
         }
 
         model_version = run_async(_create_model_version(
-            model_name=f"patchcore_{camera_id}",
+            model_name=f"patchcore_{model_suffix}",
             model_type="patchcore",
             artifact_path=str(output_path),
             metrics=numeric_metrics,
@@ -92,13 +100,15 @@ def train_patchcore_model(
         logger.info(
             "patchcore_training_complete",
             camera_id=camera_id,
+            region_id=region_id,
             output_path=str(output_path),
             memory_bank_size=result.get("memory_bank_size"),
         )
         return {
             "status": "completed",
-            "model_name": f"patchcore_{camera_id}",
+            "model_name": f"patchcore_{model_suffix}",
             "camera_id": camera_id,
+            "region_id": region_id,
             "artifact_path": str(output_path),
             "metrics": numeric_metrics,
             "model_version_id": model_version.id,

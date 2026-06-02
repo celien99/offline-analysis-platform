@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
+from app.models.camera_config import SeatModel
 from app.repositories.camera_config import CameraConfigRepository, SeatModelRepository
 from app.schemas.camera_config import (
     CameraConfigCreate,
@@ -67,7 +68,6 @@ async def create_seat_model(
     existing = await seat_repo.get_by_seat_model_id(data.seat_model_id)
     if existing:
         raise HTTPException(status_code=409, detail="seat_model_id 已存在")
-    from app.models.camera_config import SeatModel
 
     entity = SeatModel(
         seat_model_id=data.seat_model_id,
@@ -158,11 +158,13 @@ async def create_camera(
 
     from app.models.camera_config import CameraConfig
 
+    payload = data.model_dump(exclude={"regions"})
     entity = CameraConfig(
         seat_model_id=seat_model_id,
-        **data.model_dump(),
+        **payload,
     )
     await cam_repo.create(entity)
+    await cam_repo.replace_regions(entity, _build_region_entities(data.regions))
     await session.commit()
     return CameraConfigResponse.model_validate(entity)
 
@@ -183,8 +185,14 @@ async def update_camera(
         raise HTTPException(status_code=404, detail="相机配置不存在")
 
     update_data = data.model_dump(exclude_unset=True)
+    regions = update_data.pop("regions", None)
     for key, value in update_data.items():
         setattr(entity, key, value)
+    if regions is not None:
+        await cam_repo.replace_regions(
+            entity,
+            _build_region_entities(regions),
+        )
     await cam_repo.update(entity)
     await session.commit()
     return CameraConfigResponse.model_validate(entity)
@@ -203,3 +211,37 @@ async def delete_camera(
     await cam_repo.soft_delete(camera_db_id)
     await session.commit()
     return None
+
+
+def _build_region_entities(regions: list[dict] | list) -> list:
+    import json
+
+    from app.models.camera_config import CameraConfigRegion
+
+    entities = []
+    for index, raw_region in enumerate(regions):
+        region = (
+            raw_region
+            if isinstance(raw_region, dict)
+            else raw_region.model_dump()
+        )
+        box = region["box"]
+        patchcore = region.get("patchcore")
+        entities.append(
+            CameraConfigRegion(
+                region_id=region["region_id"],
+                x1=float(box[0]),
+                y1=float(box[1]),
+                x2=float(box[2]),
+                y2=float(box[3]),
+                patchcore_model_version_id=region["patchcore_model_version_id"],
+                enabled=bool(region.get("enabled", True)),
+                sort_order=int(region.get("sort_order", index)),
+                patchcore_overrides_json=(
+                    json.dumps(patchcore, ensure_ascii=False)
+                    if patchcore
+                    else None
+                ),
+            )
+        )
+    return entities
