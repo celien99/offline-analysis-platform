@@ -31,7 +31,7 @@ import {
   useTrainingStart,
   useTrainedModels,
   useTrainingStatus,
-  useEfficientADTrainingStart,
+  usePatchCoreTrainingStart,
   useGateReport,
 } from "../../hooks/queries";
 import type { TrainingStartParams, TrainedModel } from "../../types";
@@ -53,15 +53,15 @@ export default function TrainingPage() {
   const [gateModelId, setGateModelId] = useState<string | null>(null);
   const [gateModalVisible, setGateModalVisible] = useState(false);
 
-  // EfficientAD inline form state
-  const [eadCameraId, setEadCameraId] = useState("");
-  const [eadImageFiles, setEadImageFiles] = useState<File[]>([]);
+  // PatchCore inline form state
+  const [patchcoreCameraId, setPatchcoreCameraId] = useState("");
+  const [patchcoreImageFiles, setPatchcoreImageFiles] = useState<File[]>([]);
 
   const [filterForm] = Form.useForm();
 
   const { data: modelsData, refetch: refetchModels } = useTrainedModels({ page });
   const filterStart = useTrainingStart();
-  const efficientadStart = useEfficientADTrainingStart();
+  const patchcoreStart = usePatchCoreTrainingStart();
   const { data: statusData } = useTrainingStatus(statusTaskId);
   const { data: gateReport } = useGateReport(gateModelId);
 
@@ -87,32 +87,32 @@ export default function TrainingPage() {
     );
   };
 
-  // ── EfficientAD ──
-  const handleEfficientadStart = () => {
-    if (!eadCameraId.trim()) {
+  // ── PatchCore ──
+  const handlePatchcoreStart = () => {
+    if (!patchcoreCameraId.trim()) {
       message.error("请输入 Camera ID");
       return;
     }
-    if (eadImageFiles.length === 0) {
+    if (patchcoreImageFiles.length === 0) {
       message.error("请上传正常参考图像");
       return;
     }
 
     const formData = new FormData();
-    formData.append("camera_id", eadCameraId.trim());
-    eadImageFiles.forEach((f) => formData.append("good_images", f));
+    formData.append("camera_id", patchcoreCameraId.trim());
+    patchcoreImageFiles.forEach((f) => formData.append("good_images", f));
 
-    efficientadStart.mutate(formData, {
+    patchcoreStart.mutate(formData, {
       onSuccess: () => {
-        message.success("EfficientAD 训练已加入队列");
-        setEadImageFiles([]);
+        message.success("PatchCore 训练已加入队列");
+        setPatchcoreImageFiles([]);
         refetchModels();
       },
     });
   };
 
   const modelTypeColor = (t: string) => {
-    if (t === "efficientad") return "cyan";
+    if (t === "patchcore") return "cyan";
     return "green";
   };
 
@@ -217,7 +217,7 @@ export default function TrainingPage() {
       children: (
         <Card>
           <Typography.Paragraph type="secondary">
-            从已审核的聚类数据中训练二分类过滤器，用于在线检测中抑制 EfficientAD 误报。
+            从已审核的聚类数据中训练二分类过滤器，用于在线检测中抑制 PatchCore 误报。
           </Typography.Paragraph>
           <Button
             type="primary"
@@ -230,20 +230,20 @@ export default function TrainingPage() {
       ),
     },
     {
-      key: "efficientad",
-      label: "EfficientAD 训练",
+      key: "patchcore",
+      label: "PatchCore 训练",
       children: (
         <Card>
           <Typography.Paragraph type="secondary" className="mb-4">
-            使用正常参考图像训练 EfficientAD 异常检测模型。训练参数由内置配置文件控制，仅需提供目标相机 ID 和正常参考图像。
+            使用正常参考图像训练 PatchCore 异常检测模型。训练参数由内置配置文件控制，仅需提供目标相机 ID 和正常参考图像。
           </Typography.Paragraph>
 
           <Form layout="vertical" className="max-w-lg">
             <Form.Item label="相机ID" required>
               <Input
                 placeholder="例如: cam_front"
-                value={eadCameraId}
-                onChange={(e) => setEadCameraId(e.target.value)}
+                value={patchcoreCameraId}
+                onChange={(e) => setPatchcoreCameraId(e.target.value)}
               />
             </Form.Item>
 
@@ -252,13 +252,13 @@ export default function TrainingPage() {
                 multiple
                 accept="image/*"
                 beforeUpload={(file) => {
-                  setEadImageFiles((prev) => [...prev, file]);
+                  setPatchcoreImageFiles((prev) => [...prev, file]);
                   return false;
                 }}
                 onRemove={(file) => {
-                  setEadImageFiles((prev) => prev.filter((f) => f.name !== file.name || f.size !== file.size));
+                  setPatchcoreImageFiles((prev) => prev.filter((f) => f.name !== file.name || f.size !== file.size));
                 }}
-                fileList={eadImageFiles.map((f, i) => ({ uid: `ead-${i}`, name: f.name, status: "done" as const, originFileObj: f })) as any}
+                fileList={patchcoreImageFiles.map((f, i) => ({ uid: `patchcore-${i}`, name: f.name, status: "done" as const, originFileObj: f })) as any}
               >
                 <p className="ant-upload-drag-icon">
                   <InboxOutlined />
@@ -273,10 +273,10 @@ export default function TrainingPage() {
                 type="primary"
                 icon={<PlayCircleOutlined />}
                 size="large"
-                onClick={handleEfficientadStart}
-                loading={efficientadStart.isPending}
+                onClick={handlePatchcoreStart}
+                loading={patchcoreStart.isPending}
               >
-                开始 EfficientAD 训练
+                开始 PatchCore 训练
               </Button>
             </Form.Item>
           </Form>

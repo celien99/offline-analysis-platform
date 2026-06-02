@@ -6,5 +6,5 @@ export { rulesApi } from "./rules";
 export { trainingApi } from "./training";
 export { modelApi } from "./model";
 export { multimodalApi } from "./multimodal";
-export { efficientadTrainingApi } from "./efficientad-training";
+export { patchcoreTrainingApi } from "./patchcore-training";
 export { inspectionApi } from "./inspection";

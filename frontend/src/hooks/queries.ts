@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, efficientadTrainingApi, inspectionApi } from "../api";
+import { clusterApi, anomalyApi, knowledgeApi, rulesApi, trainingApi, modelApi, multimodalApi, patchcoreTrainingApi, inspectionApi } from "../api";
 import { cameraConfigApi } from "../api/camera-config";
 import { gateApi } from "../api/gate";
 import { maskRefinementApi } from "../api/mask-refinement";
@@ -45,7 +45,7 @@ export function useClusterAnomalies(clusterId: string | null) {
 export function useClusterVisualization() {
   return useQuery({
     queryKey: ["clusters", "visualization"],
-    queryFn: ({ signal }) => clusterApi.visualization(undefined, undefined, undefined, signal),
+    queryFn: ({ signal }) => clusterApi.visualization(undefined, undefined, signal),
     staleTime: 60_000,
   });
 }
@@ -310,11 +310,11 @@ export function useVLMAnalyzeAnomaly() {
   });
 }
 
-// ── EfficientAD Training hooks ──
+// ── PatchCore Training hooks ──
 
-export function useEfficientADTrainingStart() {
+export function usePatchCoreTrainingStart() {
   return useMutation({
-    mutationFn: (formData: FormData) => efficientadTrainingApi.start(formData),
+    mutationFn: (formData: FormData) => patchcoreTrainingApi.start(formData),
   });
 }
 
