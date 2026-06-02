@@ -2,7 +2,7 @@ import { Card } from "antd";
 
 interface CameraNode {
   cameraId: string;
-  efficientadModel: string;
+  patchcoreModel: string;
   filterModel?: string;
   normalizerModel?: string;
 }
@@ -17,7 +17,7 @@ interface Props {
 
 const MODEL_COLORS: Record<string, string> = {
   yolo: "#1677ff",
-  efficientad: "#722ed1",
+  patchcore: "#722ed1",
   filter: "#52c41a",
   normalizer: "#fa8c16",
   projector: "#eb2f96",
@@ -112,7 +112,7 @@ export default function CameraTopology({
 
               {/* 每台相机的模型 */}
               {[
-                { label: "EAD", value: cam.efficientadModel, color: MODEL_COLORS.efficientad },
+                { label: "PC", value: cam.patchcoreModel, color: MODEL_COLORS.patchcore },
                 { label: "Norm", value: cam.normalizerModel, color: MODEL_COLORS.normalizer },
                 cam.filterModel ? { label: "FC", value: cam.filterModel, color: MODEL_COLORS.filter } : null,
               ].filter(Boolean).map((m, mi) => {
@@ -138,7 +138,7 @@ export default function CameraTopology({
       </svg>
       <div className="flex gap-4 mt-3 text-xs text-gray-400 flex-wrap">
         <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.yolo }} />YOLO（全局）</span>
-        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.efficientad }} />EfficientAD</span>
+        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.patchcore }} />PatchCore</span>
         <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.normalizer }} />Normalizer</span>
         <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.filter }} />Filter</span>
         <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ background: MODEL_COLORS.projector }} />Projector</span>

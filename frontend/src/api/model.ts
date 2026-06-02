@@ -45,7 +45,7 @@ export const modelApi = {
   register: (data: ModelRegisterData) =>
     post<ModelOption>("/model/register", data),
 
-  /** 批量导入 batch_train 产物 */
+  /** 批量导入 PatchCore 训练产物 */
   importBatchTrain: (data: BatchTrainImportRequest) =>
     post<BatchTrainImportResult>("/model/import-batch-train", data),
 };

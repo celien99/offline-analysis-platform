@@ -82,7 +82,7 @@ export default function CameraConfigPage() {
 
   // 按类型分别获取模型下拉选项
   const { data: yoloModels } = useModelOptions("yolo");
-  const { data: efficientadModels } = useModelOptions("efficientad");
+  const { data: patchcoreModels } = useModelOptions("patchcore");
   const { data: filterClassifierModels } = useModelOptions("filter_classifier");
   const { data: projectorModels } = useModelOptions("projector");
   const { data: whiteningMatrixModels } = useModelOptions("whitening_matrix");
@@ -90,7 +90,7 @@ export default function CameraConfigPage() {
   // 合并所有模型用于表格展示
   const allModels = [
     ...(yoloModels ?? []),
-    ...(efficientadModels ?? []),
+    ...(patchcoreModels ?? []),
     ...(filterClassifierModels ?? []),
     ...(projectorModels ?? []),
     ...(whiteningMatrixModels ?? []),
@@ -154,9 +154,9 @@ export default function CameraConfigPage() {
     cameraForm.resetFields();
     cameraForm.setFieldsValue({
       detection_confidence: 0.25,
-      efficientad_image_size: 256,
-      efficientad_threshold: 0.99,
-      efficientad_model_version_id: null,
+      patchcore_image_size: 256,
+      patchcore_threshold: 0.99,
+      patchcore_model_version_id: null,
       filter_classifier_model_version_id: null,
       normalizer_model_version_id: null,
     });
@@ -167,12 +167,12 @@ export default function CameraConfigPage() {
     setEditingCamera(record);
     cameraForm.setFieldsValue({
       camera_id: record.camera_id,
-      efficientad_model_version_id: record.efficientad_model_version_id,
+      patchcore_model_version_id: record.patchcore_model_version_id,
       filter_classifier_model_version_id: record.filter_classifier_model_version_id,
       normalizer_model_version_id: record.normalizer_model_version_id,
       detection_confidence: record.detection_confidence,
-      efficientad_image_size: record.efficientad_image_size,
-      efficientad_threshold: record.efficientad_threshold,
+      patchcore_image_size: record.patchcore_image_size,
+      patchcore_threshold: record.patchcore_threshold,
     });
     setCameraModalOpen(true);
   };
@@ -244,7 +244,7 @@ export default function CameraConfigPage() {
 
   const cameraTopoData = (cameras ?? []).map((c) => ({
     cameraId: c.camera_id,
-    efficientadModel: modelLabel(c.efficientad_model_version_id, allModels),
+    patchcoreModel: modelLabel(c.patchcore_model_version_id, allModels),
     normalizerModel: modelLabel(c.normalizer_model_version_id, allModels),
     filterModel: c.filter_classifier_model_version_id
       ? modelLabel(c.filter_classifier_model_version_id, allModels)
@@ -454,8 +454,8 @@ export default function CameraConfigPage() {
                 columns={[
                   { title: "相机ID", dataIndex: "camera_id", width: 100, ellipsis: true },
                   {
-                    title: "EfficientAD 模型",
-                    dataIndex: "efficientad_model_version_id",
+                    title: "PatchCore 模型",
+                    dataIndex: "patchcore_model_version_id",
                     width: 140,
                     ellipsis: true,
                     render: (v: string | null) => modelLabel(v, allModels),
@@ -572,11 +572,11 @@ export default function CameraConfigPage() {
             <Input placeholder="如 cam_back" disabled={!!editingCamera} />
           </Form.Item>
           <Form.Item
-            name="efficientad_model_version_id"
-            label="EfficientAD 模型"
-            rules={[{ required: true, message: "请选择 EfficientAD 模型" }]}
+            name="patchcore_model_version_id"
+            label="PatchCore 模型"
+            rules={[{ required: true, message: "请选择 PatchCore 模型" }]}
           >
-            <ModelSelect models={efficientadModels} />
+            <ModelSelect models={patchcoreModels} />
           </Form.Item>
           <Form.Item
             name="normalizer_model_version_id"
@@ -599,12 +599,12 @@ export default function CameraConfigPage() {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="efficientad_image_size" label="EfficientAD 图像尺寸">
+              <Form.Item name="patchcore_image_size" label="PatchCore 图像尺寸">
                 <InputNumber min={64} max={1024} step={32} className="w-full" />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="efficientad_threshold" label="EfficientAD 阈值">
+              <Form.Item name="patchcore_threshold" label="PatchCore 阈值">
                 <InputNumber min={0} max={1} step={0.01} className="w-full" />
               </Form.Item>
             </Col>
@@ -648,7 +648,7 @@ export default function CameraConfigPage() {
               placeholder="选择模型类型"
               options={[
                 { label: "YOLO", value: "yolo" },
-                { label: "EfficientAD", value: "efficientad" },
+                { label: "PatchCore", value: "patchcore" },
                 { label: "Filter Classifier", value: "filter_classifier" },
                 { label: "Camera Normalizer", value: "camera_normalizer" },
                 { label: "Embedding", value: "embedding" },
@@ -668,9 +668,9 @@ export default function CameraConfigPage() {
         </Form>
       </Modal>
 
-      {/* 导入 batch_train 产物 Modal */}
+      {/* 导入 PatchCore 训练产物 Modal */}
       <Modal
-        title="导入训练产物"
+        title="导入 PatchCore 训练产物"
         open={importModalOpen}
         onOk={handleImportBatchTrain}
         onCancel={() => {
@@ -685,11 +685,11 @@ export default function CameraConfigPage() {
         <Form form={importForm} layout="vertical">
           <Form.Item
             name="output_root"
-            label="batch_train 输出目录"
+            label="PatchCore 训练输出目录"
             rules={[{ required: true, message: "请输入输出目录的绝对路径" }]}
             extra={
               <span>
-                目录应包含 *_efficientad.pt, *_norm.npz, projector.npz 等文件。
+                目录应包含 *_patchcore.npz, *_norm.npz, projector.npz 等文件。
                 导入后将自动注册并绑定到当前座椅型号的同名相机。
               </span>
             }

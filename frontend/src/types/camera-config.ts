@@ -24,24 +24,24 @@ export interface CameraConfig {
   id: string;
   camera_id: string;
   seat_model_id: string;
-  efficientad_model_version_id: string | null;
+  patchcore_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
   normalizer_model_version_id: string | null;
   detection_confidence: number;
-  efficientad_image_size: number;
-  efficientad_threshold: number;
+  patchcore_image_size: number;
+  patchcore_threshold: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface CameraConfigFormData {
   camera_id: string;
-  efficientad_model_version_id: string | null;
+  patchcore_model_version_id: string | null;
   filter_classifier_model_version_id: string | null;
   normalizer_model_version_id: string | null;
   detection_confidence: number;
-  efficientad_image_size: number;
-  efficientad_threshold: number;
+  patchcore_image_size: number;
+  patchcore_threshold: number;
 }
 
 export interface SeatModelFormData {
