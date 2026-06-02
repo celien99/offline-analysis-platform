@@ -10,7 +10,7 @@ import type { ReviewSubmit, TrainingStartParams, DeployRequest, SeatModelFormDat
 
 export function useClusterList(
   page: number,
-  filters?: { seatModelId?: string; cameraId?: string },
+  filters?: { seatModelId?: string; cameraId?: string; regionId?: string },
   enabled = true,
 ) {
   return useQuery({
@@ -18,7 +18,7 @@ export function useClusterList(
     queryFn: ({ signal }) =>
       clusterApi.list(
         page, 20, undefined,
-        filters?.seatModelId, filters?.cameraId,
+        filters?.seatModelId, filters?.cameraId, filters?.regionId,
         signal,
       ),
     placeholderData: (prev) => prev,
@@ -45,7 +45,7 @@ export function useClusterAnomalies(clusterId: string | null) {
 export function useClusterVisualization() {
   return useQuery({
     queryKey: ["clusters", "visualization"],
-    queryFn: ({ signal }) => clusterApi.visualization(undefined, undefined, signal),
+    queryFn: ({ signal }) => clusterApi.visualization(undefined, undefined, undefined, signal),
     staleTime: 60_000,
   });
 }
@@ -66,6 +66,7 @@ export function useAnomalyList(params: {
   page: number;
   camera_id?: string;
   seat_model_id?: string;
+  region_id?: string;
   status?: string;
 }) {
   return useQuery({

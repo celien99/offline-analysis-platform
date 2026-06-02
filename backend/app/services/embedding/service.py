@@ -29,6 +29,7 @@ class EmbeddingService:
         anomaly_id: str,
         image: np.ndarray,
         *,
+        region_id: str | None = None,
         model_version: str | None = None,
     ) -> EmbeddingVector:
         if self._extractor is None:
@@ -46,6 +47,7 @@ class EmbeddingService:
         embedding = EmbeddingVector(
             id=generate_uuid(),
             anomaly_id=anomaly_id,
+            region_id=region_id,
             embedding=vector.tolist(),
             model_name=self._extractor.model_name,
             model_version=model_version or settings.app_version,
@@ -78,11 +80,19 @@ class EmbeddingService:
         *,
         top_k: int = 20,
         threshold: float = 0.7,
+        seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
+        region_id_is_null: bool = False,
     ) -> list[dict[str, object]]:
         return await self._repo.find_similar(
             query_vector=query_vector,
             top_k=top_k,
             threshold=threshold,
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
+            region_id_is_null=region_id_is_null,
         )
 
     async def batch_generate(

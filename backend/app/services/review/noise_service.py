@@ -43,15 +43,18 @@ class NoiseReviewService:
         self, *, offset: int = 0, limit: int = 100,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> tuple[list[AnomalyRecord], int]:
         records = await self._anomaly_repo.get_noise_anomalies(
             offset=offset, limit=limit,
             seat_model_id=seat_model_id,
             camera_id=camera_id,
+            region_id=region_id,
         )
         total = await self._anomaly_repo.count_noise_anomalies(
             seat_model_id=seat_model_id,
             camera_id=camera_id,
+            region_id=region_id,
         )
         return list(records), total
 
@@ -81,6 +84,8 @@ class NoiseReviewService:
         cluster = Cluster(
             id=cluster_id,
             seat_model_id=anomaly.seat_model_id,
+            camera_id=anomaly.camera_id,
+            region_id=anomaly.region_id,
             name=f"noise_{anomaly_id[:8]}",
             sample_count=1,
             status="reviewed",

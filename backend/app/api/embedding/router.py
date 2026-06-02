@@ -49,7 +49,9 @@ async def _enrich_results(
         enriched.append(EmbeddingSimilarResult(
             anomaly_id=aid,
             similarity=float(r.get("similarity", 0.0)),
+            seat_model_id=anomaly.seat_model_id if anomaly else None,
             camera_id=anomaly.camera_id if anomaly else None,
+            region_id=anomaly.region_id if anomaly else None,
             date_folder=anomaly.date_folder if anomaly else None,
             crop_url=crop_url,
         ))
@@ -92,5 +94,8 @@ async def search_by_vector(
         query_vector=request.vector,
         top_k=request.top_k,
         threshold=request.threshold,
+        seat_model_id=request.seat_model_id,
+        camera_id=request.camera_id,
+        region_id=request.region_id,
     )
     return await _enrich_results(results, session, minio)

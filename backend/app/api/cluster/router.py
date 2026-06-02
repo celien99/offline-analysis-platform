@@ -56,6 +56,7 @@ async def list_clusters(
     defect_type: str | None = Query(default=None),
     seat_model_id: str | None = Query(default=None),
     camera_id: str | None = Query(default=None),
+    region_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -69,6 +70,7 @@ async def list_clusters(
         defect_type=defect_type,
         seat_model_id=seat_model_id,
         camera_id=camera_id,
+        region_id=region_id,
         offset=offset,
         limit=page_size,
     )
@@ -81,6 +83,7 @@ async def list_clusters(
             cluster_id=c.id,
             seat_model_id=c.seat_model_id,
             camera_id=c.camera_id,
+            region_id=c.region_id,
             name=c.name,
             sample_count=c.sample_count,
             possible_type=c.possible_type,
@@ -113,12 +116,14 @@ async def list_clusters(
 @router.get("/visualization")
 async def get_cluster_visualization(
     seat_model_id: str | None = Query(default=None),
+    camera_id: str | None = Query(default=None),
+    region_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, object]:
     """Return cluster data formatted for Plotly scatter plot visualization."""
     service = ClusteringService(session)
     clusters, _ = await service.list_clusters(
-        seat_model_id=seat_model_id, offset=0, limit=10000
+        seat_model_id=seat_model_id, camera_id=camera_id, region_id=region_id, offset=0, limit=10000
     )
 
     scatter_data: list[dict[str, object]] = []
@@ -134,6 +139,9 @@ async def get_cluster_visualization(
         if c.umap_x is not None and c.umap_y is not None:
             scatter_data.append({
                 "cluster_id": c.id,
+                "seat_model_id": c.seat_model_id,
+                "camera_id": c.camera_id,
+                "region_id": c.region_id,
                 "name": c.name or f"Cluster {c.id[:8]}",
                 "x": c.umap_x,
                 "y": c.umap_y,
@@ -191,6 +199,7 @@ async def get_cluster_detail(
         defect_type=cluster.defect_type,
         seat_model_id=cluster.seat_model_id,
         camera_id=cluster.camera_id,
+        region_id=cluster.region_id,
         representative_ids=rep_ids,
         representative_image_urls=urls,
         centroid=centroid,
@@ -244,6 +253,8 @@ async def get_cluster_anomalies(
         results.append({
             "anomaly_id": a.id,
             "camera_id": a.camera_id,
+            "seat_model_id": a.seat_model_id,
+            "region_id": a.region_id,
             "anomaly_score": a.anomaly_score,
             "status": a.status,
             "crop_url": crop_url,
@@ -262,6 +273,7 @@ async def trigger_clustering(
         anomaly_ids=request.anomaly_ids,
         seat_model_id=request.seat_model_id,
         camera_id=request.camera_id,
+        region_id=request.region_id,
     )
     logger.info("clustering_triggered", task_id=task.id)
     return StatusResponse(

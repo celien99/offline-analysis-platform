@@ -69,6 +69,8 @@ async def _process_embedding(
         # refined embedding 不影响 anomaly 状态（raw embedding 已将其置为 embedded）
         anomaly_repo = AnomalyRepository(session)
         anomaly = await anomaly_repo.get_by_id(anomaly_id)
+        region_id = anomaly.region_id if anomaly is not None else None
+        embedding.region_id = region_id
         if anomaly is not None and anomaly.status == "pending":
             await anomaly_repo.update_status(anomaly_id, "embedded")
 
@@ -78,6 +80,7 @@ async def _process_embedding(
         "embedding_task_complete",
         anomaly_id=anomaly_id,
         embedding_type=embedding_type,
+        region_id=region_id,
     )
     return {"status": "completed", "anomaly_id": anomaly_id, "embedding_type": embedding_type}
 

@@ -78,6 +78,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
         self, *, offset: int = 0, limit: int = 100,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> Sequence[AnomalyRecord]:
         """返回 status='noise' 且未归属任何 cluster 的噪声异常。"""
         from app.models.cluster import ClusterMembership
@@ -94,6 +95,8 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
             conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
         if camera_id:
             conditions.append(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            conditions.append(AnomalyRecord.region_id == region_id)
         stmt = (
             select(AnomalyRecord)
             .where(*conditions)
@@ -106,6 +109,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
     async def count_noise_anomalies(
         self, seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> int:
         """统计未归属任何 cluster 的 noise 异常数。"""
         from app.models.cluster import ClusterMembership
@@ -122,6 +126,8 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
             conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
         if camera_id:
             conditions.append(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            conditions.append(AnomalyRecord.region_id == region_id)
         stmt = (
             select(func.count())
             .select_from(AnomalyRecord)
@@ -147,6 +153,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
         since: datetime | None = None,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
+        region_id: str | None = None,
     ) -> dict[str, int]:
         """统计指定时间范围内的 filter_action 分布。"""
         conditions = [
@@ -159,6 +166,8 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
             conditions.append(AnomalyRecord.camera_id == camera_id)
         if seat_model_id:
             conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
+        if region_id:
+            conditions.append(AnomalyRecord.region_id == region_id)
         stmt = (
             select(AnomalyRecord.filter_action, func.count(AnomalyRecord.id))
             .where(*conditions)
@@ -172,6 +181,7 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
         since: datetime | None = None,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
+        region_id: str | None = None,
     ) -> list[dict[str, object]]:
         """交叉对比 filter_action 与人工审核结果。"""
         from app.models.cluster import Cluster, ClusterMembership
@@ -189,6 +199,8 @@ class AnomalyRepository(BaseRepository[AnomalyRecord]):
             conditions.append(AnomalyRecord.camera_id == camera_id)
         if seat_model_id:
             conditions.append(AnomalyRecord.seat_model_id == seat_model_id)
+        if region_id:
+            conditions.append(AnomalyRecord.region_id == region_id)
 
         stmt = (
             select(

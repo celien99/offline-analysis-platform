@@ -30,7 +30,8 @@ class AnomalyService:
         *,
         camera_id: str,
         seat_model_id: str | None = None,
-        source: str = "efficientad",
+        region_id: str | None = None,
+        source: str = "patchcore",
         anomaly_score: float | None = None,
         date_folder: str,
         detected_at: datetime,
@@ -87,6 +88,7 @@ class AnomalyService:
                 id=anomaly_id,
                 camera_id=camera_id,
                 seat_model_id=seat_model_id,
+                region_id=region_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -113,6 +115,7 @@ class AnomalyService:
                 id=anomaly_id,
                 camera_id=camera_id,
                 seat_model_id=seat_model_id,
+                region_id=region_id,
                 source=source,
                 anomaly_score=anomaly_score,
                 date_folder=date_folder,
@@ -138,6 +141,7 @@ class AnomalyService:
             batch_id=batch_id,
             trace_id=trace_id,
             anomaly_count=len(anomalies),
+            region_id=region_id,
             has_original=original_path is not None,
             crop_input_count=len(crop_data_list or []),
         )
@@ -154,6 +158,7 @@ class AnomalyService:
         *,
         camera_id: str | None = None,
         seat_model_id: str | None = None,
+        region_id: str | None = None,
         source: str | None = None,
         status: str | None = None,
         offset: int = 0,
@@ -162,6 +167,7 @@ class AnomalyService:
         records = await self._repo.list_all(
             camera_id=camera_id,
             seat_model_id=seat_model_id,
+            region_id=region_id,
             source=source,
             status=status,
             offset=offset,
@@ -170,6 +176,7 @@ class AnomalyService:
         total = await self._repo.count(
             camera_id=camera_id,
             seat_model_id=seat_model_id,
+            region_id=region_id,
             source=source,
             status=status,
         )
@@ -231,7 +238,13 @@ class AnomalyService:
         # 只对该 anomaly 提取 embedding + 对所有非 reviewed 做增量聚类，
         # 避免 dispatch_for_new_anomalies 拉入其他 pending 异常导致全量扫描
         if record.crop_path:
-            pipeline.dispatch_single_reprocess(anomaly_id, record.crop_path)
+            pipeline.dispatch_single_reprocess(
+                anomaly_id,
+                record.crop_path,
+                seat_model_id=record.seat_model_id,
+                camera_id=record.camera_id,
+                region_id=record.region_id,
+            )
         else:
             logger.warning("reprocess_no_crop_path", anomaly_id=anomaly_id)
         return record

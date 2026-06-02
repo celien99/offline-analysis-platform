@@ -2,6 +2,7 @@ export interface AnomalyRecord {
   anomaly_id: string;
   camera_id: string;
   seat_model_id: string | null;
+  region_id: string | null;
   source: string;
   anomaly_score: number | null;
   date_folder: string;
@@ -20,6 +21,8 @@ export interface AnomalyRecord {
 export interface AnomalySummary {
   anomaly_id: string;
   camera_id: string;
+  seat_model_id?: string | null;
+  region_id?: string | null;
   anomaly_score: number | null;
   status: string;
   crop_url: string | null;
@@ -42,7 +45,9 @@ export interface AnomalyDeleteResponse {
 export interface EmbeddingSimilarResult {
   anomaly_id: string;
   similarity: number;
+  seat_model_id?: string | null;
   camera_id?: string | null;
+  region_id?: string | null;
   date_folder?: string | null;
   crop_url?: string | null;
 }

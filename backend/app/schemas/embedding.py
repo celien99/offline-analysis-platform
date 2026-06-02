@@ -15,11 +15,15 @@ class EmbeddingSearchByVectorRequest(BaseModel):
     vector: list[float] = Field(..., description="Query embedding vector")
     top_k: int = Field(default=20, ge=1, le=100)
     threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    seat_model_id: str | None = None
+    camera_id: str | None = None
+    region_id: str | None = None
 
 
 class EmbeddingResponse(BaseModel):
     embedding_id: str
     anomaly_id: str
+    region_id: str | None = None
     model_name: str
     model_version: str | None
     dimension: int
@@ -33,5 +37,7 @@ class EmbeddingSimilarResult(BaseModel):
     anomaly_id: str
     similarity: float
     camera_id: str | None = None
+    seat_model_id: str | None = None
+    region_id: str | None = None
     date_folder: str | None = None
     crop_url: str | None = None

@@ -16,6 +16,10 @@ class EmbeddingVector(BaseModel):
     anomaly_id: Mapped[str] = mapped_column(
         String(32), nullable=False, index=True
     )
+    region_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True,
+        comment="所属 ROI 区域 ID，冗余自 anomaly_records 便于向量检索隔离"
+    )
     embedding_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="raw",
         comment="raw（原始 crop 提取）/ refined（精化 crop 提取），双轨对比"

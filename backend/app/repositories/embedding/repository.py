@@ -36,6 +36,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         *,
         top_k: int = 20,
         threshold: float = 0.7,
+        seat_model_id: str | None = None,
+        camera_id: str | None = None,
+        region_id: str | None = None,
+        region_id_is_null: bool = False,
     ) -> list[dict[str, object]]:
         # pgvector <=> 运算符要求向量以字符串形式传入（如 '[1.0, 2.0, 3.0]'），
         # 直接传 Python list 或 numpy ndarray 会导致 asyncpg DataError
@@ -43,12 +47,19 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         stmt = text("""
             SELECT ev.id AS embedding_id,
                    ev.anomaly_id,
+                   ev.region_id,
                    ev.model_name,
                    ev.model_version,
                    ev.dimension,
                    1 - (ev.embedding <=> :query_vec) AS similarity
             FROM embedding_vectors ev
+            JOIN anomaly_records ar ON ar.id = ev.anomaly_id
             WHERE ev.deleted_at IS NULL
+              AND ar.deleted_at IS NULL
+              AND (:seat_model_id IS NULL OR ar.seat_model_id = :seat_model_id)
+              AND (:camera_id IS NULL OR ar.camera_id = :camera_id)
+              AND (:region_id IS NULL OR ar.region_id = :region_id)
+              AND (:region_id_is_null = 0 OR ar.region_id IS NULL)
               AND 1 - (ev.embedding <=> :query_vec) >= :threshold
             ORDER BY ev.embedding <=> :query_vec
             LIMIT :top_k
@@ -59,6 +70,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
                 "query_vec": vec_str,
                 "threshold": threshold,
                 "top_k": top_k,
+                "seat_model_id": seat_model_id,
+                "camera_id": camera_id,
+                "region_id": region_id,
+                "region_id_is_null": 1 if region_id_is_null else 0,
             },
         )
         return [dict(row._mapping) for row in result]
@@ -69,16 +84,35 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         *,
         top_k: int = 20,
         threshold: float = 0.7,
+        isolate: bool = True,
     ) -> list[dict[str, object]]:
+        from app.models.anomaly import AnomalyRecord
+
         source = await self.get_by_anomaly_id(anomaly_id)
         if source is None:
             return []
+        seat_model_id = camera_id = region_id = None
+        if isolate:
+            stmt = select(AnomalyRecord).where(
+                AnomalyRecord.deleted_at.is_(None),
+                AnomalyRecord.id == anomaly_id,
+            )
+            result = await self._session.execute(stmt)
+            anomaly = result.scalar_one_or_none()
+            if anomaly is not None:
+                seat_model_id = anomaly.seat_model_id
+                camera_id = anomaly.camera_id
+                region_id = anomaly.region_id
         # source.embedding 是 pgvector Vector（numpy ndarray），需转为 list[float] 才能被 asyncpg 正确序列化
         query_vec = source.embedding.tolist() if hasattr(source.embedding, "tolist") else list(source.embedding)
         return await self.find_similar(
             query_vector=query_vec,
             top_k=top_k,
             threshold=threshold,
+            seat_model_id=seat_model_id,
+            camera_id=camera_id,
+            region_id=region_id,
+            region_id_is_null=isolate and region_id is None,
         )
 
     async def get_batch(
@@ -104,6 +138,8 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         self,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
+        region_id_is_null: bool = False,
         embedding_type: str = "raw",
     ) -> list[tuple[str, list[float]]]:
         """获取所有非 reviewed 状态的 anomaly 的 embedding，用于图谱构建等全量场景。"""
@@ -123,6 +159,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
             stmt = stmt.where(AnomalyRecord.seat_model_id == seat_model_id)
         if camera_id:
             stmt = stmt.where(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            stmt = stmt.where(AnomalyRecord.region_id == region_id)
+        elif region_id_is_null:
+            stmt = stmt.where(AnomalyRecord.region_id.is_(None))
 
         result = await self._session.execute(stmt)
         return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]
@@ -131,12 +171,14 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
         self,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
+        region_id_is_null: bool = False,
         embedding_type: str = "raw",
     ) -> list[tuple[str, list[float]]]:
         """获取待聚类的 anomaly embedding：仅包含 embedded（新嵌入）和 noise（未成簇）状态。
 
         已聚类的 anomaly（status='clustered'）不应被重新打散，因此排除在外。
-        支持多级隔离：seat_model_id -> camera_id。
+        支持多级隔离：seat_model_id -> camera_id -> region_id。
         支持 embedding_type 过滤：raw（原始 crop）或 refined（精化 crop）。
         """
         from app.models.anomaly import AnomalyRecord
@@ -155,6 +197,10 @@ class EmbeddingRepository(BaseRepository[EmbeddingVector]):
             stmt = stmt.where(AnomalyRecord.seat_model_id == seat_model_id)
         if camera_id:
             stmt = stmt.where(AnomalyRecord.camera_id == camera_id)
+        if region_id:
+            stmt = stmt.where(AnomalyRecord.region_id == region_id)
+        elif region_id_is_null:
+            stmt = stmt.where(AnomalyRecord.region_id.is_(None))
 
         result = await self._session.execute(stmt)
         return [(row.anomaly_id, row.embedding) for row in result.scalars().all()]

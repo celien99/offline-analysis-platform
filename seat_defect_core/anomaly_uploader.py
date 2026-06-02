@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 import requests
 
-from .core_types import CameraInspectionResult, InspectionResponse
+from .core_types import CameraInspectionResult, InspectionResponse, RegionPatchCoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,6 @@ def upload_camera_result(
     if date_folder is None:
         date_folder = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
-    files: list[tuple[str, tuple]] = []
     data: Dict[str, Any] = {
         "camera_id": result.camera_id,
         "source": "patchcore",
@@ -85,6 +84,43 @@ def upload_camera_result(
         else:
             data["filter_action"] = "not_applied"
 
+    # regions 模式下每个 NG region 单独上传，避免离线 embedding/cluster 跨 region 混合。
+    if result.region_results and is_ng:
+        uploaded: list[dict[str, Any]] = []
+        for region in _uploadable_regions(result):
+            region_data = dict(data)
+            region_data["region_id"] = region.region_id
+            if region.texture_result is not None:
+                region_data["anomaly_score"] = float(region.texture_result.score)
+            region_files = _build_region_files(result, region)
+            response_json = _post_anomaly(
+                base_url=base_url,
+                data=region_data,
+                files=region_files,
+                timeout=timeout,
+            )
+            if response_json is not None:
+                uploaded.append(response_json)
+
+        if not uploaded:
+            return None
+        if len(uploaded) == 1:
+            return uploaded[0]
+
+        anomaly_ids: list[str] = []
+        total_count = 0
+        for item in uploaded:
+            anomaly_ids.extend(str(aid) for aid in item.get("anomaly_ids", []))
+            total_count += int(item.get("count", 0))
+        return {
+            "anomaly_ids": anomaly_ids,
+            "count": total_count,
+            "status": "received",
+            "message": "Region anomalies queued for processing",
+            "schema_version": uploaded[0].get("schema_version", EXPECTED_SCHEMA_VERSION),
+            "region_count": len(uploaded),
+        }
+
     # 异常分数
     if result.texture_result is not None:
         data["anomaly_score"] = float(result.texture_result.score)
@@ -97,6 +133,87 @@ def upload_camera_result(
         ]
         if region_scores:
             data["anomaly_score"] = float(max(region_scores))
+
+    files = _build_camera_files(result)
+    return _post_anomaly(base_url=base_url, data=data, files=files, timeout=timeout)
+
+
+def upload_inspection_response(
+    response: InspectionResponse,
+    base_url: str,
+    *,
+    date_folder: Optional[str] = None,
+    timeout: float = 30.0,
+    include_ok_suppressed: bool = False,
+) -> List[Dict[str, Any]]:
+    """遍历 InspectionResponse 中的所有相机结果，上传异常到离线平台。
+
+    Args:
+        response: 整件检测响应。
+        base_url: 后端 API 基础地址。
+        date_folder: 日期文件夹名。
+        timeout: HTTP 请求超时秒数。
+        include_ok_suppressed: 是否也上传被分类器抑制的 OK 结果。
+
+    Returns:
+        成功上传的异常记录列表（每项包含 backend 返回的 anomaly_id）。
+    """
+    results: List[Dict[str, Any]] = []
+    for camera_result in response.result.camera_results:
+        uploaded = upload_camera_result(
+            camera_result,
+            base_url,
+            date_folder=date_folder,
+            timeout=timeout,
+            include_ok_suppressed=include_ok_suppressed,
+        )
+        if uploaded is not None:
+            results.append(uploaded)
+    return results
+
+
+def _post_anomaly(
+    *,
+    base_url: str,
+    data: Dict[str, Any],
+    files: list[tuple[str, tuple]],
+    timeout: float,
+) -> Optional[Dict[str, Any]]:
+    try:
+        url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
+        response = requests.post(
+            url,
+            data=data,
+            files=files,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        resp_json = response.json()
+        # 校验后端 schema 版本兼容性
+        backend_version = resp_json.get("schema_version")
+        if backend_version and backend_version != EXPECTED_SCHEMA_VERSION:
+            logger.warning(
+                "Schema version mismatch: seat_defect_core expects %s, backend returns %s",
+                EXPECTED_SCHEMA_VERSION,
+                backend_version,
+            )
+        return resp_json
+    except requests.RequestException:
+        return None
+
+
+def _uploadable_regions(result: CameraInspectionResult) -> list[RegionPatchCoreResult]:
+    return [
+        region
+        for region in result.region_results
+        if region.status == "NG"
+        and region.texture_result is not None
+        and region.texture_result.heatmap is not None
+    ]
+
+
+def _build_camera_files(result: CameraInspectionResult) -> list[tuple[str, tuple]]:
+    files: list[tuple[str, tuple]] = []
 
     # 原图：用户/产线上传到 inspection 的原始大图，不含热力图叠加。
     if result.original_image is not None:
@@ -142,61 +259,64 @@ def upload_camera_result(
         if heatmap is not None:
             files.append(("heatmap_file", ("heatmap.png", _encode_heatmap(heatmap), "image/png")))
 
-    try:
-        url = f"{base_url.rstrip('/')}/api/anomaly/upload-with-files"
-        response = requests.post(
-            url,
-            data=data,
-            files=files,
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        resp_json = response.json()
-        # 校验后端 schema 版本兼容性
-        backend_version = resp_json.get("schema_version")
-        if backend_version and backend_version != EXPECTED_SCHEMA_VERSION:
-            logger.warning(
-                "Schema version mismatch: seat_defect_core expects %s, backend returns %s",
-                EXPECTED_SCHEMA_VERSION,
-                backend_version,
-            )
-        return resp_json
-    except requests.RequestException:
-        return None
+    return files
 
 
-def upload_inspection_response(
-    response: InspectionResponse,
-    base_url: str,
-    *,
-    date_folder: Optional[str] = None,
-    timeout: float = 30.0,
-    include_ok_suppressed: bool = False,
-) -> List[Dict[str, Any]]:
-    """遍历 InspectionResponse 中的所有相机结果，上传异常到离线平台。
+def _build_region_files(
+    result: CameraInspectionResult,
+    region: RegionPatchCoreResult,
+) -> list[tuple[str, tuple]]:
+    files: list[tuple[str, tuple]] = []
 
-    Args:
-        response: 整件检测响应。
-        base_url: 后端 API 基础地址。
-        date_folder: 日期文件夹名。
-        timeout: HTTP 请求超时秒数。
-        include_ok_suppressed: 是否也上传被分类器抑制的 OK 结果。
+    if result.original_image is not None:
+        files.append(("original_file", (
+            "original.jpg",
+            _encode_bgr_image(result.original_image, ".jpg"),
+            "image/jpeg",
+        )))
 
-    Returns:
-        成功上传的异常记录列表（每项包含 backend 返回的 anomaly_id）。
-    """
-    results: List[Dict[str, Any]] = []
-    for camera_result in response.result.camera_results:
-        uploaded = upload_camera_result(
-            camera_result,
-            base_url,
-            date_folder=date_folder,
-            timeout=timeout,
-            include_ok_suppressed=include_ok_suppressed,
-        )
-        if uploaded is not None:
-            results.append(uploaded)
-    return results
+    crop_base = _region_crop_base(result, region)
+    if crop_base is not None and region.texture_result is not None:
+        crops = _crop_by_heatmap(np.asarray(region.texture_result.heatmap, dtype=np.float32), crop_base)
+        if crops:
+            for i, crop_img in enumerate(crops):
+                files.append(("crop_files", (
+                    f"{region.region_id}_crop_{i}.jpg",
+                    _encode_bgr_image(crop_img, ".jpg"),
+                    "image/jpeg",
+                )))
+        else:
+            files.append(("crop_files", (
+                f"{region.region_id}_crop_0.jpg",
+                _encode_bgr_image(crop_base, ".jpg"),
+                "image/jpeg",
+            )))
+
+    if region.texture_result is not None and region.texture_result.heatmap is not None:
+        files.append(("heatmap_file", (
+            f"{region.region_id}_heatmap.png",
+            _encode_heatmap(np.asarray(region.texture_result.heatmap, dtype=np.float32)),
+            "image/png",
+        )))
+    elif result.overlay_image is not None:
+        files.append(("heatmap_file", (
+            "heatmap.jpg",
+            _encode_bgr_image(result.overlay_image, ".jpg"),
+            "image/jpeg",
+        )))
+
+    return files
+
+
+def _region_crop_base(
+    result: CameraInspectionResult,
+    region: RegionPatchCoreResult,
+) -> np.ndarray | None:
+    if region.sample is not None and region.sample.image is not None:
+        return np.asarray(region.sample.image)
+    if result.roi_aligned_image is not None:
+        return result.roi_aligned_image
+    return result.roi_image
 
 
 def _extract_heatmap_for_upload(result: CameraInspectionResult) -> np.ndarray | None:

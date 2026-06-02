@@ -38,6 +38,7 @@ class ComparisonReport:
     """双轨对比报告。"""
     seat_model_id: str | None
     camera_id: str | None
+    region_id: str | None
     raw_metrics: TrackMetrics | None
     refined_metrics: TrackMetrics | None
     recommendation: str
@@ -61,6 +62,7 @@ class ComparisonReport:
         return {
             "seat_model_id": self.seat_model_id,
             "camera_id": self.camera_id,
+            "region_id": self.region_id,
             "raw": _track_dict(self.raw_metrics),
             "refined": _track_dict(self.refined_metrics),
             "recommendation": self.recommendation,
@@ -79,6 +81,7 @@ class DualTrackComparison:
         self,
         seat_model_id: str | None = None,
         camera_id: str | None = None,
+        region_id: str | None = None,
     ) -> ComparisonReport:
         """执行双轨对比并返回报告。"""
         from app.infrastructure.database.session import async_session_factory
@@ -91,11 +94,15 @@ class DualTrackComparison:
             raw_rows = await repo.get_embeddings_for_clustering(
                 seat_model_id=seat_model_id,
                 camera_id=camera_id,
+                region_id=region_id,
+                region_id_is_null=region_id is None,
                 embedding_type="raw",
             )
             refined_rows = await repo.get_embeddings_for_clustering(
                 seat_model_id=seat_model_id,
                 camera_id=camera_id,
+                region_id=region_id,
+                region_id_is_null=region_id is None,
                 embedding_type="refined",
             )
 
@@ -107,6 +114,7 @@ class DualTrackComparison:
         return ComparisonReport(
             seat_model_id=seat_model_id,
             camera_id=camera_id,
+            region_id=region_id,
             raw_metrics=raw_metrics,
             refined_metrics=refined_metrics,
             recommendation=recommendation,
