@@ -8,18 +8,18 @@ from fastapi import APIRouter, File, Form, UploadFile
 from app.common.logging import get_logger
 from app.core.config import settings
 from app.schemas.common import StatusResponse
-from app.workers.efficientad_training_worker.tasks import train_efficientad_model
+from app.workers.patchcore_training_worker.tasks import train_patchcore_model
 
-router = APIRouter(prefix="/api/efficientad-training", tags=["efficientad-training"])
+router = APIRouter(prefix="/api/patchcore-training", tags=["patchcore-training"])
 logger = get_logger(__name__)
 
 
 @router.post("/start", response_model=StatusResponse)
-async def start_efficientad_training(
+async def start_patchcore_training(
     camera_id: str = Form(..., description="目标相机 ID"),
     good_images: list[UploadFile] = File(..., description="正常参考图像文件（可多张）"),
 ) -> StatusResponse:
-    """上传正常参考图像，启动 EfficientAD 模型训练任务。
+    """上传正常参考图像，启动 PatchCore 模型训练任务。
 
     训练参数从内置配置文件（INDUSTRIAL_DEFAULT_INSPECTION_CONFIG）中读取，
     用户仅需提供目标相机 ID 和正常参考图像。
@@ -34,7 +34,7 @@ async def start_efficientad_training(
     config_json = config_path.read_text(encoding="utf-8")
 
     # 将上传的图片保存到临时目录
-    tmp_dir = tempfile.mkdtemp(prefix="efficientad_images_")
+    tmp_dir = tempfile.mkdtemp(prefix="patchcore_images_")
     image_paths: list[str] = []
 
     try:
@@ -46,21 +46,21 @@ async def start_efficientad_training(
                 f.write(content)
             image_paths.append(save_path)
 
-        task = train_efficientad_model.delay(
+        task = train_patchcore_model.delay(
             camera_id=camera_id,
             config_json=config_json,
             good_image_paths=image_paths,
         )
 
         logger.info(
-            "efficientad_training_dispatched",
+            "patchcore_training_dispatched",
             task_id=task.id,
             camera_id=camera_id,
             image_count=len(image_paths),
         )
         return StatusResponse(
             status="queued",
-            message=f"EfficientAD training task {task.id} dispatched",
+            message=f"PatchCore training task {task.id} dispatched",
             task_id=task.id,
         )
     except Exception as e:

@@ -216,7 +216,7 @@ async def import_batch_train_artifacts(
     """扫描 batch_train 的 output_root 目录，自动注册模型并绑定到 CameraConfig。
 
     识别并导入以下产物：
-    - {camera_id}_efficientad.pt → 注册为 efficientad 类型
+    - {camera_id}_patchcore.npz → 注册为 patchcore 类型
     - {camera_id}_norm.npz → 注册为 camera_normalizer 类型
     - projector.npz → 注册为 projector 类型
 
@@ -239,7 +239,7 @@ async def import_batch_train_artifacts(
     errors: list[str] = []
 
     # 扫描 output_root 目录
-    pt_files: dict[str, Path] = {}       # camera_id → .pt 路径
+    patchcore_files: dict[str, Path] = {}  # camera_id → PatchCore .npz 路径
     norm_files: dict[str, Path] = {}     # camera_id → _norm.npz 路径
     projector_path: Optional[Path] = None
 
@@ -249,47 +249,46 @@ async def import_batch_train_artifacts(
         name = f.name
         if name == "projector.npz":
             projector_path = f
-        elif name.endswith("_efficientad.pt") and not name.endswith(".state_dict.pt"):
-            # {camera_id}_efficientad.pt
-            camera_id = name[: -len("_efficientad.pt")]
-            pt_files[camera_id] = f
+        elif name.endswith("_patchcore.npz"):
+            camera_id = name[: -len("_patchcore.npz")]
+            patchcore_files[camera_id] = f
         elif name.endswith("_norm.npz"):
             # {camera_id}_norm.npz
             camera_id = name[: -len("_norm.npz")]
             norm_files[camera_id] = f
 
-    # 按 camera_id 导入 EfficientAD 模型 + Normalizer
-    all_camera_ids = set(pt_files.keys()) | set(norm_files.keys())
+    # 按 camera_id 导入 PatchCore 模型 + Normalizer
+    all_camera_ids = set(patchcore_files.keys()) | set(norm_files.keys())
     for camera_id in sorted(all_camera_ids):
-        pt_path = pt_files.get(camera_id)
+        patchcore_path = patchcore_files.get(camera_id)
         norm_path = norm_files.get(camera_id)
 
         # 读取 meta.json 获取版本信息
         version = _build_timestamp_version()
-        if pt_path:
-            meta_path = pt_path.with_suffix(".meta.json")
+        if patchcore_path:
+            meta_path = patchcore_path.with_suffix(".meta.json")
             if meta_path.exists():
                 try:
                     json.loads(meta_path.read_text("utf-8"))
                 except (json.JSONDecodeError, OSError):
                     pass
 
-        # 注册 EfficientAD 模型
-        if pt_path:
+        # 注册 PatchCore 模型
+        if patchcore_path:
             try:
-                model_name = f"efficientad_{camera_id}"
+                model_name = f"patchcore_{camera_id}"
                 model = await train_svc.create_model_version(
                     model_name=model_name,
                     version=version,
-                    model_type="efficientad",
-                    artifact_path=str(pt_path.absolute()),
+                    model_type="patchcore",
+                    artifact_path=str(patchcore_path.absolute()),
                 )
                 imported.append({
                     "camera_id": camera_id,
-                    "model_type": "efficientad",
+                    "model_type": "patchcore",
                     "model_id": model.id,
                     "model_name": model_name,
-                    "file": pt_path.name,
+                    "file": patchcore_path.name,
                 })
 
                 if request.auto_bind:
@@ -300,9 +299,9 @@ async def import_batch_train_artifacts(
                         imported[-1]["bound"] = True
                     else:
                         imported[-1]["bound"] = False
-                        errors.append(f"CameraConfig 不存在: {camera_id}，EfficientAD 模型未绑定")
+                        errors.append(f"CameraConfig 不存在: {camera_id}，PatchCore 模型未绑定")
             except Exception as exc:
-                errors.append(f"注册 {pt_path.name} 失败: {exc}")
+                errors.append(f"注册 {patchcore_path.name} 失败: {exc}")
 
         # 注册 CameraNormalizer
         if norm_path:

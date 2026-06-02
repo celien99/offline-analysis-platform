@@ -41,14 +41,23 @@ class ConfigBuilder:
         "alignment": {"output_width": 256, "output_height": 256},
     }
 
-    DEFAULT_EFFICIENTAD = {
-        "device": "cpu",
-        "input_size": 256,
-        "teacher_backbone": "wide_resnet50_2",
-        "student_backbone": "resnet18",
-        "min_valid_pixel_ratio": 0.2,
-        "image_threshold": 0.0,
-        "pixel_threshold": 0.0,
+    DEFAULT_PATCHCORE = {
+        "backend": "full",
+        "image_size": 256,
+        "patch_size": 32,
+        "stride": 16,
+        "max_memory": 1024,
+        "threshold_quantile": 0.99,
+        "texture_input": "lab_l",
+        "min_target_coverage": 0.8,
+        "max_ignore_overlap": 0.1,
+        "min_valid_patch_ratio": 0.65,
+        "backbone_name": "wide_resnet50_2",
+        "feature_layers": ["layer2", "layer3"],
+        "backbone_pretrained": False,
+        "backbone_device": "cpu",
+        "feature_pool_kernel_size": 3,
+        "coreset_sampling_ratio": 0.1,
     }
 
     DEFAULT_COLOR_BRANCH = {
@@ -204,7 +213,6 @@ class ConfigBuilder:
                         "cameras": camera_configs,
                     }
                 ],
-                "calibration": calibration,
             }
         }
 
@@ -231,9 +239,9 @@ class ConfigBuilder:
         detection["model_path"] = yolo_path
         detection["confidence"] = cam.detection_confidence
 
-        efficientad = dict(self.DEFAULT_EFFICIENTAD)
-        efficientad["input_size"] = cam.efficientad_image_size
-        efficientad["image_threshold"] = cam.efficientad_threshold
+        patchcore = dict(self.DEFAULT_PATCHCORE)
+        patchcore["image_size"] = cam.efficientad_image_size
+        patchcore["threshold_quantile"] = cam.efficientad_threshold
 
         filter_classifier: dict[str, object] = dict(self.DEFAULT_FILTER_CLASSIFIER)
         filter_clf_path = self._resolve_model_path(
@@ -251,39 +259,24 @@ class ConfigBuilder:
         if deployed_rules:
             rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
 
-        proposal: dict[str, object] = dict(self.DEFAULT_PROPOSAL)
-        tracking: dict[str, object] = dict(self.DEFAULT_TRACKING)
-        calibration: dict[str, object] = dict(self.DEFAULT_CALIBRATION)
-
-        # 每机位 CameraNormalizer stats 路径
-        normalizer_path = self._resolve_model_path(
-            cam.normalizer_model_version_id, model_paths
-        )
-        if normalizer_path:
-            calibration["camera_norm"] = {
-                "enabled": True,
-                "stats_path": normalizer_path,
-            }
-
-        efficientad_path = self._resolve_model_path(
+        patchcore_path = self._resolve_model_path(
             cam.efficientad_model_version_id, model_paths
         )
 
         config: dict[str, object] = {
             "camera_id": cam.camera_id,
-            "efficientad_model_path": efficientad_path,
+            "patchcore_model_path": patchcore_path,
             "source": "",
             "enabled": True,
             "color_insensitive_mode": True,
             "quality": dict(self.DEFAULT_QUALITY),
             "detection": detection,
             "roi": dict(self.DEFAULT_ROI),
-            "efficientad": efficientad,
+            "patchcore": patchcore,
+            "color_branch": dict(self.DEFAULT_COLOR_BRANCH),
             "filter_classifier": filter_classifier,
             "rule_engine": rule_engine,
-            "proposal": proposal,
-            "track": tracking,
-            "calibration": calibration,
+            "regions": [],
         }
 
         return config

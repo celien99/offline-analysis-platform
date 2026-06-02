@@ -30,7 +30,7 @@ async def upload_anomaly_with_files(
     camera_id: str = Form(..., max_length=64),
     seat_model_id: str | None = Form(default=None, max_length=128),
     source: str = Form(
-        default="efficientad", pattern=r"^(efficientad|filter_classifier|rule_engine)$"
+        default="patchcore", pattern=r"^(patchcore|filter_classifier|rule_engine)$"
     ),
     anomaly_score: float | None = Form(default=None, ge=0.0),
     date_folder: str = Form(..., max_length=16),

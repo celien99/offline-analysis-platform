@@ -45,7 +45,7 @@ class SeatModelWithCameras(SeatModelResponse):
 
 class CameraConfigCreate(BaseModel):
     camera_id: str = Field(..., max_length=128, description="相机标识符")
-    efficientad_model_version_id: str = Field(..., description="EfficientAD 模型版本 ID")
+    efficientad_model_version_id: str = Field(..., description="PatchCore 模型版本 ID")
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
     efficientad_image_size: int = Field(default=256, ge=64, le=1024)
     efficientad_threshold: float = Field(default=0.99, ge=0.0, le=1.0)
