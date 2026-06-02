@@ -1,423 +1,858 @@
-# Industrial AI Offline Analysis Platform
+ <h1 align="center">🏭 Industrial AI Offline Analysis Platform</h1>
 
-工业座椅缺陷检测离线分析平台。当前分支以 **PatchCore-only** 为在线检测核心：`seat_defect_core` 只保留 YOLO ROI + PatchCore / Region PatchCore 检测逻辑，不保留 EfficientAD 相关检测逻辑。
+<h3 align="center">工业座椅缺陷检测 — 离线智能分析平台</h3>
 
-本仓库是一个 uv workspace monorepo，包含：
+<p align="center">
+  <b>AI 智能进化平台</b> · 持续学习，持续优化，持续降低误报率
+</p>
 
-- `seat_defect_core`: 在线检测与 PatchCore 训练核心。
-- `backend`: FastAPI + Celery 离线平台后端。
-- `frontend`: React + Ant Design 管理端。
-- `ml`: 离线 embedding、聚类、VLM、分类器等算法模块。
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-✓-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License"></a>
+</p>
 
-> 当前分支约束：前端和后端的相机 Region 配置只负责绑定 `region_id -> patchcore_model_version_id`。Region 坐标、启用状态、排序和 PatchCore overrides 的权威来源是 `seat_defect_core` 检测配置文件，默认由 `INDUSTRIAL_DEFAULT_INSPECTION_CONFIG` 指向 `seat_defect_core/config.example.json`。
+<p align="center">
+  <b>360+ 源文件</b> · <b>75+ API 端点</b> · <b>14 个 Celery Worker</b> · <b>10 个前端页面</b> · <b>24 个 ML 模块文件</b> · <b>6 个 Docker 服务</b> · <b>70+ 个测试</b>
+</p>
 
 ---
 
-## System Architecture
+## 项目简介
+
+一个面向工业座椅缺陷检测的**闭环 AI 进化平台**。本系统**离线运行**，持续积累产线异常样本，通过 Embedding 提取、无监督聚类、多模态大模型解释、人工复核、知识库构建、规则引擎和分类器训练，最终将优化后的模型反哺至在线检测系统，形成持续降低误报率的数据飞轮。
+
+> [!IMPORTANT]
+> 本系统**不参与在线实时检测**。定位为离线"大脑"——负责学习、归纳、进化，在线系统负责毫秒级实时决策。
+
+---
+
+## 系统架构
 
 ```mermaid
 flowchart TB
-    subgraph CORE["seat_defect_core: PatchCore-only online inspection core"]
-        direction TB
-        IMG["Camera images"] --> YOLO["YOLO segmentation"]
-        YOLO --> ROI["ROI crop, mask refine, alignment"]
-        ROI --> REGION{"regions configured?"}
-        REGION -- "no" --> FULLPC["Full ROI PatchCore"]
-        REGION -- "yes" --> SPLIT["Split ROI by config regions"]
-        SPLIT --> RPC["Region PatchCore batch inference"]
-        FULLPC --> RULE["Rule engine"]
-        RPC --> RULE
-        RULE --> FUSION["Multi-camera fusion"]
-        FUSION --> RESULT["OK / NG result"]
-        RESULT --> UPLOAD["Optional NG upload"]
+    subgraph ONLINE["🔴 在线检测系统 (seat_defect_core)"]
+        direction LR
+        CAM["📷 相机输入"] --> YOLO["YOLO<br/>ROI 检测"]
+        YOLO --> ROI["ROI 对齐<br/>Mask 处理"]
+        ROI --> PC["PatchCore<br/>全 ROI / Region 异常检测"]
+        PC --> RE["规则引擎<br/>后处理"]
+        RE --> DECISION{"OK / NG"}
     end
 
-    subgraph PLATFORM["offline-analysis-platform"]
+    subgraph OFFLINE["🔵 离线分析平台（本仓库）"]
         direction TB
-        FE["frontend<br/>React + Ant Design"] --> API["backend API<br/>FastAPI"]
-        API --> DB[("PostgreSQL + pgvector")]
-        API --> MINIO[("MinIO artifacts")]
-        API --> REDIS[("Redis")]
-        API --> MLFLOW[("MLflow")]
-        REDIS --> WORKER["Celery workers"]
-        WORKER --> CORE_RUN["inspection worker<br/>subprocess: python -m seat_defect_core inspect"]
-        WORKER --> PC_TRAIN["patchcore training worker<br/>python -m seat_defect_core train-patchcore"]
-        WORKER --> EMB["embedding / clustering / VLM / gate workers"]
-        PC_TRAIN --> REGISTRY["ModelVersion registry"]
-        REGISTRY --> DB
+        INGEST["📥 异常样本<br/>收集缓冲"] --> ISOLATION["🔒 数据隔离<br/>seat_model+camera+region"]
+        ISOLATION --> MASK["🧹 Mask Refinement<br/>背景消除/标准化"]
+        MASK --> DUAL["🔀 双轨对比<br/>Raw vs Refined Embedding"]
+        DUAL --> EMBED["🧬 Embedding<br/>DINOv2-S · 384 维"]
+        EMBED --> CLUSTER["🔬 聚类分析<br/>UMAP + HDBSCAN"]
+        CLUSTER --> GRAPH["🕸 相似度图谱<br/>KNN Graph Builder"]
+        CLUSTER --> VLM["🤖 多模态解释<br/>Qwen2.5-VL"]
+        VLM --> REVIEW["👨‍🔧 人工复核<br/>确认/误报/拆分/合并"]
+        REVIEW --> KB["📚 知识库<br/>缺陷模式沉淀"]
+        REVIEW --> RULES["🧠 规则引擎<br/>优先级评估"]
+        REVIEW --> TAX["🌳 缺陷分类树<br/>层级缺陷分类"]
+        KB --> TRAIN["🎯 分类器训练<br/>MobileNetV3"]
+        KB --> METRIC["📐 度量学习<br/>ArcFace / Triplet Loss"]
+        TRAIN --> GATE["🛡 模型门禁<br/>召回率/抑制率/分层评估"]
+        METRIC --> GATE
+        GATE --> REGISTRY["📦 模型注册<br/>MLflow"]
+        REGISTRY --> DEPLOY["🚀 原子部署<br/>模型 + 规则"]
+        DEPLOY --> HOT["🔴 在线热重载<br/>Canary · Checksum · 回滚"]
     end
 
-    CORE_RUN --> CORE
-    UPLOAD --> API
-
-    subgraph CONFIG["camera config contract"]
-        direction TB
-        TEMPLATE["seat_defect_core/config.example.json<br/>camera geometry, regions, PatchCore defaults"]
-        BINDING["DB camera configs<br/>camera PatchCore model id<br/>region PatchCore model ids"]
-        BUILDER["ConfigBuilder"]
-        TEMPLATE --> BUILDER
-        BINDING --> BUILDER
-        BUILDER --> RUNTIME["runtime config.json<br/>geometry from template<br/>model paths from DB"]
-    end
-
-    API --> BUILDER
-    RUNTIME --> CORE_RUN
+    ONLINE -->|"NG 自动上传<br/>PatchProposal + Features"| INGEST
+    HOT -->|"模型版本 / 规则部署"| ONLINE
 ```
-
-### Runtime Data Flow
-
-1. Frontend selects a seat model, camera(s), and image files.
-2. Backend loads `SeatModel`, `CameraConfig`, `CameraConfigRegion`, and referenced `ModelVersion` records.
-3. `ConfigBuilder` reads the default inspection config and preserves camera/region geometry from that file.
-4. Backend overlays only model paths from DB bindings onto the generated runtime config.
-5. Celery inspection worker runs `python -m seat_defect_core inspect`.
-6. `seat_defect_core` runs YOLO -> ROI -> PatchCore or Region PatchCore -> rule engine -> fusion.
-7. NG results can be uploaded back to the backend for anomaly review, embedding, clustering, and knowledge workflows.
 
 ---
 
-## Key Functions
+## 核心功能
 
-### PatchCore Online Inspection
-
-- YOLO segmentation finds the seat target.
-- ROI preprocessing aligns the target into the PatchCore input canvas.
-- If `regions` are configured in the core config, each enabled region runs its own PatchCore model.
-- If no `regions` are configured, the full ROI PatchCore model is used.
-- Full PatchCore backend requires usable backbone weights: either `backbone_pretrained=true` or `backbone_weights_path`.
-- Region heatmaps are stitched back into full ROI coordinates for debug artifacts.
-- Multi-camera results are fused into a final OK / NG decision.
-
-### Camera And Region Model Binding
-
-- Seat model stores global model references such as YOLO, projector, and whitening matrix.
-- Camera config stores the camera-level PatchCore model binding.
-- Region config stores only:
-  - `region_id`
-  - `patchcore_model_version_id`
-- Frontend does not edit `x1/y1/x2/y2`, `enabled`, `sort_order`, or region PatchCore overrides.
-- Backend validates PatchCore bindings before saving:
-  - model version must exist
-  - `model_type` must be `patchcore`
-  - `artifact_path` must point to an existing file
-- `/api/model/options?model_type=patchcore` returns only available PatchCore model files, ordered newest first.
-
-> Database field names still contain historical names such as `efficientad_model_version_id`, `efficientad_image_size`, and `efficientad_threshold` for migration compatibility. In this branch these fields are used as PatchCore camera-level settings.
-
-### PatchCore Training
-
-- Frontend training page can start PatchCore training with normal reference images.
-- Backend endpoint: `POST /api/patchcore-training/start`.
-- Worker command:
-
-```bash
-python -m seat_defect_core train-patchcore \
-  --config <config.json> \
-  --camera-id <camera_id> \
-  --good-images <dir> \
-  --output <model.npz> \
-  --input-mode roi
-```
-
-- Optional `--region-id upper` trains a specific region model using the region definition from the core config.
-- Trained `.npz` artifacts are registered as `model_type=patchcore` in `model_versions`.
-
-### Offline Analysis Loop
-
-- NG samples are uploaded to the backend anomaly APIs.
-- Embedding workers extract visual features.
-- Clustering workers group similar anomalies by `seat_model_id + camera_id + region_id`.
-- Review workflows mark real defects or false alarms.
-- Knowledge base and rules preserve review decisions.
-- Training and model registry workflows produce new model versions.
-- Deployment and gate modules manage candidate models and rollout metadata.
+<table>
+  <tr>
+    <td width="50%">
+      <h3>🧬 Embedding 提取与相似检索</h3>
+      <ul>
+        <li>DINOv2-S 自监督视觉大模型，像素级密集特征</li>
+        <li>384 维特征向量，存入 <b>pgvector</b>（IVFFlat 索引）</li>
+        <li>支持按异常 ID 或原始向量进行余弦相似度检索</li>
+        <li>Celery 异步批量提取，不阻塞 API</li>
+        <li>Grad-CAM 热力图生成 + Pillow 缩略图生成</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🔬 无监督聚类发现</h3>
+      <ul>
+        <li>StandardScaler → UMAP → HDBSCAN 完整 Pipeline</li>
+        <li>无需人工标注，自动发现缺陷模式</li>
+        <li>每个簇自动选取代表样本</li>
+        <li>Celery Beat 每 <b>6 小时</b>自动触发完整离线分析周期 (Pipeline 编排)</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🤖 多模态 VLM 异常解释</h3>
+      <ul>
+        <li>Qwen2.5-VL / InternVL，通过 vLLM 端点推理</li>
+        <li>同时分析原图、ROI、热力图、裁剪图</li>
+        <li>结构化 JSON 输出：缺陷类型、误报判断、原因分析、置信度</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>👨‍🔧 人工复核工作流</h3>
+      <ul>
+        <li>6 种操作：确认缺陷 / 标记误报 / 重命名 / 拆分 / 合并 / 忽略</li>
+        <li>复核后自动生成知识库条目</li>
+        <li>完整审计追溯：复核人 + 时间戳 + 状态变更</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>📚 知识库 + 规则引擎</h3>
+      <ul>
+        <li>缺陷模式库：分类、相机关联、建议动作（忽略 / NG / 复核）</li>
+        <li>优先级规则引擎，支持在线过滤</li>
+        <li>一键从知识条目生成规则</li>
+        <li>内置评估模拟器，测试规则命中效果</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🎯 分类器训练与模型部署</h3>
+      <ul>
+        <li>支持 MobileNetV3 / EfficientNet / ResNet18 + ArcFace / Triplet Loss 度量学习</li>
+        <li>Adam + ReduceLROnPlateau + Early Stopping (patience=10)</li>
+        <li>自动数据加载：从 MinIO 读取已审核聚类数据，train/val split</li>
+        <li>按 defect_type 自动分组构建度量学习多类训练数据</li>
+        <li>导出 TorchScript / ONNX，自动注册至 <b>MLflow</b> 和数据库</li>
+        <li>安全部署 + 版本化回滚 + 🔴 热重载信号自动通知在线系统</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🔄 在线检测核心 (seat_defect_core)</h3>
+      <ul>
+        <li>完整在线推理 pipeline：YOLO → ROI 对齐 / Mask 处理 → PatchCore → Region PatchCore（可选）→ Rule Engine → Fusion</li>
+        <li><b>PatchCore-only</b>：当前分支的 seat_defect_core 仅保留 PatchCore 检测逻辑，不保留 EfficientAD 在线检测逻辑</li>
+        <li><b>Region PatchCore</b>：按配置文件中的 region_id / box / enabled / sort_order 切分标准 ROI，每个 region 可绑定独立 PatchCore 模型</li>
+        <li><b>全 ROI PatchCore</b>：未配置 regions 时，使用相机级 PatchCore 模型对完整 ROI 判定</li>
+        <li><b>Full backend</b>：支持 wide_resnet50_2 backbone 特征抽取，要求 backbone_pretrained=true 或配置 backbone_weights_path</li>
+        <li>调试工件：支持 PatchCore 热力图叠加，Region 模式会将各区域热力图拼回标准 ROI</li>
+        <li>规则引擎后处理：可配置阈值规则，支持 suppress_to_ok / flag_for_review</li>
+        <li>多机位 Fusion：合并各相机 OK / NG 结果，输出整椅判定</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🌳 缺陷分类树</h3>
+      <ul>
+        <li>4 大类预设分类体系：表面缺陷 / 缝线缺陷 / 结构缺陷 / 光学异常</li>
+        <li>自引用层级结构（parent_id），支持多级细分</li>
+        <li>审核确认缺陷时自动关联分类树节点</li>
+        <li>树统计 API：各节点下的异常计数和聚类计数</li>
+        <li>支持自定义扩展和人工调整分类结构</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🕸 相似度图谱</h3>
+      <ul>
+        <li>基于 pgvector 的 KNN 图谱构建</li>
+        <li>预计算相似边，支持快速邻居查询</li>
+        <li>BFS 最短路径导航（max_hops 可配置）</li>
+        <li>以任意异常为中心的子图探索</li>
+        <li>图谱构建记录追踪 + Celery 异步重建</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📐 度量学习训练</h3>
+      <ul>
+        <li>ArcFace 加性角度边际损失：同类嵌入更紧凑</li>
+        <li>Triplet Loss：锚点/正样本/负样本三元组优化</li>
+        <li>EmbeddingBackbone：从 MobileNetV3/ResNet/EfficientNet 提取归一化嵌入</li>
+        <li>按 defect_type 自动分组构建多类训练数据</li>
+        <li>训练完成后自动导出 TorchScript + 注册 MLflow</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🧹 Mask Refinement + 双轨对比</h3>
+      <ul>
+        <li>GrabCut 前景/背景分离，去除背景噪声</li>
+        <li>CLAHE 自适应直方图均衡化，标准化光照</li>
+        <li>形态学操作：闭运算填充孔洞 + 开运算去噪</li>
+        <li><b>双轨 Embedding 对比</b>：Raw vs Refined 聚类质量评估</li>
+        <li>自动推荐最优精化策略，Celery 批量处理</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🔴 在线热重载</h3>
+      <ul>
+        <li>reload.signal 信号文件机制，在线系统自动检测模型更新</li>
+        <li>A/B 模型版本管理（Active / Shadow），支持 Canary 灰度提升</li>
+        <li><b>SHA256 Checksum 校验</b>：部署前后完整性验证</li>
+        <li><b>回滚版本绑定</b>：manifest.json 追踪切换历史 + 安全回滚</li>
+        <li><b>训练完成自动 Canary 部署</b>：仅部署至 Shadow，通过后手动 Promote</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🔒 数据隔离</h3>
+      <ul>
+        <li><b>三级隔离键</b>：seat_model_id + camera_id + region_id</li>
+        <li><b>4 级回退策略</b>：model+camera+region → model+camera → model → global</li>
+        <li><b>按操作类型阈值</b>：聚类 ≥3 样本、训练 ≥5 样本才使用当前隔离级</li>
+        <li>隔离键从 anomaly → cluster → training run 全链路传播</li>
+        <li>前端筛选器：支持按 model/camera/region 独立过滤</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🛡 模型上线门禁</h3>
+      <ul>
+        <li><b>自动回归评估</b>：训练完成后自动触发门禁 Celery 任务</li>
+        <li><b>4 项准入标准</b>：召回率 ≥95%、召回下降 ≤2%、抑制率提升 ≥10%、零真实缺陷误杀</li>
+        <li><b>分层评估</b>：按 camera_id 分层的 Stratified 指标</li>
+        <li>Holdout 评估集：从已审核 cluster 自动构建 Ground Truth</li>
+        <li>门禁失败阻断部署，仅通过模型可进入 Canary 阶段</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🔁 在线↔离线数据闭环</h3>
+      <ul>
+        <li><b>NG 自动上传</b>：检测完成后 daemon 线程异步 POST 到离线平台，不阻塞主流程</li>
+        <li><b>模型自动加载</b>：指向部署目录即可自动发现 <code>model.pt</code>，mtime 缓存自动失效</li>
+        <li><b>训练完成自动门禁 → 部署</b>：训练 → 门禁评估 → 通过后自动 Canary 部署</li>
+        <li><b>原子部署</b>：模型文件先写 <code>.tmp</code> 再 rename，防止在线系统读到不完整文件</li>
+        <li><b>部署桥接</b>：<code>DeploymentService</code> 执行实际文件拷贝至配置的部署目标目录</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🎛 Cascading Budget + Identity Linking</h3>
+      <ul>
+        <li><b>两级预算控制</b>：Proposal Budget (自适应阈值 + K 上限) + Filter Budget (动态 per-patch 调度 full/partial/skip_all/emergency)，Filter EMA 耗时估计</li>
+        <li><b>DefectTracker</b>：6态生命周期 (BIRTH→ACTIVE→TENTATIVE→MATURE→LOST→DEAD)，Kalman + 特征余弦级联匹配</li>
+        <li><b>冲突解决</b>：Best Match Wins (1:N) / NMS Merge (N:1) / Feature Tiebreaker (N:M) / Hungarian (Race)</li>
+        <li>MATURE identity (≥5帧) 触发上传，后续帧 PATCH 更新，跨相机 identity 合并去重</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📐 Unified Embedding Space + Calibration</h3>
+      <ul>
+        <li><b>EmbeddingSpaceContract</b>：协议层 representation standard (384d, L2, cosine, DINOv2 geometry)</li>
+        <li><b>Feature Calibration Layer</b>：CameraNormalizer (per-camera per-channel 标准化) → EmbeddingProjector → WhiteningTransform (ZCA 去相关) → EMAFeatureCenter (缺陷中心追踪)</li>
+        <li>离线聚类 (DINOv2) 与在线上传的缺陷样本共享 seat_model / camera / region 隔离键</li>
+        <li>EMA 特征中心：跨机位 defect_type 中心追踪，支持 KNN 检索 + 新缺陷发现 (is_novel)</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>📷 相机配置管理 + batch_train</h3>
+      <ul>
+        <li><b>SeatModel 级别全局模型</b>：YOLO (ROI 检测) + EmbeddingProjector + WhiteningTransform，所有机位共享</li>
+        <li><b>Camera 级别模型</b>：PatchCore 模型 + Filter Classifier（可选），每机位独立配置</li>
+        <li><b>Region 级别模型</b>：前端只绑定 region_id → PatchCore 模型；region 坐标与启用状态来自 seat_defect_core 配置文件</li>
+        <li><b>ConfigBuilder 动态构建</b>：从数据库读取模型绑定 → 自动生成 seat_defect_core 运行时 config.json，ROI/Region 几何沿用检测配置文件</li>
+        <li><b>前端可视化</b>：SeatModel 列表状态标签 · 全局模型配置卡片 · 机位参数表单 · Region PatchCore 模型绑定</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>🧬 PatchCore 训练管线</h3>
+      <ul>
+        <li><b>正常样本训练</b>：上传正常参考图像，训练 PatchCore memory bank 与阈值</li>
+        <li><b>ROI / online 输入模式</b>：支持直接使用标准 ROI 图，或复用线上 YOLO/ROI/mask 流程制备训练样本</li>
+        <li><b>Region 训练</b>：传入 region_id 时，按检测配置中的 region 定义训练局部 PatchCore 模型</li>
+        <li><b>模型注册</b>：训练完成后输出 .npz，并注册为 model_type=patchcore 的 ModelVersion</li>
+        <li><b>Celery 异步训练</b>：通过 API 触发 → Celery Worker 调用 seat_defect_core train-patchcore → 注册模型版本</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
 ---
 
-## Monorepo Structure
+## 技术栈
 
-```text
+<p align="center">
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy">
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/Celery-37814A?style=for-the-badge&logo=celery&logoColor=white" alt="Celery">
+  <img src="https://img.shields.io/badge/MinIO-C72E49?style=for-the-badge&logo=minio&logoColor=white" alt="MinIO">
+  <br>
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/MLflow-0194E2?style=for-the-badge&logo=mlflow&logoColor=white" alt="MLflow">
+  <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Ant_Design-0170FE?style=for-the-badge&logo=ant-design&logoColor=white" alt="Ant Design">
+  <img src="https://img.shields.io/badge/Plotly-3F4F75?style=for-the-badge&logo=plotly&logoColor=white" alt="Plotly">
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+</p>
+
+---
+
+## 项目结构
+
+```
 offline-analysis-platform/
-├── pyproject.toml                  # uv workspace: backend, ml, seat_defect_core
-├── uv.lock
-├── start.sh                        # local dev startup helper
-├── AGENTS.md                       # Codex agent guidance
-│
-├── seat_defect_core/               # PatchCore-only online inspection core
-│   ├── __main__.py                 # CLI: inspect, train-patchcore
-│   ├── api.py                      # SeatDefectInspector SDK entrypoint
-│   ├── config.py                   # runtime dataclasses
-│   ├── config.example.json         # default inspection template
-│   ├── runtime_config.py           # validation
-│   ├── runtime_config_parsers.py   # JSON/INI parsing
-│   ├── anomaly_uploader.py         # optional NG upload
-│   ├── fusion.py                   # multi-camera fusion
-│   ├── rule_engine.py              # post-processing rules
-│   ├── artifacts/                  # debug overlays and heatmaps
-│   ├── classifier/                 # optional filter classifier loader
-│   ├── core_types/                 # geometry, inputs, pipeline state, results
-│   ├── cvops/                      # quality, ROI, region split helpers
-│   ├── patchcore/                  # PatchCore engine, features, scoring, color branch
-│   ├── service/                    # inspection orchestration and model cache
-│   ├── training/                   # PatchCore training
-│   ├── yolo/                       # YOLO segmentation integration
-│   └── tests/
-│
-├── backend/
+├── backend/                          # Python 后端（200 文件）
 │   ├── app/
-│   │   ├── api/
-│   │   │   ├── anomaly/            # anomaly upload, query, reprocess
-│   │   │   ├── camera_config/      # seat model and camera model bindings
-│   │   │   ├── cluster/            # clustering APIs
-│   │   │   ├── embedding/          # vector search APIs
-│   │   │   ├── gate/               # model gate evaluation
-│   │   │   ├── graph/              # similarity graph APIs
-│   │   │   ├── hot_reload/         # reload/deployment helper APIs
-│   │   │   ├── inspection/         # run seat_defect_core with uploaded files
-│   │   │   ├── knowledge/          # knowledge base
-│   │   │   ├── mask_refinement/    # image refinement comparison
-│   │   │   ├── multimodal/         # VLM analysis
-│   │   │   ├── patchcore_training/ # PatchCore training trigger
-│   │   │   ├── registry/           # model registry and deployment
-│   │   │   ├── review/             # review workflow
-│   │   │   ├── rules/              # rule engine CRUD and evaluation
-│   │   │   ├── taxonomy/           # defect taxonomy
-│   │   │   └── training/           # classifier training
-│   │   ├── services/
-│   │   │   ├── camera_config/      # ConfigBuilder: template + DB model paths
-│   │   │   ├── clustering/
-│   │   │   ├── deployment/
-│   │   │   ├── embedding/
-│   │   │   ├── gate/
-│   │   │   ├── knowledge/
-│   │   │   ├── mask_refinement/
-│   │   │   ├── multimodal/
-│   │   │   ├── review/
-│   │   │   └── training/
-│   │   ├── workers/
-│   │   │   ├── inspection_worker/          # invokes seat_defect_core inspect
-│   │   │   ├── patchcore_training_worker/  # invokes seat_defect_core train-patchcore
-│   │   │   ├── clustering_worker/
-│   │   │   ├── embedding_worker/
-│   │   │   ├── gate_worker/
-│   │   │   ├── graph_worker/
-│   │   │   ├── mask_refinement_worker/
-│   │   │   ├── training_worker/
-│   │   │   └── vlm_worker/
-│   │   ├── repositories/           # DB access layer
-│   │   ├── models/                 # SQLAlchemy ORM
-│   │   ├── schemas/                # Pydantic schemas
-│   │   ├── infrastructure/         # DB, MinIO, Celery, pgvector
-│   │   ├── core/                   # settings, security, exceptions
-│   │   ├── common/                 # logging, shared types, data isolation
-│   │   └── tests/
-│   ├── alembic/                    # migrations
-│   ├── docker-compose.yml          # db, redis, minio, mlflow, api, worker
-│   └── pyproject.toml
+│   │   ├── api/                      # 19 个 FastAPI 路由，75+ 端点
+│   │   │   ├── anomaly/              #   上传 · 列表 · 详情 · 重新处理
+│   │   │   ├── cluster/              #   列表 · 详情 · 可视化 · 触发聚类
+│   │   │   ├── review/               #   提交复核 · 查询历史
+│   │   │   ├── embedding/            #   按异常 ID / 向量相似检索
+│   │   │   ├── knowledge/            #   增删改查 · 全文搜索 · 按簇查询
+│   │   │   ├── rules/                #   增删改查 · 在线评估 · 开关 · 从知识库生成
+│   │   │   ├── training/             #   分类器训练 · 度量学习训练 · 状态查询
+│   │   │   ├── patchcore_training/   #   🧬 PatchCore 训练 · 状态查询
+│   │   │   ├── registry/             #   部署 · 回滚 · 部署历史
+│   │   │   ├── multimodal/           #   VLM 单簇 · 批量 · 单异常分析
+│   │   │   ├── taxonomy/             #   🌳 缺陷分类树 · 统计 · 自动分类
+│   │   │   ├── graph/                #   🕸 相似度图谱 · 邻居 · 路径 · 子图
+│   │   │   ├── mask_refinement/      #   🧹 背景消除 · 图像标准化
+│   │   │   ├── gate/                 #   🛡 门禁状态 · 评估报告 · 手动触发
+│   │   │   ├── hot_reload/           #   🔴 热重载信号 · A/B 切换 · 回滚
+│   │   │   ├── inspection/           #   🔍 在线检测任务分发 · 结果查询
+│   │   │   ├── camera_config/        #   📷 座椅型号 + 机位 / Region PatchCore 模型绑定
+│   │   │   └── reference/            #   📎 参考数据管理
+│   │   ├── domain/                   # 8 个领域模型 + Protocol 接口
+│   │   ├── services/                 # 17 个业务服务模块
+│   │   │   ├── camera_config/         #   📷 相机配置构建 (ConfigBuilder)
+│   │   │   ├── gate/                 #   🛡 模型门禁评估（召回率/抑制率/分层）
+│   │   │   ├── mask_refinement/      #   🧹 背景消除 + 🔀 双轨对比
+│   │   │   └── ...
+│   │   ├── repositories/             # 12 个 Repository（封装所有 DB 访问）
+│   │   ├── models/                   # 14 个 SQLAlchemy ORM 表（含 pgvector）
+│   │   ├── schemas/                  # Pydantic v2 请求/响应 Schema
+│   │   ├── workers/                  # 14 个 Celery Worker 模块
+│   │   │   ├── patchcore_training_worker/    # 🧬 PatchCore 训练任务
+│   │   │   ├── inspection_worker/    #   🔍 在线检测任务
+│   │   │   ├── gate_worker/          #   🛡 门禁评估任务
+│   │   │   └── ...
+│   │   ├── infrastructure/           # 数据库 · MinIO · pgvector · Celery · 配置
+│   │   ├── core/                     # 配置类 · 异常体系 · 安全工具
+│   │   ├── common/                   # 共享类型 · structlog 结构化日志 · 🔒 数据隔离工具
+│   │   └── tests/                    # pytest-asyncio（11 个测试套件，70 用例）
+│   ├── alembic/                      # 数据库迁移脚本
+│   ├── docker-compose.yml            # 6 服务编排
+│   ├── Dockerfile                    # API 镜像
+│   ├── Dockerfile.worker             # GPU Worker 镜像
+│   └── pyproject.toml                # 依赖与工具配置
+├── frontend/                         # React 前端（71 源文件）
+│   ├── index.html                    # Vite 入口 HTML
+│   ├── vite.config.ts                # Vite 配置 + API 代理
+│   ├── tailwind.config.js            # TailwindCSS 配置
+│   └── src/
+│       ├── app/                      # layout.tsx · router.tsx（React Router）
+│       ├── features/                 # 功能页面（Feature-based 架构）
+│       │   ├── dashboard/            #   看板：UMAP 散点图 · 复核柱状图 · 统计卡片
+│       │   ├── cluster-review/       #   聚类复核：列表 · 详情弹窗 · 复核弹窗
+│       │   ├── anomaly-browser/      #   异常浏览：筛选 · 列表 · 详情 · 相似检索
+│       │   ├── knowledge-base/       #   知识库：增删改查 · 全文搜索 · 创建表单
+│       │   ├── rules-engine/         #   规则引擎：启停开关 · 评估模拟器 · 创建表单
+│       │   ├── training/             #   训练管理：模型列表 · 启动训练 · 状态轮询
+│       │   ├── model-deploy/         #   模型部署：部署历史 · 部署操作 · 回滚确认
+│       │   ├── inspection/           #   🔍 在线检测：选型号+机位 → 上传图片 → 查看结果
+│       │   └── camera-config/        #   📷 相机配置：座椅型号+机位模型绑定与参数配置
+│       ├── api/                      # Axios API 客户端（按 domain 拆分）
+│       ├── types/                    # TypeScript 类型定义（按 domain 拆分）
+│       ├── hooks/                    # useApi 通用 hook
+│       ├── components/ui/            # PageHeader 等共享 UI 组件
+│       └── lib/                      # constants 等共享常量
+└── ml/                               # ML 模块（24 文件）
+    ├── embedding/                    # DINOv2-S 提取器（384 维）
+    ├── clustering/                   # UMAP + HDBSCAN Pipeline
+    ├── classifier/                   # Filter Classifier
+    │   ├── dual_modal/               #   Dual-Modal Filter（图像+特征双模态）
+    │   │   ├── model.py              #     MobileNetV3 + 离线特征 → Late Fusion
+    │   │   ├── trainer.py            #     FocalLoss + 双学习率 + Feature Dropout
+    │   │   ├── dataset.py            #     图像 + 离线特征加载
+    │   │   └── config.py             #     训练超参
+    │   └── metric_learning.py        #   📐 ArcFace + Triplet Loss 度量学习
+    ├── alignment/                    # 📐 Embedding Space 对齐
+    │   ├── projector.py              #   AlignmentProjector (Transformer)
+    │   ├── trainer.py                #   InfoNCE 对比学习训练
+    │   ├── dataset.py                #   PatchCore/DINOv2 成对数据
+    │   └── config.py                 #   AlignmentConfig
+    └── vlm/                          # Qwen2.5-VL 多模态分析器
+```
+- `seat_defect_core/` 在线检测核心（含 `_protocol/` 共享协议子模块），详见下方
+
+### seat_defect_core — 在线实时检测核心
+
+```
+seat_defect_core/
+├── __init__.py                        # 公共 SDK API：SeatDefectInspector, inspect_paths_once 等
+├── __main__.py                        # CLI 入口：inspect / train-patchcore
+├── api.py                             # SeatDefectInspector 实现，含自动上传调度
+├── config.py                          # InspectionConfig, AlignmentConfig 等数据类定义
+├── config_file.py                     # JSON/INI 配置文件加载 + 校验
+├── runtime_config.py                  # 运行时配置加载
+├── runtime_config_parsers.py          # 配置解析器（含所有子配置解析）
+├── rule_engine.py                     # 规则引擎：阈值条件命中 + 动作执行
+├── anomaly_uploader.py                # NG 结果 fire-and-forget 上传至离线平台
+├── fusion.py                          # 多机位融合判定
+├── serialization.py                   # 检测结果序列化
+├── reporting.py                       # 报告生成
+├── util.py                            # 通用工具（select_texture_input, write_image, write_json）
+├── USAGE.md                           # 使用说明文档（中文）
+├── config.example.json                # 示例检测配置
+├── config.best.json                   # 最佳实践检测配置
+├── config.training.example.json       # 训练配置示例
 │
-├── frontend/
-│   ├── src/
-│   │   ├── app/                    # router and layout
-│   │   ├── api/                    # Axios clients
-│   │   ├── features/
-│   │   │   ├── anomaly-browser/
-│   │   │   ├── camera-config/      # PatchCore camera and region model binding
-│   │   │   ├── cluster-review/
-│   │   │   ├── dashboard/
-│   │   │   ├── inspection/
-│   │   │   ├── knowledge-base/
-│   │   │   ├── model-deploy/
-│   │   │   ├── rules-engine/
-│   │   │   └── training/
-│   │   ├── hooks/
-│   │   ├── types/
-│   │   └── components/
-│   └── package.json
+├── _protocol/                         # 共享数据协议（内嵌，零外部依赖）
+│   ├── types.py                    #   类型别名
+│   ├── entities.py                 #   PatchProposal 等 dataclass
+│   ├── canonical_proposal.py       #   CanonicalPatchProposal (schema_version + 归一化坐标)
+│   ├── embedding_space.py          #   EmbeddingSpaceContract + UnifiedEmbedding
+│   └── serialization.py            #   JSON/dict 序列化
 │
-├── ml/
-│   ├── embedding/                  # offline embedding extractors
-│   ├── clustering/                 # UMAP/HDBSCAN clustering
-│   ├── classifier/                 # offline classifier training modules
-│   ├── alignment/
-│   └── vlm/
+├── artifacts/                         # 调试工件生成
+│   └── debug.py                    #   热力图叠加（峰值增强 + 膨胀 + 白色热点标记）
 │
-├── models/
-│   ├── patchcore/                  # local PatchCore artifacts
-│   ├── yolo/
-│   └── efficientad/                # legacy artifacts may exist, not seat_defect_core logic
+├── calibration/                       # 🎯 特征校准层（跨机位特征统一）
+│   ├── camera_normalizer.py        #   CameraNormalizer — 机位级 per-channel 标准化
+│   ├── projector.py                #   EmbeddingProjector — 多尺度特征 → 384-dim
+│   ├── whitening.py                #   WhiteningTransform — ZCA 白化去相关
+│   ├── feature_center.py           #   EMAFeatureCenter — 缺陷类型特征中心 EMA
+│   ├── registry.py                 #   CalibrationRegistry — 统一校准入口
+│   └── config.py                   #   CalibrationConfig
 │
-├── outputs/
-└── sample_images/
+├── classifier/                        # Filter Classifier（可选误报抑制）
+│   └── engine.py                    #   Filter Classifier 推理引擎
+│
+├── core_types/                        # 核心类型定义
+│   ├── geometry.py                 #   几何类型
+│   ├── input.py                    #   输入类型（InspectionFrame）
+│   ├── pipeline.py                 #   流水线状态类型
+│   └── results.py                  #   结果类型（TextureAnomalyResult, InspectionResponse 等）
+│
+├── cvops/                             # 计算机视觉操作
+│   ├── quality.py                  #   图像质量检查
+│   ├── roi.py                      #   ROI 裁剪 + 对齐
+│   └── roi_geometry.py             #   ROI 几何操作
+│
+├── patchcore/                         # PatchCore 异常检测引擎
+│   ├── engine.py                   #   PatchCoreService + 模型加载
+│   ├── features.py                 #   full backend 特征抽取
+│   ├── scoring.py                  #   PatchCore 评分与热力图
+│   └── color_branch.py             #   可选颜色分支
+│
+├── service/                           # 检测服务层
+│   ├── core.py                     #   InspectionService + ModelBundleCache
+│   ├── frames.py                   #   帧管理
+│   ├── inspection.py               #   多机位检测编排
+│   ├── inspection_camera.py        #   单机位检测流程
+│   └── response.py                 #   响应构建
+│
+├── scripts/                           # 辅助脚本
+│   └── train_windows.ps1           #   Windows 训练脚本
+│
+├── training/                          # 🧬 PatchCore 训练管线
+│   └── patchcore.py                #   单机位 / Region PatchCore 训练
+│
+├── yolo/                              # YOLO 分割集成
+│   └── detection.py                #   YOLO 模型加载 + 推理
+│
+└── tests/                             # 测试
+    ├── test_patchcore_training_input.py
+    └── test_runtime_config_validation.py
 ```
 
 ---
 
-## Backend API Overview
+## 快速开始
 
-| Area | Endpoint prefix | Purpose |
+### 环境要求
+
+- **Docker** & **Docker Compose**
+- **Python 3.11+**（本地开发）
+- **NVIDIA GPU**（可选，用于 ML Worker）
+
+### Docker Compose 一键启动（推荐）
+
+```bash
+cd backend
+cp .env.example .env
+docker compose up -d
+```
+
+<details>
+<summary><b>启动 6 个服务</b></summary>
+
+| 服务 | 端口 | 说明 |
 |---|---|---|
-| Health | `/health` | service status |
-| Anomaly | `/api/anomaly` | NG upload, list, detail, reprocess |
-| Camera config | `/api/seat-models` | seat model CRUD, camera config, PatchCore model binding |
-| Inspection | `/api/inspection` | upload files and dispatch `seat_defect_core inspect` |
-| PatchCore training | `/api/patchcore-training` | upload normal images and train PatchCore |
-| Model registry | `/api/model` | model options, register, deploy, rollback |
-| Clustering | `/api/cluster` | list clusters, visualization, trigger clustering |
-| Embedding | `/api/embedding` | vector search |
-| Knowledge | `/api/knowledge` | knowledge base CRUD and search |
-| Rules | `/api/rules` | rule CRUD and evaluation |
-| Review | `/api/review` | cluster/noise review workflow |
-| VLM | `/api/multimodal` | multimodal anomaly explanation |
-| Graph | `/api/graph` | similarity graph |
-| Gate | `/api/gates` | model gate status and reports |
+| **API** | `8000` | FastAPI 接口 + Swagger 文档 |
+| **Worker** | — | Celery GPU Worker（ML 任务） |
+| **PostgreSQL** | `5432` | pgvector `IVFFlat` 向量索引 |
+| **Redis** | `6379` | 消息队列 + 结果后端 |
+| **MinIO** | `9000` / `9001` | 对象存储 + Web 控制台 |
+| **MLflow** | `5001` | 模型注册与实验追踪 |
 
-Swagger docs are available at `http://localhost:8000/docs`.
+</details>
+
+```bash
+# 健康检查
+curl http://localhost:8000/health
+# → { "status": "healthy", "version": "0.1.0" }
+
+# API 文档
+open http://localhost:8000/docs       # Swagger UI
+open http://localhost:8000/redoc      # ReDoc
+```
+
+### 本地开发
+
+```bash
+# 安装 uv（如果尚未安装）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 1. 启动基础设施（Docker）
+docker compose -f backend/docker-compose.yml up -d
+# → 启动 PostgreSQL / Redis / MinIO / MLflow / Celery Worker
+
+# 2. 后端 API
+cd backend
+cp .env.example .env
+uv sync                                       # 自动创建 .venv + 安装所有依赖
+uv run alembic upgrade head                   # 数据库迁移
+uv run uvicorn app.main:app --reload --port 8000  # → http://localhost:8000
+
+# 3. 前端
+cd frontend
+pnpm install && pnpm run dev                  # → http://localhost:3000
+
+# 4. 在线检测核心
+cd seat_defect_core && uv sync && cd ..
+./seat_defect_core/.venv/bin/python -m seat_defect_core \
+  --config seat_defect_core/config.example.json \
+  --images "cam_front=sample.jpg"
+```
 
 ---
 
-## Frontend Pages
+## API 总览
 
-| Route | Page | Function |
+> 所有端点文档详见 **[`/docs`](http://localhost:8000/docs)**（Swagger）和 **[`/redoc`](http://localhost:8000/redoc)**
+
+```
+                     POST   /api/anomaly/upload                    📥 上传异常
+                     POST   /api/anomaly/upload-with-files         (在线核心 fire-and-forget 上传)
+                     GET    /api/anomaly/list · /{id}
+                     POST   /api/anomaly/{id}/reprocess
+
+                     GET    /api/cluster/list · /{id}              🔬 聚类分析
+                     GET    /api/cluster/visualization
+                     POST   /api/cluster/trigger
+
+                     POST   /api/cluster/review                    ✏️  人工复核
+                     GET    /api/cluster/{id}/reviews
+
+                     GET    /api/embedding/search                  🔍 向量检索
+                     POST   /api/embedding/search
+
+                     CRUD   /api/knowledge/entries                 📚 知识库
+                     GET    /api/knowledge/entries/search
+                     GET    /api/knowledge/clusters/{id}/entries
+
+                     CRUD   /api/rules                             🧠 规则引擎
+                     POST   /api/rules/evaluate
+                     POST   /api/rules/{id}/toggle
+                     POST   /api/rules/generate-from-knowledge
+
+                     POST   /api/training/start                    🎯 模型训练
+                     GET    /api/training/status/{task_id}
+
+                     POST   /api/patchcore-training/start      🧬 PatchCore 训练
+
+                     POST   /api/inspection/run-with-files      🔍 在线检测（调用 seat_defect_core）
+                     GET    /api/inspection/result/{task_id}
+
+                     CRUD   /api/camera-config/seat-models      📷 座椅型号管理
+                     CRUD   /api/camera-config/cameras          机位配置管理
+                     POST   /api/camera-config/cameras/import-artifacts  batch_train 产物导入
+
+                     GET    /api/gates/status/{model_version_id}  🛡 模型门禁
+                     GET    /api/gates/report/{model_version_id}
+                     POST   /api/gates/evaluate
+
+                     GET    /api/model/deploy-targets              📦 模型部署
+                     POST   /api/model/deploy
+                     POST   /api/model/deploy/{target}/rollback
+
+                     POST   /api/multimodal/analyze/cluster/{id}    🤖 多模态分析
+                     POST   /api/multimodal/analyze/batch
+                     POST   /api/multimodal/analyze/anomaly/{id}
+
+                     POST   /api/taxonomy/init                         🌳 缺陷分类树
+                     GET    /api/taxonomy/tree · /tree/stats
+                     CRUD   /api/taxonomy/nodes
+                     POST   /api/taxonomy/auto-classify
+                     POST   /api/taxonomy/link-knowledge
+
+                     POST   /api/graph/build                           🕸 相似度图谱
+                     GET    /api/graph/build/status
+                     GET    /api/graph/neighbors/{anomaly_id}
+                     POST   /api/graph/path
+                     GET    /api/graph/subgraph/{anomaly_id}
+
+                     POST   /api/training/metric-learning/start         📐 度量学习训练
+
+                     POST   /api/mask-refinement/refine/{id}            🧹 Mask 精化
+                     POST   /api/mask-refinement/refine-batch
+
+                     POST   /api/hot-reload/signal/{target}             🔴 热重载
+                     GET    /api/hot-reload/signal/{target}
+                     PUT    /api/hot-reload/manifest/{target}
+                     POST   /api/hot-reload/promote/{target}
+                     POST   /api/hot-reload/rollback/{target}
+                     GET    /api/hot-reload/targets
+```
+
+---
+
+## 前端页面
+
+| 页面 | 路由 | 功能说明 |
+|:---|:---:|---|
+| **Dashboard** | `/` | Plotly UMAP 散点图 · 复核状态分布柱状图 · 4 个统计指标卡片 |
+| **Cluster Review** | `/clusters` | 聚类列表筛选 (seat_model/camera/region) · 详情弹窗 · 双轨对比弹窗 · 一键复核 |
+| **Anomaly Browser** | `/anomalies` | seat_model/camera/region/状态筛选 · PhotoView 图片浏览（缩放/旋转） · 相似检索 |
+| **Knowledge Base** | `/knowledge` | 条目增删改查 · 全文搜索 · 按分类/缺陷类型筛选 · 一键生成规则 |
+| **Rules Engine** | `/rules` | 规则增删改查 · 启停开关 · 在线评估模拟器 · 从知识库生成规则 |
+| **Training** | `/training` | 模型列表 · 架构/超参配置启动训练 · 状态轮询（5s） · 🛡 门禁状态 + 详细报告弹窗 |
+| **Model Deploy** | `/deploy` | 部署历史一览 · 选择模型/版本/目标部署 · 🔴 热重载状态面板 (Checksum/完整性/Canary/回滚) |
+| **Inspection** | `/inspection` | 选择座椅型号+机位 → 上传图片 → 调用 seat_defect_core 在线检测 → 展示 NG/OK 结果与异常分数 |
+| **Camera Config** | `/cameras` | 座椅型号管理 (YOLO/Projector/Whitening 全局模型) · 机位 PatchCore 模型绑定 · Region PatchCore 模型绑定 |
+
+---
+
+## 端到端 Demo
+
+```bash
+# 1. 启动离线平台基础设施 + Worker
+docker compose -f backend/docker-compose.yml up -d
+
+# 2. 启动后端 API（终端 2）
+cd backend && uv run uvicorn app.main:app --reload --port 8000
+
+# 3. 安装 seat_defect_core 并准备图片
+cd seat_defect_core && uv sync && cd ..
+mkdir -p sample_images
+# 放入测试图片，文件名 = camera_id，如 cam_front.jpg
+
+# 4. 运行端到端 Demo
+./seat_defect_core/.venv/bin/python scripts/demo_full_loop.py \
+  --backend http://localhost:8000 --images ./sample_images
+```
+
+---
+
+## 在线↔离线数据闭环
+
+本平台实现了完整的 **在线检测 → 离线学习 → 模型反哺** 数据飞轮。
+
+### 闭环流程
+
+```
+1. 在线 NG → seat_defect_core 检测到 NG 后，daemon 线程异步上传
+   ROI 图片 + PatchCore/Region 结果到 POST /api/anomaly/upload-with-files
+                    ↓
+2. Mask Refine → GrabCut 背景消除 + CLAHE 光照标准化
+                    ↓
+3. Embedding   → Celery Worker 提取 DINOv2-S 384 维特征向量
+                    ↓
+4. 相似度图谱  → KNN 图谱构建，支持邻居查询和路径导航
+                    ↓
+5. 聚类分析    → UMAP + HDBSCAN 无监督发现缺陷模式
+                    ↓
+6. VLM 解释    → Qwen2.5-VL 多模态大模型自动解释每个簇
+                    ↓
+7. 人工复核    → 工程师确认缺陷 / 标记误报 / 拆分合并簇
+   → 确认缺陷时自动关联 🌳 缺陷分类树节点
+                    ↓
+8. 知识库 + 规则 → 缺陷模式沉淀 + 规则自动生成
+                    ↓
+9. 分类器训练  → Filter Classifier (MobileNetV3) 二元分类
+   度量学习    → ArcFace/Triplet Loss 缺陷嵌入学习 (可选)
+                    ↓
+10. 模型门禁   → 🛡 自动回归评估：召回率/抑制率/分层指标
+   → 门禁失败阻断部署，仅通过模型可进入下一步
+                    ↓
+11. 模型注册   → MLflow 模型注册 + 版本管理
+                    ↓
+12. Canary 部署 → Celery 部署至 Shadow 目标，原子写入 (.tmp → rename)
+                    ↓
+13. 热重载信号 → reload.signal + manifest.json + SHA256 Checksum
+   支持 Canary Promote 和版本回滚
+                    ↓
+14. 在线加载   → seat_defect_core 使用新的 PatchCore / Region PatchCore 模型，
+   规则与离线复核知识持续降低误报率
+                    ↓
+                   ↺ 循环往复，持续进化
+```
+
+### 配置在线核心
+
+在 `seat_defect_core` 的检测配置中启用数据闭环：
+
+```json
+{
+  "seat_defect_inspection": {
+    "default_seat_model_id": "seat_model_A",
+    "upload_base_url": "http://offline-platform:8000",
+    "seat_models": [{
+      "seat_model_id": "seat_model_A",
+      "cameras": [{
+        "camera_id": "cam_front",
+        "patchcore_model_path": "./models/patchcore/cam_front_patchcore.npz",
+        "patchcore": {
+          "backend": "full",
+          "backbone_pretrained": true
+        },
+        "regions": [{
+          "region_id": "upper",
+          "box": [0.03, 0.03, 0.97, 0.42],
+          "patchcore_model_path": "./models/patchcore/cam_front_upper_patchcore.npz",
+          "enabled": true
+        }],
+        "rule_engine": {
+          "enabled": true,
+          "rules": []
+        }
+      }]
+    }]
+  }
+}
+```
+
+> **关键设计**：当前分支采用 PatchCore-only 在线检测。Region 的 `box / enabled / sort_order / patchcore overrides` 以 `seat_defect_core` 检测配置文件为准；前端相机配置只负责为 camera 或 region 绑定 PatchCore 模型版本。
+
+---
+
+## 设计原则
+
+<p>
+  <img src="https://img.shields.io/badge/API_→_Service_→_Domain_→_Repository_→_Infrastructure-分层架构-blue?style=flat-square" alt="分层">
+  <img src="https://img.shields.io/badge/Protocol_AI_接口-模型可替换-green?style=flat-square" alt="Protocol">
+  <img src="https://img.shields.io/badge/全链路异步-非阻塞-red?style=flat-square" alt="Async">
+  <img src="https://img.shields.io/badge/Repository_模式-可测试-orange?style=flat-square" alt="Repository">
+  <img src="https://img.shields.io/badge/Pydantic_Settings-零硬编码-purple?style=flat-square" alt="Settings">
+  <img src="https://img.shields.io/badge/structlog-结构化日志-gray?style=flat-square" alt="Logging">
+</p>
+
+| 原则 | 实践 |
+|---|---|
+| **统一数据协议** | `seat_defect_core/_protocol/` 定义 `PatchProposal` 统一数据契约，内嵌于在线核心，在线推理和离线训练共享同一套数据结构 |
+| **特征校准层** | `seat_defect_core/calibration/` 跨机位特征统一：Normalize → Project → Whiten → EMA Center，消除机位间特征分布差异 |
+| **严格分层架构** | API 层只处理 HTTP，零数据库访问、零业务逻辑 |
+| **Protocol 接口抽象** | `EmbeddingExtractor` 和 `VLMAnalyzer` 采用 Protocol 定义，替换模型无需改动业务代码 |
+| **全链路异步** | Async FastAPI + async SQLAlchemy + async MinIO，CPU/GPU 密集型任务全部交 Celery Worker 异步执行 |
+| **Repository 模式** | 所有 DB 访问封装在类型安全的 Repository 中，测试可直接用 SQLite 内存库替代 |
+| **零硬编码** | Pydantic Settings 从环境变量读取所有配置，禁止 `DB_HOST = "localhost"` |
+| **结构化日志** | structlog 输出 JSON 行日志，绑定 `trace_id` `cluster_id` `anomaly_id` `model_version` `camera_id` 上下文 |
+| **Embedding 空间统一** | `EmbeddingSpaceContract` 定义 representation standard，在线上传样本和离线分析共享 seat_model / camera / region 隔离键 |
+
+---
+
+## 环境变量
+
+完整列表见 [`backend/.env.example`](backend/.env.example)。
+
+| 变量 | 默认值 | 说明 |
 |---|---|---|
-| `/` | Dashboard | overview charts and statistics |
-| `/inspection` | Inspection | choose seat model/cameras, upload images, view OK/NG result |
-| `/anomalies` | Anomaly Browser | filter anomalies by seat model, camera, region, status |
-| `/clusters` | Cluster Review | cluster review and review actions |
-| `/knowledge` | Knowledge Base | defect knowledge entries |
-| `/rules` | Rules Engine | rule CRUD and simulation |
-| `/training` | Training | classifier and PatchCore training entrypoints |
-| `/deploy` | Model Deploy | model deployment records and actions |
-| `/cameras` | Camera Config | seat model, camera PatchCore model, region model binding |
-
-Camera Config page intentionally does not expose Region coordinates. Region IDs are model-binding keys; geometry is read by `seat_defect_core` from its config.
-
----
-
-## Configuration Contract
-
-### Default Inspection Config
-
-Backend setting:
-
-```text
-INDUSTRIAL_DEFAULT_INSPECTION_CONFIG=../seat_defect_core/config.example.json
-```
-
-`ConfigBuilder` loads this file and matches template cameras by `(seat_model_id, camera_id)`. Matching is case-insensitive as a fallback, so `seat_model_A` can match `seat_model_a`.
-
-### Runtime Config Generation
-
-The generated config uses:
-
-- camera source, ROI, region boxes, region enabled flags, sort order, PatchCore defaults, and region overrides from `seat_defect_core/config.example.json`
-- camera-level and region-level PatchCore model paths from DB `model_versions.artifact_path`
-- selected camera IDs from the inspection request
-
-If a region model binding references a missing model or a non-existing file, backend camera config save rejects it with HTTP 400 before detection.
+| `INDUSTRIAL_POSTGRES_URL` | `postgresql+asyncpg://postgres:postgres@localhost:5432/anomaly_db` | PostgreSQL 连接 |
+| `INDUSTRIAL_REDIS_URL` | `redis://localhost:6379/0` | Redis 缓存 |
+| `INDUSTRIAL_CELERY_BROKER_URL` | `redis://localhost:6379/1` | Celery 消息队列 |
+| `INDUSTRIAL_CELERY_RESULT_BACKEND` | `redis://localhost:6379/2` | Celery 结果存储 |
+| `INDUSTRIAL_MINIO_ENDPOINT` | `localhost:9000` | MinIO 对象存储 |
+| `INDUSTRIAL_MLFLOW_TRACKING_URI` | `http://localhost:5001` | MLflow 模型注册 |
+| `INDUSTRIAL_VLM_ENDPOINT` | `http://localhost:8001/v1` | VLM 推理端点 |
+| `INDUSTRIAL_DEFAULT_DEPLOY_TARGET` | `production_line_a` | 默认部署目标 |
+| `INDUSTRIAL_DEPLOY_TARGETS` | `{"production_line_a":"./deployed_models/line_a"}` | 部署目标映射 |
+| `INDUSTRIAL_DEPLOY_MODEL_SUBDIR` | `filter_classifier` | 模型子目录 |
+| `INDUSTRIAL_DEPLOY_ON_TRAIN_COMPLETE` | `false` | 训练后自动部署 |
+| `INDUSTRIAL_DEPLOY_AUTO_STRATEGY` | `canary` | 自动部署策略 (canary/direct) |
+| `INDUSTRIAL_GATE_ENABLED` | `true` | 启用模型上线门禁 |
+| `INDUSTRIAL_GATE_MIN_RECALL` | `0.95` | 门禁最低召回率 |
+| `INDUSTRIAL_GATE_MAX_RECALL_DROP` | `0.02` | 门禁最大召回下降 |
+| `INDUSTRIAL_GATE_MIN_SUPPRESSION_GAIN` | `0.10` | 门禁最小抑制率提升 |
+| `INDUSTRIAL_ISOLATION_CLUSTERING_MIN_SAMPLES` | `3` | 聚类最小隔离样本数 |
+| `INDUSTRIAL_ISOLATION_TRAINING_MIN_SAMPLES` | `5` | 训练最小隔离样本数 |
+| `INDUSTRIAL_EMBEDDING_DIM` | `384` | Embedding 维度 |
+| `INDUSTRIAL_DEBUG` | `false` | 调试模式 |
 
 ---
 
-## Quick Start
-
-### Requirements
-
-- Python 3.11+
-- uv
-- Docker / Docker Compose
-- pnpm
-
-### One-command Local Startup
+## 测试
 
 ```bash
-./start.sh
+cd backend
+uv run pytest -v                                  # 全部 70 个测试用例
+uv run pytest app/tests/ -v --cov=app             # 含覆盖率报告
+uv run pytest app/tests/test_anomaly_service.py -v  # 单独文件
 ```
 
-This starts:
-
-- PostgreSQL + pgvector on `5432`
-- Redis on `6379`
-- MinIO on `9000/9001`
-- MLflow on `5001`
-- FastAPI on `8000`
-- Celery worker
-- Vite frontend on `3000`
-
-Useful variants:
-
-```bash
-./start.sh --no-frontend
-./start.sh --status
-./start.sh --stop
-```
-
-### Manual Development Startup
-
-```bash
-uv sync --all-packages
-docker compose -f backend/docker-compose.yml up -d db redis minio minio-init mlflow
-uv run --directory backend alembic upgrade head
-uv run --directory backend uvicorn app.main:app --reload --port 8000
-uv run --directory backend celery -A app.infrastructure.queue.celery_app worker -l info -c 2
-pnpm -C frontend install
-pnpm -C frontend run dev
-```
-
-### Run seat_defect_core Directly
-
-```bash
-uv run python -m seat_defect_core inspect \
-  --config seat_defect_core/config.example.json \
-  --images cam_back=sample_images/1.png
-```
-
-Train a region PatchCore model. Replace `./path/to/good_images` with a directory containing normal reference images:
-
-```bash
-uv run python -m seat_defect_core train-patchcore \
-  --config seat_defect_core/config.example.json \
-  --camera-id cam_back \
-  --region-id upper \
-  --good-images ./path/to/good_images \
-  --output ./models/patchcore/cam_back_upper_patchcore.npz \
-  --input-mode online
-```
+| 测试套件 | 覆盖内容 |
+|---|---|
+| `test_exceptions` | 全部 10 种异常类型及其错误码 |
+| `test_anomaly_repository` | 创建、按ID查询、更新状态、不存在记录 |
+| `test_clustering_service` | 默认配置、自定义配置 |
+| `test_knowledge_service` | 创建条目、从复核自动生成、搜索 |
+| `test_rule_engine` | CRUD、优先级评估、启停开关、相机过滤 |
+| `test_anomaly_service` | 创建异常、含文件上传、列表查询过滤、重新处理 |
+| `test_api` | 健康检查、空列表、资源不存在、无结果搜索 |
+| `test_e2e_pipeline` | 异常上传隔离字段、Embedding+聚类全流程、审核+训练数据、门禁指标、隔离键传播 |
+| `test_clustering_stability` | 固定 seed 确定性、分离簇检测、样本不足全噪声、代表样本选取 |
+| `test_hot_reload` | SHA256 checksum 计算/校验、manifest 读写/回滚绑定、信号发送/清除/完整性 |
+| `test_model_loading` | TorchScript 创建/加载/推理、预处理 pipeline、embedding 维度 (DINOv2-S 384)、故障安全 |
 
 ---
 
-## Verification
+## 参与贡献
 
-Focused backend checks:
-
-```bash
-uv run --directory backend pytest app/tests/test_camera_config_regions.py -q
-uv run --directory backend pytest app/tests/test_e2e_pipeline.py::TestDataIsolationPropagation -q
-```
-
-Core checks:
+欢迎提交 Issue 和 Pull Request。各组件独立管理依赖：
 
 ```bash
-uv run pytest seat_defect_core/tests -q
+cd backend && uv sync          # 后端依赖
+cd seat_defect_core && uv sync # 在线检测核心依赖
+cd backend && uv run pytest    # 运行测试
+cd backend && uv run mypy app  # 类型检查
+cd backend && uv run ruff check app  # 代码检查
 ```
 
-Frontend check:
+请遵循项目代码规范：
 
-```bash
-pnpm -C frontend run typecheck
-```
-
-Python compile sanity:
-
-```bash
-rg --files backend/app seat_defect_core -g '*.py' | xargs python3 -m py_compile
-```
+- 每个 Python 文件首行 `from __future__ import annotations`
+- 完整类型注解（mypy strict 兼容）
+- 函数 < 50 行，类 < 300 行
+- 禁止 `utils.py` 杂物堆
+- 所有 DB 访问走 Repository
+- 所有 Schema 继承 Pydantic v2 `BaseModel`
+- 所有日志使用 structlog
 
 ---
 
-## Current Branch Notes
+## 许可证
 
-- `seat_defect_core` is PatchCore-only.
-- EfficientAD-related runtime detection logic is intentionally not part of `seat_defect_core`.
-- Some backend/frontend field names still contain `efficientad_*` for DB/API compatibility; their current meaning is PatchCore camera-level config.
-- Region geometry is not a frontend responsibility.
-- The backend should not expose or accept frontend-edited Region coordinates as authoritative runtime geometry.
-- PatchCore model options are filtered by file existence to avoid binding stale model records.
+[MIT](LICENSE)
+
+---
+
+<p align="center">
+  <sub>为工业 AI 而生 — 持续学习，持续进化。</sub>
+</p>
