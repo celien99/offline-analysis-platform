@@ -24,11 +24,11 @@ import {
   SettingOutlined,
   WarningOutlined,
   CheckCircleOutlined,
+  MinusCircleOutlined,
 } from "@ant-design/icons";
 import PageHeader from "../../components/ui/PageHeader";
 import CameraTopology from "./components/CameraTopology";
 import ModelSelect from "./components/ModelSelect";
-import { cameraConfigApi } from "../../api/camera-config";
 import {
   useSeatModels,
   useCreateSeatModel,
@@ -49,7 +49,6 @@ import type {
   CameraConfig,
   ModelOption,
   ModelRegisterData,
-  CameraRegionConfig,
 } from "../../types";
 
 const PAGE_SIZE = 20;
@@ -64,15 +63,10 @@ function modelLabel(
   return m ? `${m.model_name} (${m.version})` : modelVersionId;
 }
 
-function mergeRegionModelBindings(
-  definitions: CameraRegionConfig[],
-  existing: CameraRegionConfig[] = [],
-): CameraRegionConfig[] {
-  const existingById = new Map(existing.map((region) => [region.region_id, region]));
-  return definitions.map((definition) => ({
-    ...definition,
-    patchcore_model_version_id:
-      existingById.get(definition.region_id)?.patchcore_model_version_id ?? null,
+function toRegionBindingFormValues(regions: CameraConfig["regions"]) {
+  return (regions ?? []).map((region) => ({
+    region_id: region.region_id,
+    patchcore_model_version_id: region.patchcore_model_version_id,
   }));
 }
 
@@ -83,7 +77,6 @@ export default function CameraConfigPage() {
   const [editingSeat, setEditingSeat] = useState<SeatModel | null>(null);
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<CameraConfig | null>(null);
-  const [regionDefinitionsLoading, setRegionDefinitionsLoading] = useState(false);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
@@ -164,28 +157,6 @@ export default function CameraConfigPage() {
   };
 
   // ── Camera Config handlers ──
-  const loadRegionDefinitions = async (
-    cameraId: string,
-    existingRegions: CameraRegionConfig[] = [],
-  ) => {
-    if (!selectedSeatModel || !cameraId) {
-      return;
-    }
-    setRegionDefinitionsLoading(true);
-    try {
-      const definitions = await cameraConfigApi.getRegionDefinitions(selectedSeatModel, cameraId);
-      cameraForm.setFieldValue(
-        "regions",
-        mergeRegionModelBindings(definitions, existingRegions),
-      );
-    } catch (error) {
-      cameraForm.setFieldValue("regions", []);
-      message.warning("未从检测配置文件读取到该相机的 Region 定义");
-    } finally {
-      setRegionDefinitionsLoading(false);
-    }
-  };
-
   const openCameraCreate = () => {
     setEditingCamera(null);
     cameraForm.resetFields();
@@ -201,7 +172,7 @@ export default function CameraConfigPage() {
     setCameraModalOpen(true);
   };
 
-  const openCameraEdit = async (record: CameraConfig) => {
+  const openCameraEdit = (record: CameraConfig) => {
     setEditingCamera(record);
     cameraForm.setFieldsValue({
       camera_id: record.camera_id,
@@ -211,10 +182,9 @@ export default function CameraConfigPage() {
       detection_confidence: record.detection_confidence,
       patchcore_image_size: record.patchcore_image_size,
       patchcore_threshold: record.patchcore_threshold,
-      regions: [],
+      regions: toRegionBindingFormValues(record.regions),
     });
     setCameraModalOpen(true);
-    await loadRegionDefinitions(record.camera_id, record.regions ?? []);
   };
 
   const handleCameraSubmit = async () => {
@@ -627,12 +597,6 @@ export default function CameraConfigPage() {
             <Input
               placeholder="如 cam_back"
               disabled={!!editingCamera}
-              onBlur={(event) => {
-                const cameraId = event.target.value.trim();
-                if (!editingCamera && cameraId) {
-                  void loadRegionDefinitions(cameraId);
-                }
-              }}
             />
           </Form.Item>
           <Form.Item
@@ -676,27 +640,33 @@ export default function CameraConfigPage() {
 
           <Typography.Title level={5}>Region PatchCore 模型</Typography.Title>
           <Form.List name="regions">
-            {(fields) => (
+            {(fields, { add, remove }) => (
               <Space direction="vertical" className="w-full" size={12}>
-                {regionDefinitionsLoading && (
-                  <Typography.Text type="secondary">正在读取检测配置文件中的 Region 定义...</Typography.Text>
-                )}
                 {fields.map((field, index) => (
                   <Card
                     key={field.key}
                     size="small"
                     title={`Region ${index + 1}`}
+                    extra={
+                      <Button
+                        danger
+                        type="text"
+                        icon={<MinusCircleOutlined />}
+                        onClick={() => remove(field.name)}
+                      />
+                    }
                   >
                     <Row gutter={12}>
-                      <Col span={8}>
+                      <Col span={10}>
                         <Form.Item
                           name={[field.name, "region_id"]}
                           label="区域 ID"
+                          rules={[{ required: true, message: "请输入区域 ID" }]}
                         >
-                          <Input disabled />
+                          <Input placeholder="如 upper" />
                         </Form.Item>
                       </Col>
-                      <Col span={12}>
+                      <Col span={14}>
                         <Form.Item
                           name={[field.name, "patchcore_model_version_id"]}
                           label="PatchCore 模型"
@@ -705,38 +675,22 @@ export default function CameraConfigPage() {
                           <ModelSelect models={patchcoreModels} />
                         </Form.Item>
                       </Col>
-                      <Col span={4}>
-                        <Form.Item shouldUpdate noStyle>
-                          {({ getFieldValue }) => {
-                            const enabled = getFieldValue(["regions", field.name, "enabled"]);
-                            return (
-                              <Form.Item label="启用">
-                                <Tag color={enabled ? "green" : "default"}>
-                                  {enabled ? "启用" : "禁用"}
-                                </Tag>
-                              </Form.Item>
-                            );
-                          }}
-                        </Form.Item>
-                      </Col>
                     </Row>
-                    <Form.Item shouldUpdate noStyle>
-                      {({ getFieldValue }) => {
-                        const box = getFieldValue(["regions", field.name, "box"]) as number[] | undefined;
-                        return (
-                          <Typography.Text type="secondary">
-                            坐标来自检测配置文件: {box ? box.map((item) => item.toFixed(2)).join(", ") : "-"}
-                          </Typography.Text>
-                        );
-                      }}
-                    </Form.Item>
                   </Card>
                 ))}
-                {!regionDefinitionsLoading && fields.length === 0 && (
-                  <Typography.Text type="secondary">
-                    输入相机 ID 后将从检测配置文件读取 Region 定义。
-                  </Typography.Text>
-                )}
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    add({
+                      region_id: "",
+                      patchcore_model_version_id: null,
+                    })
+                  }
+                  block
+                >
+                  添加 Region 模型绑定
+                </Button>
               </Space>
             )}
           </Form.List>

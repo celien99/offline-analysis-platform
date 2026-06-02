@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import copy
 from collections.abc import Sequence
 from pathlib import Path
 
+from app.core.config import settings
 from app.models.camera_config import CameraConfig
 
 
@@ -153,6 +155,7 @@ class ConfigBuilder:
             if repo_root
             else Path(__file__).resolve().parent.parent.parent.parent.parent
         )
+        self._template_by_key = self._load_template_cameras()
 
     def build(
         self,
@@ -236,15 +239,36 @@ class ConfigBuilder:
     def _build_camera_config(
         self, cam: CameraConfig, model_paths: dict[str, str], yolo_path: str = ""
     ) -> dict[str, object]:
-        detection = dict(self.DEFAULT_DETECTION)
+        template = self._template_by_key.get((cam.seat_model_id, cam.camera_id))
+        if template is not None:
+            config = copy.deepcopy(template)
+            detection = dict(config.get("detection") or {})
+            patchcore = dict(config.get("patchcore") or {})
+            filter_classifier = dict(config.get("filter_classifier") or {})
+            rule_engine = dict(config.get("rule_engine") or {})
+        else:
+            detection = dict(self.DEFAULT_DETECTION)
+            patchcore = dict(self.DEFAULT_PATCHCORE)
+            filter_classifier = dict(self.DEFAULT_FILTER_CLASSIFIER)
+            rule_engine = dict(self.DEFAULT_RULE_ENGINE)
+            config = {
+                "camera_id": cam.camera_id,
+                "source": "",
+                "enabled": True,
+                "color_insensitive_mode": True,
+                "quality": dict(self.DEFAULT_QUALITY),
+                "roi": dict(self.DEFAULT_ROI),
+                "color_branch": dict(self.DEFAULT_COLOR_BRANCH),
+                "regions": [],
+            }
+
+        config["camera_id"] = cam.camera_id
         detection["model_path"] = yolo_path
         detection["confidence"] = cam.detection_confidence
 
-        patchcore = dict(self.DEFAULT_PATCHCORE)
         patchcore["image_size"] = cam.efficientad_image_size
         patchcore["threshold_quantile"] = cam.efficientad_threshold
 
-        filter_classifier: dict[str, object] = dict(self.DEFAULT_FILTER_CLASSIFIER)
         filter_clf_path = self._resolve_model_path(
             cam.filter_classifier_model_version_id, model_paths
         )
@@ -255,7 +279,6 @@ class ConfigBuilder:
                 str(filter_classifier["model_path"])
             )
 
-        rule_engine: dict[str, object] = dict(self.DEFAULT_RULE_ENGINE)
         deployed_rules = rule_engine.get("deployed_rules_path")
         if deployed_rules:
             rule_engine["deployed_rules_path"] = self._resolve_path(str(deployed_rules))
@@ -263,23 +286,18 @@ class ConfigBuilder:
         patchcore_path = self._resolve_model_path(
             cam.efficientad_model_version_id, model_paths
         )
-        regions = self._build_region_configs(cam, model_paths)
+        regions = self._build_region_configs(
+            cam,
+            model_paths,
+            template_regions=config.get("regions"),
+        )
 
-        config: dict[str, object] = {
-            "camera_id": cam.camera_id,
-            "patchcore_model_path": patchcore_path,
-            "source": "",
-            "enabled": True,
-            "color_insensitive_mode": True,
-            "quality": dict(self.DEFAULT_QUALITY),
-            "detection": detection,
-            "roi": dict(self.DEFAULT_ROI),
-            "patchcore": patchcore,
-            "color_branch": dict(self.DEFAULT_COLOR_BRANCH),
-            "filter_classifier": filter_classifier,
-            "rule_engine": rule_engine,
-            "regions": regions,
-        }
+        config["patchcore_model_path"] = patchcore_path
+        config["detection"] = detection
+        config["patchcore"] = patchcore
+        config["filter_classifier"] = filter_classifier
+        config["rule_engine"] = rule_engine
+        config["regions"] = regions
 
         return config
 
@@ -287,8 +305,18 @@ class ConfigBuilder:
         self,
         cam: CameraConfig,
         model_paths: dict[str, str],
+        template_regions: object = None,
     ) -> list[dict[str, object]]:
-        region_configs: list[dict[str, object]] = []
+        region_configs: list[dict[str, object]] = [
+            copy.deepcopy(region)
+            for region in (template_regions if isinstance(template_regions, list) else [])
+            if isinstance(region, dict)
+        ]
+        region_by_id = {
+            str(region.get("region_id")): region
+            for region in region_configs
+            if region.get("region_id")
+        }
         for region in cam.regions:
             if region.deleted_at is not None:
                 continue
@@ -296,18 +324,48 @@ class ConfigBuilder:
                 region.patchcore_model_version_id,
                 model_paths,
             )
-            region_config: dict[str, object] = {
-                "region_id": region.region_id,
-                "box": [region.x1, region.y1, region.x2, region.y2],
-                "patchcore_model_path": patchcore_path,
-                "enabled": region.enabled,
-            }
-            if region.patchcore_overrides_json:
-                try:
-                    overrides = json.loads(region.patchcore_overrides_json)
-                except json.JSONDecodeError:
-                    overrides = None
-                if isinstance(overrides, dict):
-                    region_config["patchcore"] = overrides
-            region_configs.append(region_config)
+            if not patchcore_path:
+                continue
+            if region.region_id in region_by_id:
+                region_by_id[region.region_id]["patchcore_model_path"] = patchcore_path
         return region_configs
+
+    def _load_template_cameras(self) -> dict[tuple[str, str], dict[str, object]]:
+        path = self._resolve_config_path(settings.default_inspection_config)
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        inspection = payload.get("seat_defect_inspection")
+        if not isinstance(inspection, dict):
+            return {}
+        seat_models = inspection.get("seat_models")
+        if not isinstance(seat_models, list):
+            return {}
+
+        templates: dict[tuple[str, str], dict[str, object]] = {}
+        for seat_model in seat_models:
+            if not isinstance(seat_model, dict):
+                continue
+            seat_model_id = seat_model.get("seat_model_id")
+            cameras = seat_model.get("cameras")
+            if not isinstance(seat_model_id, str) or not isinstance(cameras, list):
+                continue
+            for camera in cameras:
+                if not isinstance(camera, dict):
+                    continue
+                camera_id = camera.get("camera_id")
+                if isinstance(camera_id, str):
+                    templates[(seat_model_id, camera_id)] = camera
+        return templates
+
+    def _resolve_config_path(self, raw: str) -> Path:
+        path = Path(raw)
+        if path.is_absolute():
+            return path
+        backend_relative = (self._repo_root / "backend" / path).resolve()
+        if backend_relative.exists():
+            return backend_relative
+        return (self._repo_root / path).resolve()

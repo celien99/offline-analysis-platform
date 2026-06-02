@@ -13,10 +13,10 @@ import type {
 interface BackendCameraRegionConfig {
   id?: string;
   region_id: string;
-  box: [number, number, number, number];
+  box?: [number, number, number, number] | null;
   patchcore_model_version_id?: string;
-  enabled: boolean;
-  sort_order: number;
+  enabled?: boolean;
+  sort_order?: number;
   patchcore?: Record<string, object | undefined> | null;
   created_at?: string;
   updated_at?: string;
@@ -74,10 +74,10 @@ function toCameraRegionConfig(data: BackendCameraRegionConfig): CameraRegionConf
   return {
     id: data.id,
     region_id: data.region_id,
-    box: data.box,
+    box: data.box ?? null,
     patchcore_model_version_id: data.patchcore_model_version_id ?? null,
-    enabled: data.enabled,
-    sort_order: data.sort_order,
+    enabled: data.enabled ?? true,
+    sort_order: data.sort_order ?? 0,
     patchcore: data.patchcore ?? null,
   };
 }
@@ -139,18 +139,6 @@ export const cameraConfigApi = {
   listCameras: (seatModelId: string) =>
     get<BackendCameraConfig[]>(`/seat-models/${seatModelId}/cameras`)
       .then((items) => items.map(toCameraConfig)),
-
-  getRegionDefinitions: (seatModelId: string, cameraId: string) =>
-    get<BackendCameraRegionConfig[]>(
-      `/seat-models/${seatModelId}/cameras/${cameraId}/region-definitions`,
-    ).then((items) =>
-      items.map((item) =>
-        toCameraRegionConfig({
-          ...item,
-          patchcore_model_version_id: "",
-        }),
-      ),
-    ),
 
   createCamera: (seatModelId: string, data: CameraConfigFormData) =>
     post<BackendCameraConfig>(

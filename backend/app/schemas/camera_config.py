@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # ── Seat Model ──
@@ -43,32 +43,19 @@ class SeatModelWithCameras(SeatModelResponse):
 
 # ── Camera Config ──
 
-class CameraRegionDefinition(BaseModel):
-    region_id: str = Field(..., max_length=64, description="ROI 区域 ID")
-    box: list[float] = Field(..., min_length=4, max_length=4, description="归一化区域框 [x1, y1, x2, y2]")
-    enabled: bool = True
-    sort_order: int = Field(default=0, ge=0)
-    patchcore: dict[str, object] | None = Field(default=None, description="区域级 PatchCore 配置覆盖")
-
-    @field_validator("box")
-    @classmethod
-    def validate_box(cls, value: list[float]) -> list[float]:
-        if len(value) != 4:
-            raise ValueError("box 必须包含 4 个坐标")
-        x1, y1, x2, y2 = value
-        if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
-            raise ValueError("box 必须满足 0 <= x1 < x2 <= 1 且 0 <= y1 < y2 <= 1")
-        return value
-
-
 class CameraRegionCreate(BaseModel):
     region_id: str = Field(..., max_length=64, description="ROI 区域 ID")
     patchcore_model_version_id: str = Field(..., description="区域 PatchCore 模型版本 ID")
 
 
-class CameraRegionResponse(CameraRegionDefinition):
+class CameraRegionResponse(BaseModel):
     id: str
+    region_id: str
     patchcore_model_version_id: str
+    box: list[float] | None = None
+    enabled: bool = True
+    sort_order: int = 0
+    patchcore: dict[str, object] | None = None
     created_at: datetime
     updated_at: datetime
 

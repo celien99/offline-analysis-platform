@@ -38,10 +38,10 @@ export interface CameraConfig {
 export interface CameraRegionConfig {
   id?: string;
   region_id: string;
-  box: [number, number, number, number];
+  box?: [number, number, number, number] | null;
   patchcore_model_version_id: string | null;
-  enabled: boolean;
-  sort_order: number;
+  enabled?: boolean;
+  sort_order?: number;
   patchcore?: Record<string, object | undefined> | null;
 }
 
