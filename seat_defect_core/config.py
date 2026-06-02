@@ -97,7 +97,7 @@ class PatchCoreConfig:
     # full 后端的骨干网络参数。
     backbone_name: str = "wide_resnet50_2"
     feature_layers: List[str] = field(default_factory=lambda: ["layer2", "layer3"])
-    backbone_pretrained: bool = False
+    backbone_pretrained: bool = True
     backbone_weights_path: Optional[str] = None
     backbone_device: str = "cpu"
     feature_pool_kernel_size: int = 3

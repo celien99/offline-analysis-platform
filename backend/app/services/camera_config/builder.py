@@ -57,7 +57,7 @@ class ConfigBuilder:
         "min_valid_patch_ratio": 0.65,
         "backbone_name": "wide_resnet50_2",
         "feature_layers": ["layer2", "layer3"],
-        "backbone_pretrained": False,
+        "backbone_pretrained": True,
         "backbone_device": "cpu",
         "feature_pool_kernel_size": 3,
         "coreset_sampling_ratio": 0.1,
@@ -239,7 +239,7 @@ class ConfigBuilder:
     def _build_camera_config(
         self, cam: CameraConfig, model_paths: dict[str, str], yolo_path: str = ""
     ) -> dict[str, object]:
-        template = self._template_by_key.get((cam.seat_model_id, cam.camera_id))
+        template = self._get_template_camera(cam.seat_model_id, cam.camera_id)
         if template is not None:
             config = copy.deepcopy(template)
             detection = dict(config.get("detection") or {})
@@ -359,7 +359,16 @@ class ConfigBuilder:
                 camera_id = camera.get("camera_id")
                 if isinstance(camera_id, str):
                     templates[(seat_model_id, camera_id)] = camera
+                    normalized_key = (seat_model_id.lower(), camera_id.lower())
+                    templates.setdefault(normalized_key, camera)
         return templates
+
+    def _get_template_camera(
+        self, seat_model_id: str, camera_id: str
+    ) -> dict[str, object] | None:
+        return self._template_by_key.get(
+            (seat_model_id, camera_id),
+        ) or self._template_by_key.get((seat_model_id.lower(), camera_id.lower()))
 
     def _resolve_config_path(self, raw: str) -> Path:
         path = Path(raw)
